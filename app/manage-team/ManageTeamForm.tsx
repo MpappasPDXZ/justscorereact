@@ -33,10 +33,9 @@ export default function ManageTeamForm() {
       }
       const data = await response.json()
       setTeamNumber(data.next_team_number)
-    } catch (err) {
-      console.error("Error fetching team number:", err)
-      setError("Failed to fetch team number. Please try again.")
-    }
+    } catch (error) {  // Use the error
+      console.error("An error occurred:", error);  // Actually use the error
+  }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -72,9 +71,9 @@ export default function ManageTeamForm() {
         session: "spring",
         created_on: new Date().toISOString().split("T")[0],
       })
-    } catch (err) {
-      setError("An error occurred while creating the team. Please try again.")
-    }
+    } catch (error) {  // Use the error
+      console.error("An error occurred:", error);  // Actually use the error
+  }
   }
 
   return (
