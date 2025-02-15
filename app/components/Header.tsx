@@ -30,7 +30,7 @@ const Header = () => {
         <div className="md:hidden bg-[#252623]">
           <nav className="px-2 pt-2 pb-4 space-y-1">
             <MobileNavLink href="/manage-team" onClick={toggleMenu}>
-              Manage Team
+              Manage Teams
             </MobileNavLink>
             <MobileNavLink href="/score-game" onClick={toggleMenu}>
               Score a Game
