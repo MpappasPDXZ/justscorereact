@@ -21,7 +21,7 @@ export default function RootLayout({
       <body className={inter.className}>
         <Header />
         <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-cyan-50">
-          <main className="container mx-auto px-4 py-24">{children}</main>
+          <main className="container mx-auto px-4 py-8">{children}</main>
         </div>
       </body>
     </html>
