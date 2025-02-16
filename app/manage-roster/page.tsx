@@ -60,9 +60,9 @@ export default function ManageRoster() {
     ].filter((pos) => pos.name && pos.allocation)
 
     return positions.map((pos, index) => {
-      const allocationPercentage = Math.round(Number.parseFloat(pos.allocation) * 100)
-      return (
-        <div key={index} className="text-sm text-gray-500">
+        const allocationPercentage = Math.round(Number.parseFloat(pos.allocation || '0') * 100)
+        return (
+          <div key={index} className="text-sm text-gray-500">
           {index + 1}: {pos.name} {allocationPercentage}%
         </div>
       )
