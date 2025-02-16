@@ -27,6 +27,7 @@ export default function TeamList() {
   useEffect(() => {
     const fetchTeams = async () => {
       try {
+        console.log('API URL:', process.env.NEXT_PUBLIC_API_BASE_URL);
         const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/read_metadata_duckdb`)
         if (!response.ok) {
           throw new Error("Failed to fetch teams")
