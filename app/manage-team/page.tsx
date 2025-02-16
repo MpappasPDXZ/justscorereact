@@ -4,7 +4,7 @@ import { useState } from "react"
 import TeamList from "../components/TeamList"
 import ManageTeamForm from "./ManageTeamForm"
 
-export default function ManageTeamPage() {
+export default function ManageTeam() {
   const [showCreateForm, setShowCreateForm] = useState(false)
 
   return (

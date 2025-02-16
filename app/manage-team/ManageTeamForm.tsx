@@ -4,7 +4,11 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 
-export default function ManageTeamForm() {
+interface ManageTeamFormProps {
+  onTeamCreated: () => void;
+}
+
+export default function ManageTeamForm({ onTeamCreated }: ManageTeamFormProps) {
   const router = useRouter()
   const [formData, setFormData] = useState({
     team_name: "Team 1",

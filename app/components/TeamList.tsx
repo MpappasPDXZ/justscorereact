@@ -32,6 +32,7 @@ export default function TeamList() {
           throw new Error("Failed to fetch teams")
         }
         const data: TeamMetadata = await response.json()
+        console.log('API Response:', data)
         setTeams(data.metadata)
       } catch (error) {
         setError("Failed to fetch teams")

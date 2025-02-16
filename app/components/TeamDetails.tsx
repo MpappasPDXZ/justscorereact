@@ -10,9 +10,11 @@ interface Player {
   defensive_position_one: string
   defensive_position_two: string | null
   defensive_position_three: string | null
+  defensive_position_four: string | null
   defensive_position_allocation_one: string
   defensive_position_allocation_two: string | null
   defensive_position_allocation_three: string | null
+  defensive_position_allocation_four: string | null
 }
 
 interface TeamRoster {
@@ -31,14 +33,25 @@ export default function TeamDetails({ teamId }: TeamDetailsProps) {
 
   useEffect(() => {
     const fetchRoster = async () => {
+      console.log('-------------------')
+      console.log('TEAM DETAILS FETCH START')
+      console.log('teamId:', teamId)
+      
       try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/teams/${teamId}/roster`)
-        if (!response.ok) {
-          throw new Error("Failed to fetch roster")
-        }
+        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/teams/${teamId}/roster`
+        console.log('Fetching URL:', url)
+        
+        const response = await fetch(url)
+        console.log('Response status:', response.status)
+        
         const data: TeamRoster = await response.json()
+        console.log('TEAM ROSTER DATA:', data)
+        console.log('ACTIVE STATUSES:', data.roster.map(p => `${p.player_name}: ${p.active}`))
+        console.log('-------------------')
+        
         setRoster(data.roster)
       } catch (error) {
+        console.log('FETCH ERROR:', error)
         setError("Failed to fetch roster")
       } finally {
         setLoading(false)
@@ -62,7 +75,7 @@ export default function TeamDetails({ teamId }: TeamDetailsProps) {
             <tr className="bg-gray-200 text-gray-600 uppercase text-sm leading-normal">
               <th className="py-3 px-6 text-left">Name</th>
               <th className="py-3 px-6 text-left">Jersey</th>
-              <th className="py-3 px-6 text-left">Active</th>
+              <th className="py-3 px-6 text-left">Status</th>
               <th className="py-3 px-6 text-left">Positions</th>
             </tr>
           </thead>
@@ -73,7 +86,13 @@ export default function TeamDetails({ teamId }: TeamDetailsProps) {
                   <div className="font-medium">{player.player_name}</div>
                 </td>
                 <td className="py-3 px-6 text-left">{player.jersey_number}</td>
-                <td className="py-3 px-6 text-left">{player.active}</td>
+                <td className="py-3 px-6 text-left">
+                  <span className={`px-2 py-1 rounded-full text-xs ${
+                    player.active === "Active" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                  }`}>
+                    {player.active}
+                  </span>
+                </td>
                 <td className="py-3 px-6 text-left">
                   <div>
                     {player.defensive_position_one} ({player.defensive_position_allocation_one})
@@ -86,6 +105,11 @@ export default function TeamDetails({ teamId }: TeamDetailsProps) {
                   {player.defensive_position_three && (
                     <div>
                       {player.defensive_position_three} ({player.defensive_position_allocation_three})
+                    </div>
+                  )}
+                  {player.defensive_position_four && (
+                    <div>
+                      {player.defensive_position_four} ({player.defensive_position_allocation_four})
                     </div>
                   )}
                 </td>

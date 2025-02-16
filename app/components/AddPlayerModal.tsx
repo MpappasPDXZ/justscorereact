@@ -5,27 +5,42 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { Dialog, Transition } from "@headlessui/react"
 import { Fragment } from "react"
+import type { Player } from "../manage-roster/page"
+import { ExclamationTriangleIcon } from "@heroicons/react/24/outline"
 
 interface AddPlayerModalProps {
   isOpen: boolean
   onClose: () => void
   onAddPlayer: (playerData: any) => void
   existingJerseyNumbers?: string[]
+  isEditing?: boolean
+  initialData?: Player | null
+  title?: string
 }
 
 const defensivePositions = ["P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH"]
 
-export default function AddPlayerModal({ isOpen, onClose, onAddPlayer, existingJerseyNumbers }: AddPlayerModalProps) {
+export default function AddPlayerModal({ 
+  isOpen, 
+  onClose, 
+  onAddPlayer, 
+  existingJerseyNumbers,
+  isEditing = false,
+  initialData = null,
+  title = "Add New Player"
+}: AddPlayerModalProps) {
   const [playerData, setPlayerData] = useState({
     player_name: "",
     jersey_number: "",
-    active: "Y",
+    active: "Active",
     defensive_position_one: "P",
     defensive_position_two: "",
     defensive_position_three: "",
+    defensive_position_four: "",
     defensive_position_allocation_one: "",
     defensive_position_allocation_two: "",
     defensive_position_allocation_three: "",
+    defensive_position_allocation_four: "",
   })
 
   const [error, setError] = useState("")
@@ -36,13 +51,21 @@ export default function AddPlayerModal({ isOpen, onClose, onAddPlayer, existingJ
       Number.parseFloat(playerData.defensive_position_allocation_one) || 0,
       Number.parseFloat(playerData.defensive_position_allocation_two) || 0,
       Number.parseFloat(playerData.defensive_position_allocation_three) || 0,
+      Number.parseFloat(playerData.defensive_position_allocation_four) || 0,
     ]
     setTotalAllocation(allocations.reduce((sum, a) => sum + a, 0))
   }, [
     playerData.defensive_position_allocation_one,
     playerData.defensive_position_allocation_two,
     playerData.defensive_position_allocation_three,
+    playerData.defensive_position_allocation_four,
   ])
+
+  useEffect(() => {
+    if (isOpen && isEditing && initialData) {
+      setPlayerData(initialData)
+    }
+  }, [isOpen, isEditing, initialData])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -60,8 +83,8 @@ export default function AddPlayerModal({ isOpen, onClose, onAddPlayer, existingJ
       return false
     }
 
-    if (Math.abs(totalAllocation - 1) > 0.001 && totalAllocation !== 0) {
-      setError("The sum of all allocations must equal 1 (100%) or be 0")
+    if (Math.abs(totalAllocation - 1) > 0.001) {
+      setError("The sum of all position allocations must equal 1 (100%)")
       return false
     }
 
@@ -76,21 +99,29 @@ export default function AddPlayerModal({ isOpen, onClose, onAddPlayer, existingJ
         ...playerData,
         defensive_position_two: playerData.defensive_position_two || null,
         defensive_position_three: playerData.defensive_position_three || null,
+        defensive_position_four: playerData.defensive_position_four || null,
         defensive_position_allocation_two: playerData.defensive_position_allocation_two || null,
         defensive_position_allocation_three: playerData.defensive_position_allocation_three || null,
-        active: playerData.active === "Y" ? "true" : "false", // Convert Y/N to true/false
+        defensive_position_allocation_four: playerData.defensive_position_allocation_four || null
       }
+
+      console.log('Original playerData:', playerData)
+      console.log('Filtered playerData being sent to API:', filteredPlayerData)
+      console.log('JSON.stringify result:', JSON.stringify(filteredPlayerData))
+
       onAddPlayer(filteredPlayerData)
       setPlayerData({
         player_name: "",
         jersey_number: "",
-        active: "Y",
+        active: "Active",
         defensive_position_one: "P",
         defensive_position_two: "",
         defensive_position_three: "",
-        defensive_position_allocation_one: "",
+        defensive_position_four: "",
+        defensive_position_allocation_one: "1.00",
         defensive_position_allocation_two: "",
         defensive_position_allocation_three: "",
+        defensive_position_allocation_four: "",
       })
       onClose()
     }
@@ -124,7 +155,7 @@ export default function AddPlayerModal({ isOpen, onClose, onAddPlayer, existingJ
             >
               <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all">
                 <Dialog.Title as="h3" className="text-lg font-medium leading-6 text-gray-900">
-                  Add New Player
+                  {title}
                 </Dialog.Title>
                 <form onSubmit={handleSubmit} className="mt-2 space-y-4">
                   <div>
@@ -166,11 +197,11 @@ export default function AddPlayerModal({ isOpen, onClose, onAddPlayer, existingJ
                       onChange={handleChange}
                       className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
                     >
-                      <option value="Y">Yes</option>
-                      <option value="N">No</option>
+                      <option value="Active">Active</option>
+                      <option value="Inactive">Inactive</option>
                     </select>
                   </div>
-                  {[1, 2, 3].map((num) => (
+                  {[1, 2, 3, 4].map((num) => (
                     <div key={num} className="space-y-2">
                       <div>
                         <label
@@ -181,10 +212,9 @@ export default function AddPlayerModal({ isOpen, onClose, onAddPlayer, existingJ
                         </label>
                         <select
                           id={`defensive_position_${num}`}
-                          name={`defensive_position_${num === 1 ? "one" : num === 2 ? "two" : "three"}`}
-                          value={playerData[`defensive_position_${num === 1 ? "one" : num === 2 ? "two" : "three"}`]}
+                          name={`defensive_position_${num === 1 ? "one" : num === 2 ? "two" : num === 3 ? "three" : "four"}`}
+                          value={playerData[`defensive_position_${num === 1 ? "one" : num === 2 ? "two" : num === 3 ? "three" : "four"}`]}
                           onChange={handleChange}
-                          disabled={num !== 1 && totalAllocation >= 1}
                           className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
                         >
                           <option value="">Select a position</option>
@@ -205,32 +235,28 @@ export default function AddPlayerModal({ isOpen, onClose, onAddPlayer, existingJ
                         <input
                           type="number"
                           id={`defensive_position_allocation_${num}`}
-                          name={`defensive_position_allocation_${num === 1 ? "one" : num === 2 ? "two" : "three"}`}
+                          name={`defensive_position_allocation_${num === 1 ? "one" : num === 2 ? "two" : num === 3 ? "three" : "four"}`}
                           value={
                             playerData[
-                              `defensive_position_allocation_${num === 1 ? "one" : num === 2 ? "two" : "three"}`
+                              `defensive_position_allocation_${num === 1 ? "one" : num === 2 ? "two" : num === 3 ? "three" : "four"}`
                             ]
                           }
                           onChange={handleChange}
                           min="0"
-                          max={
-                            1 -
-                            (totalAllocation -
-                              (Number.parseFloat(
-                                playerData[
-                                  `defensive_position_allocation_${num === 1 ? "one" : num === 2 ? "two" : "three"}`
-                                ],
-                              ) || 0))
-                          }
+                          max="1"
                           step="0.01"
-                          disabled={num !== 1 && totalAllocation >= 1}
                           className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
                         />
                       </div>
                     </div>
                   ))}
-                  <div className="text-sm font-medium text-gray-700">
-                    Total Allocation: {totalAllocation.toFixed(2)}
+                  <div className="flex items-center space-x-2">
+                    <div className="text-sm font-medium text-gray-700">
+                      Total Allocation: {totalAllocation.toFixed(2)}
+                    </div>
+                    {Math.abs(totalAllocation - 1) > 0.001 && totalAllocation !== 0 && (
+                      <ExclamationTriangleIcon className="h-5 w-5 text-yellow-500" title="Total allocation should equal 1.00" />
+                    )}
                   </div>
                   {error && <p className="text-red-500 text-sm">{error}</p>}
                   <div className="mt-4 flex justify-end space-x-2">
@@ -245,7 +271,7 @@ export default function AddPlayerModal({ isOpen, onClose, onAddPlayer, existingJ
                       type="submit"
                       className="inline-flex justify-center rounded-md border border-transparent bg-blue-100 px-4 py-2 text-sm font-medium text-blue-900 hover:bg-blue-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
                     >
-                      Add Player
+                      {isEditing ? "Save Edits" : "Add Player"}
                     </button>
                   </div>
                 </form>
