@@ -4,12 +4,14 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:  # Added for manual triggers
 
 env:
   AZURE_CONTAINER_REGISTRY: justscoreacr   # Updated to your registry name
   CONTAINER_APP_NAME: justscorereact
   CONTAINER_APP_RESOURCE_GROUP: justscore-rg
   IMAGE_NAME: justscorereact           # Changed from samples/hello-world to justscorereact
+  NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL }}  # Add this if needed
 
 jobs:
   build-and-deploy:
