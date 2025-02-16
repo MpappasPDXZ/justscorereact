@@ -1,37 +1,19 @@
-FROM node:18-alpine AS builder
-
-# Set working directory
-WORKDIR /usr/src/app
-
-# Copy package files
+# Build stage
+FROM --platform=linux/amd64 node:18-alpine AS builder
+WORKDIR /app
 COPY package*.json ./
-
-# Install ALL dependencies (including devDependencies)
 RUN npm install
-
-# Copy only necessary directories and files
-COPY app ./app
-COPY tsconfig.json ./
-COPY tailwind.config.ts ./
-COPY postcss.config.js ./
-COPY next.config.js ./
-
-# Build application
+COPY . .
 RUN npm run build
 
-# Production image
-FROM node:18-alpine AS runner
-WORKDIR /usr/src/app
-
+# Production stage
+FROM --platform=linux/amd64 node:18-alpine
+WORKDIR /app
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/node_modules ./node_modules
 ENV NODE_ENV=production
-
-# Copy necessary files
-COPY --from=builder /usr/src/app/.next ./.next
-COPY --from=builder /usr/src/app/package.json ./package.json
-COPY --from=builder /usr/src/app/node_modules ./node_modules
-
-# Expose port
+ENV PORT=3000
 EXPOSE 3000
-
-# Start the application
 CMD ["npm", "start"]

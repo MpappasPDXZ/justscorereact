@@ -29,18 +29,18 @@ export default function AddPlayerModal({
   initialData = null,
   title = "Add New Player"
 }: AddPlayerModalProps) {
-  const [playerData, setPlayerData] = useState({
+  const [playerData, setPlayerData] = useState<Omit<Player, "player_id" | "team_id">>({
     player_name: "",
     jersey_number: "",
     active: "Active",
     defensive_position_one: "P",
-    defensive_position_two: "",
-    defensive_position_three: "",
-    defensive_position_four: "",
+    defensive_position_two: null,
+    defensive_position_three: null,
+    defensive_position_four: null,
     defensive_position_allocation_one: "",
-    defensive_position_allocation_two: "",
-    defensive_position_allocation_three: "",
-    defensive_position_allocation_four: "",
+    defensive_position_allocation_two: null,
+    defensive_position_allocation_three: null,
+    defensive_position_allocation_four: null,
   })
 
   const [error, setError] = useState("")
@@ -48,10 +48,10 @@ export default function AddPlayerModal({
 
   useEffect(() => {
     const allocations = [
-      Number.parseFloat(playerData.defensive_position_allocation_one) || 0,
-      Number.parseFloat(playerData.defensive_position_allocation_two) || 0,
-      Number.parseFloat(playerData.defensive_position_allocation_three) || 0,
-      Number.parseFloat(playerData.defensive_position_allocation_four) || 0,
+      Number.parseFloat(playerData.defensive_position_allocation_one || '0'),
+      Number.parseFloat(playerData.defensive_position_allocation_two || '0'),
+      Number.parseFloat(playerData.defensive_position_allocation_three || '0'),
+      Number.parseFloat(playerData.defensive_position_allocation_four || '0'),
     ]
     setTotalAllocation(allocations.reduce((sum, a) => sum + a, 0))
   }, [
@@ -95,33 +95,19 @@ export default function AddPlayerModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (validateForm()) {
-      const filteredPlayerData = {
-        ...playerData,
-        defensive_position_two: playerData.defensive_position_two || null,
-        defensive_position_three: playerData.defensive_position_three || null,
-        defensive_position_four: playerData.defensive_position_four || null,
-        defensive_position_allocation_two: playerData.defensive_position_allocation_two || null,
-        defensive_position_allocation_three: playerData.defensive_position_allocation_three || null,
-        defensive_position_allocation_four: playerData.defensive_position_allocation_four || null
-      }
-
-      console.log('Original playerData:', playerData)
-      console.log('Filtered playerData being sent to API:', filteredPlayerData)
-      console.log('JSON.stringify result:', JSON.stringify(filteredPlayerData))
-
-      onAddPlayer(filteredPlayerData)
+      onAddPlayer(playerData)
       setPlayerData({
         player_name: "",
         jersey_number: "",
         active: "Active",
         defensive_position_one: "P",
-        defensive_position_two: "",
-        defensive_position_three: "",
-        defensive_position_four: "",
+        defensive_position_two: null,
+        defensive_position_three: null,
+        defensive_position_four: null,
         defensive_position_allocation_one: "1.00",
-        defensive_position_allocation_two: "",
-        defensive_position_allocation_three: "",
-        defensive_position_allocation_four: "",
+        defensive_position_allocation_two: null,
+        defensive_position_allocation_three: null,
+        defensive_position_allocation_four: null,
       })
       onClose()
     }
@@ -213,7 +199,7 @@ export default function AddPlayerModal({
                         <select
                           id={`defensive_position_${num}`}
                           name={`defensive_position_${num === 1 ? "one" : num === 2 ? "two" : num === 3 ? "three" : "four"}`}
-                          value={playerData[`defensive_position_${num === 1 ? "one" : num === 2 ? "two" : num === 3 ? "three" : "four"}`]}
+                          value={playerData[`defensive_position_${num === 1 ? "one" : num === 2 ? "two" : num === 3 ? "three" : "four"}`] || ""}
                           onChange={handleChange}
                           className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
                         >
@@ -236,11 +222,7 @@ export default function AddPlayerModal({
                           type="number"
                           id={`defensive_position_allocation_${num}`}
                           name={`defensive_position_allocation_${num === 1 ? "one" : num === 2 ? "two" : num === 3 ? "three" : "four"}`}
-                          value={
-                            playerData[
-                              `defensive_position_allocation_${num === 1 ? "one" : num === 2 ? "two" : num === 3 ? "three" : "four"}`
-                            ]
-                          }
+                          value={playerData[`defensive_position_allocation_${num === 1 ? "one" : num === 2 ? "two" : num === 3 ? "three" : "four"}`] || ""}
                           onChange={handleChange}
                           min="0"
                           max="1"

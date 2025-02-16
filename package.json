@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "azure-build": "next build && next export",
+    "azure-start": "next start -p $PORT"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.0",

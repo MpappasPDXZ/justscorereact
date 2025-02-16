@@ -1,13 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import AddPlayerModal from "../components/AddPlayerModal"
 import { TrashIcon, PencilIcon } from "@heroicons/react/24/outline"
 import BaseballDiamondModal from "../components/BaseballDiamondModal"
 import { BaseballIcon } from "../components/BaseballIcon"
 
-interface Player {
+export interface Player {
   player_id: string
   team_id: string
   player_name: string
@@ -23,7 +23,8 @@ interface Player {
   defensive_position_allocation_four: string | null
 }
 
-export default function ManageRoster() {
+// Create a wrapper component that uses searchParams
+function RosterContent() {
   const [players, setPlayers] = useState<Player[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -186,27 +187,6 @@ export default function ManageRoster() {
         return positionAllocations
       }
     
-      const validateForm = () => {
-        if (!playerData.player_name || !playerData.jersey_number) {
-          setError("Player name and jersey number are required")
-          return false
-        }
-
-        if (existingJerseyNumbers && existingJerseyNumbers.includes(playerData.jersey_number)) {
-          setError("This jersey number is already in use")
-          return false
-        }
-
-        // Only check total allocation at save time
-        if (Math.abs(totalAllocation - 1) > 0.001) {
-          setError("The sum of all allocations must equal 1 (100%)")
-          return false
-        }
-
-        setError("")
-        return true
-      }
-    
       return (
         <div className="max-w-4xl mx-auto">
           <div className="flex justify-between items-center mb-4">
@@ -362,3 +342,12 @@ export default function ManageRoster() {
         </div>
       )
     }
+
+// Main component with Suspense
+export default function ManageRoster() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <RosterContent />
+    </Suspense>
+  )
+}

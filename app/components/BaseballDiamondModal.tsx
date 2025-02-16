@@ -1,6 +1,5 @@
 import { Dialog, Transition } from "@headlessui/react"
 import { Fragment } from "react"
-import { BaseballDiamondIcon } from "@heroicons/react/24/outline"
 
 interface Position {
   position: string
