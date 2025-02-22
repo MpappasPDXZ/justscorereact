@@ -5,7 +5,6 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { Dialog, Transition } from "@headlessui/react"
 import { Fragment } from "react"
-import type { Player } from "../manage-roster/page"
 import { ExclamationTriangleIcon } from "@heroicons/react/24/outline"
 
 interface AddPlayerModalProps {
@@ -14,11 +13,26 @@ interface AddPlayerModalProps {
   onAddPlayer: (playerData: any) => void
   existingJerseyNumbers?: string[]
   isEditing?: boolean
-  initialData?: Player | null
+  initialData?: PlayerData | null
   title?: string
 }
 
 const defensivePositions = ["P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH"]
+const DEFENSIVE_POSITIONS = ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'] as const;
+
+export interface PlayerData {
+  player_name: string
+  jersey_number: string
+  active: "Active" | "Inactive"
+  defensive_position_one: string
+  defensive_position_two: string
+  defensive_position_three: string
+  defensive_position_four: string
+  defensive_position_allocation_one: string
+  defensive_position_allocation_two: string
+  defensive_position_allocation_three: string
+  defensive_position_allocation_four: string
+}
 
 export default function AddPlayerModal({ 
   isOpen, 
@@ -29,18 +43,18 @@ export default function AddPlayerModal({
   initialData = null,
   title = "Add New Player"
 }: AddPlayerModalProps) {
-  const [playerData, setPlayerData] = useState<Omit<Player, "player_id" | "team_id">>({
+  const [playerData, setPlayerData] = useState<PlayerData>({
     player_name: "",
     jersey_number: "",
     active: "Active",
     defensive_position_one: "P",
-    defensive_position_two: null,
-    defensive_position_three: null,
-    defensive_position_four: null,
-    defensive_position_allocation_one: "",
-    defensive_position_allocation_two: null,
-    defensive_position_allocation_three: null,
-    defensive_position_allocation_four: null,
+    defensive_position_two: "",
+    defensive_position_three: "",
+    defensive_position_four: "",
+    defensive_position_allocation_one: "1.00",
+    defensive_position_allocation_two: "",
+    defensive_position_allocation_three: "",
+    defensive_position_allocation_four: "",
   })
 
   const [error, setError] = useState("")
@@ -101,13 +115,13 @@ export default function AddPlayerModal({
         jersey_number: "",
         active: "Active",
         defensive_position_one: "P",
-        defensive_position_two: null,
-        defensive_position_three: null,
-        defensive_position_four: null,
+        defensive_position_two: "",
+        defensive_position_three: "",
+        defensive_position_four: "",
         defensive_position_allocation_one: "1.00",
-        defensive_position_allocation_two: null,
-        defensive_position_allocation_three: null,
-        defensive_position_allocation_four: null,
+        defensive_position_allocation_two: "",
+        defensive_position_allocation_three: "",
+        defensive_position_allocation_four: "",
       })
       onClose()
     }
@@ -144,94 +158,179 @@ export default function AddPlayerModal({
                   {title}
                 </Dialog.Title>
                 <form onSubmit={handleSubmit} className="mt-2 space-y-4">
-                  <div>
-                    <label htmlFor="player_name" className="block text-sm font-medium text-gray-700">
-                      Player Name
-                    </label>
-                    <input
-                      type="text"
-                      id="player_name"
-                      name="player_name"
-                      value={playerData.player_name}
-                      onChange={handleChange}
-                      required
-                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="jersey_number" className="block text-sm font-medium text-gray-700">
-                      Jersey Number
-                    </label>
-                    <input
-                      type="text"
-                      id="jersey_number"
-                      name="jersey_number"
-                      value={playerData.jersey_number}
-                      onChange={handleChange}
-                      required
-                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="active" className="block text-sm font-medium text-gray-700">
-                      Active
-                    </label>
-                    <select
-                      id="active"
-                      name="active"
-                      value={playerData.active}
-                      onChange={handleChange}
-                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-                    >
-                      <option value="Active">Active</option>
-                      <option value="Inactive">Inactive</option>
-                    </select>
-                  </div>
-                  {[1, 2, 3, 4].map((num) => (
-                    <div key={num} className="space-y-2">
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label
-                          htmlFor={`defensive_position_${num}`}
-                          className="block text-sm font-medium text-gray-700"
-                        >
-                          Defensive Position {num}
-                        </label>
-                        <select
-                          id={`defensive_position_${num}`}
-                          name={`defensive_position_${num === 1 ? "one" : num === 2 ? "two" : num === 3 ? "three" : "four"}`}
-                          value={playerData[`defensive_position_${num === 1 ? "one" : num === 2 ? "two" : num === 3 ? "three" : "four"}`] || ""}
+                        <label className="block text-sm font-medium text-gray-700">Player Name</label>
+                        <input
+                          type="text"
+                          name="player_name"
+                          value={playerData.player_name}
                           onChange={handleChange}
-                          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-                        >
-                          <option value="">Select a position</option>
-                          {defensivePositions.map((pos) => (
-                            <option key={pos} value={pos}>
-                              {pos}
-                            </option>
-                          ))}
-                        </select>
+                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                          required
+                        />
                       </div>
                       <div>
-                        <label
-                          htmlFor={`defensive_position_allocation_${num}`}
-                          className="block text-sm font-medium text-gray-700"
-                        >
-                          Position {num} Allocation
-                        </label>
+                        <label className="block text-sm font-medium text-gray-700">Jersey Number</label>
                         <input
-                          type="number"
-                          id={`defensive_position_allocation_${num}`}
-                          name={`defensive_position_allocation_${num === 1 ? "one" : num === 2 ? "two" : num === 3 ? "three" : "four"}`}
-                          value={playerData[`defensive_position_allocation_${num === 1 ? "one" : num === 2 ? "two" : num === 3 ? "three" : "four"}`] || ""}
+                          type="text"
+                          name="jersey_number"
+                          value={playerData.jersey_number}
                           onChange={handleChange}
-                          min="0"
-                          max="1"
-                          step="0.01"
-                          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                          required
                         />
                       </div>
                     </div>
-                  ))}
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Status</label>
+                      <select
+                        name="active"
+                        value={playerData.active}
+                        onChange={handleChange}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                      >
+                        <option value="Active">Active</option>
+                        <option value="Inactive">Inactive</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Defensive Positions</label>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-1">Position 1</label>
+                          <div className="flex items-center space-x-2">
+                            <div className="w-20">
+                              <select
+                                name="defensive_position_one"
+                                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                required
+                                value={playerData.defensive_position_one}
+                                onChange={handleChange}
+                              >
+                                {DEFENSIVE_POSITIONS.map(pos => (
+                                  <option key={pos} value={pos}>{pos}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="flex-1">
+                              <input
+                                type="number"
+                                name="defensive_position_allocation_one"
+                                placeholder="0.0"
+                                step="0.01"
+                                min="0"
+                                max="1"
+                                value={playerData.defensive_position_allocation_one}
+                                onChange={handleChange}
+                                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                required
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-1">Position 2</label>
+                          <div className="flex items-center space-x-2">
+                            <div className="w-20">
+                              <select
+                                name="defensive_position_two"
+                                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                value={playerData.defensive_position_two}
+                                onChange={handleChange}
+                              >
+                                <option value="">-</option>
+                                {DEFENSIVE_POSITIONS.map(pos => (
+                                  <option key={pos} value={pos}>{pos}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="flex-1">
+                              <input
+                                type="number"
+                                name="defensive_position_allocation_two"
+                                placeholder="0.0"
+                                step="0.01"
+                                min="0"
+                                max="1"
+                                value={playerData.defensive_position_allocation_two}
+                                onChange={handleChange}
+                                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-1">Position 3</label>
+                          <div className="flex items-center space-x-2">
+                            <div className="w-20">
+                              <select
+                                name="defensive_position_three"
+                                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                value={playerData.defensive_position_three}
+                                onChange={handleChange}
+                              >
+                                <option value="">-</option>
+                                {DEFENSIVE_POSITIONS.map(pos => (
+                                  <option key={pos} value={pos}>{pos}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="flex-1">
+                              <input
+                                type="number"
+                                name="defensive_position_allocation_three"
+                                placeholder="0.0"
+                                step="0.01"
+                                min="0"
+                                max="1"
+                                value={playerData.defensive_position_allocation_three}
+                                onChange={handleChange}
+                                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-1">Position 4</label>
+                          <div className="flex items-center space-x-2">
+                            <div className="w-20">
+                              <select
+                                name="defensive_position_four"
+                                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                value={playerData.defensive_position_four}
+                                onChange={handleChange}
+                              >
+                                <option value="">-</option>
+                                {DEFENSIVE_POSITIONS.map(pos => (
+                                  <option key={pos} value={pos}>{pos}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="flex-1">
+                              <input
+                                type="number"
+                                name="defensive_position_allocation_four"
+                                placeholder="0.0"
+                                step="0.01"
+                                min="0"
+                                max="1"
+                                value={playerData.defensive_position_allocation_four}
+                                onChange={handleChange}
+                                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                   <div className="flex items-center space-x-2">
                     <div className="text-sm font-medium text-gray-700">
                       Total Allocation: {totalAllocation.toFixed(2)}

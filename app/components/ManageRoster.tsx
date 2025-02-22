@@ -24,11 +24,11 @@ interface Player {
 }
 
 interface ManageRosterProps {
-  teamId: string;
-  onRosterUpdated?: () => void;  // Made optional to maintain compatibility
+  teamId: string
+  onPlayerAdded?: () => void
 }
 
-export default function ManageRoster({ teamId, onRosterUpdated }: ManageRosterProps) {
+export default function ManageRoster({ teamId, onPlayerAdded }: ManageRosterProps) {
   const [players, setPlayers] = useState<Player[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -49,7 +49,9 @@ export default function ManageRoster({ teamId, onRosterUpdated }: ManageRosterPr
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/teams/${teamId}/roster`)
       const data = await response.json()
       setPlayers(data.roster)
-      onRosterUpdated?.()
+      if (onPlayerAdded) {
+        onPlayerAdded()
+      }
     } catch (err) {
       console.error('Fetch error:', err)
       setError("Failed to fetch roster")
@@ -58,21 +60,26 @@ export default function ManageRoster({ teamId, onRosterUpdated }: ManageRosterPr
     }
   }
 
-  const handleAddPlayer = async (playerData: Omit<Player, "team_id">) => {
+  const handleAddPlayer = async (formData: FormData) => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/teams/${teamId}/player`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...playerData, team_id: teamId }),
-      })
-      if (!response.ok) throw new Error("Failed to add player")
-      await fetchRoster()
-      setIsAddPlayerModalOpen(false)
-      onRosterUpdated?.()
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/teams/${teamId}/players`, {
+        method: 'POST',
+        // ... rest of fetch config ...
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to add player');
+      }
+
+      setIsAddPlayerModalOpen(false);
+      fetchRoster(); // Fetch the updated roster
+      if (onPlayerAdded) {
+        onPlayerAdded(); // Call the callback to trigger parent refresh
+      }
     } catch (error) {
-      setError("Failed to add player")
+      console.error('Error adding player:', error);
     }
-  }
+  };
 
   const handleUpdatePlayer = async (updatedPlayer: Player) => {
     try {
@@ -83,7 +90,9 @@ export default function ManageRoster({ teamId, onRosterUpdated }: ManageRosterPr
       })
       if (!response.ok) throw new Error("Failed to update player")
       await fetchRoster()
-      onRosterUpdated?.()
+      if (onPlayerAdded) {
+        onPlayerAdded()
+      }
     } catch (error) {
       setError("Failed to update player")
     }
@@ -99,7 +108,9 @@ export default function ManageRoster({ teamId, onRosterUpdated }: ManageRosterPr
       )
       if (!response.ok) throw new Error("Failed to delete player")
       await fetchRoster() // Refresh the roster after deletion
-      onRosterUpdated?.()
+      if (onPlayerAdded) {
+        onPlayerAdded()
+      }
     } catch (error) {
       setError("Failed to delete player")
     }
