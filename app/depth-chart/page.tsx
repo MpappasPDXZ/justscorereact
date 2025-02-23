@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 
 interface PlayerRank {
@@ -17,7 +17,8 @@ interface PositionPlayers {
 
 const positions = ["P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF"]
 
-export default function DepthChart() {
+// Separate the main content into its own component
+function DepthChartContent() {
   const [positionPlayers, setPositionPlayers] = useState<PositionPlayers>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -222,5 +223,14 @@ export default function DepthChart() {
         ))}
       </div>
     </div>
+  )
+}
+
+// Main component wrapped in Suspense
+export default function DepthChart() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <DepthChartContent />
+    </Suspense>
   )
 } 
