@@ -34,6 +34,20 @@ export interface PlayerData {
   defensive_position_allocation_four: string
 }
 
+const defaultPlayerData: PlayerData = {
+  player_name: "",
+  jersey_number: "",
+  active: "Active",
+  defensive_position_one: "P",
+  defensive_position_two: "",
+  defensive_position_three: "",
+  defensive_position_four: "",
+  defensive_position_allocation_one: "1.00",
+  defensive_position_allocation_two: "",
+  defensive_position_allocation_three: "",
+  defensive_position_allocation_four: "",
+};
+
 export default function AddPlayerModal({ 
   isOpen, 
   onClose, 
@@ -43,22 +57,29 @@ export default function AddPlayerModal({
   initialData = null,
   title = "Add New Player"
 }: AddPlayerModalProps) {
-  const [playerData, setPlayerData] = useState<PlayerData>({
-    player_name: "",
-    jersey_number: "",
-    active: "Active",
-    defensive_position_one: "P",
-    defensive_position_two: "",
-    defensive_position_three: "",
-    defensive_position_four: "",
-    defensive_position_allocation_one: "1.00",
-    defensive_position_allocation_two: "",
-    defensive_position_allocation_three: "",
-    defensive_position_allocation_four: "",
-  })
+  const [playerData, setPlayerData] = useState<PlayerData>(defaultPlayerData)
 
   const [error, setError] = useState("")
   const [totalAllocation, setTotalAllocation] = useState(0)
+
+  useEffect(() => {
+    if (isOpen) {
+      if (isEditing && initialData) {
+        setPlayerData({
+          ...defaultPlayerData,
+          ...initialData,
+          defensive_position_two: initialData.defensive_position_two || "",
+          defensive_position_three: initialData.defensive_position_three || "",
+          defensive_position_four: initialData.defensive_position_four || "",
+          defensive_position_allocation_two: initialData.defensive_position_allocation_two || "",
+          defensive_position_allocation_three: initialData.defensive_position_allocation_three || "",
+          defensive_position_allocation_four: initialData.defensive_position_allocation_four || "",
+        })
+      } else {
+        setPlayerData(defaultPlayerData)
+      }
+    }
+  }, [isOpen, isEditing, initialData])
 
   useEffect(() => {
     const allocations = [
@@ -75,15 +96,12 @@ export default function AddPlayerModal({
     playerData.defensive_position_allocation_four,
   ])
 
-  useEffect(() => {
-    if (isOpen && isEditing && initialData) {
-      setPlayerData(initialData)
-    }
-  }, [isOpen, isEditing, initialData])
-
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
-    setPlayerData((prev) => ({ ...prev, [name]: value }))
+    setPlayerData(prev => ({
+      ...prev,
+      [name]: value || ""
+    }))
   }
 
   const validateForm = () => {
@@ -110,19 +128,7 @@ export default function AddPlayerModal({
     e.preventDefault()
     if (validateForm()) {
       onAddPlayer(playerData)
-      setPlayerData({
-        player_name: "",
-        jersey_number: "",
-        active: "Active",
-        defensive_position_one: "P",
-        defensive_position_two: "",
-        defensive_position_three: "",
-        defensive_position_four: "",
-        defensive_position_allocation_one: "1.00",
-        defensive_position_allocation_two: "",
-        defensive_position_allocation_three: "",
-        defensive_position_allocation_four: "",
-      })
+      setPlayerData(defaultPlayerData)
       onClose()
     }
   }
@@ -240,7 +246,7 @@ export default function AddPlayerModal({
                               <select
                                 name="defensive_position_two"
                                 className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                value={playerData.defensive_position_two}
+                                value={playerData.defensive_position_two || ""}
                                 onChange={handleChange}
                               >
                                 <option value="">-</option>
@@ -272,7 +278,7 @@ export default function AddPlayerModal({
                               <select
                                 name="defensive_position_three"
                                 className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                value={playerData.defensive_position_three}
+                                value={playerData.defensive_position_three || ""}
                                 onChange={handleChange}
                               >
                                 <option value="">-</option>
@@ -304,7 +310,7 @@ export default function AddPlayerModal({
                               <select
                                 name="defensive_position_four"
                                 className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                value={playerData.defensive_position_four}
+                                value={playerData.defensive_position_four || ""}
                                 onChange={handleChange}
                               >
                                 <option value="">-</option>
