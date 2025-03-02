@@ -15,6 +15,7 @@ interface GameDetail {
   field_temperature: string;
   game_status: string;
   my_team_ha: string;
+  game_id: string;
 }
 
 interface EditGameModalProps {
@@ -171,7 +172,7 @@ export default function EditGameModal({ isOpen, onClose, onSave, gameData, teamI
                     <input
                       id="game_id_display"
                       type="text"
-                      value={gameDetail.game_id}
+                      value={(gameDetail as any).game_id}
                       className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-500 bg-gray-100 leading-tight focus:outline-none"
                       disabled
                       readOnly

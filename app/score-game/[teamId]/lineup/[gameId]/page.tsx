@@ -583,13 +583,14 @@ export default function GameLineup() {
           <div>
             <p className="flex">
               <span className="font-semibold w-20">Date:</span>
-              <span>{game.event_date}</span>
+              <span>{game?.event_date}</span>
             </p>
             <p className="flex">
               <span className="font-semibold w-20">Teams:</span>
-              <span>{game.my_team_ha.toLowerCase() === 'home' ? 
-                `Your Team (Home) vs ${game.away_team_name} (Away)` : 
-                `${game.away_team_name} (Home) vs Your Team (Away)`}
+              <span>
+                {game?.my_team_ha?.toLowerCase() === 'home' 
+                  ? `Your Team (Home) vs ${game?.away_team_name} (Away)` 
+                  : `${game?.away_team_name} (Home) vs Your Team (Away)`}
               </span>
             </p>
           </div>
@@ -734,7 +735,7 @@ export default function GameLineup() {
                         >
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{player.order_number}</td>
                           <td className={`px-6 py-4 whitespace-nowrap text-sm ${
-                            (activeTab === 'home' ? homeDuplicates : awayDuplicates).has(player.jersey_number) 
+                            homeDuplicates.has(player.jersey_number)
                               ? 'bg-red-100 text-red-800' 
                               : 'text-gray-500'
                           }`}>
@@ -884,7 +885,7 @@ export default function GameLineup() {
                         >
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{player.order_number}</td>
                           <td className={`px-6 py-4 whitespace-nowrap text-sm ${
-                            (activeTab === 'home' ? homeDuplicates : awayDuplicates).has(player.jersey_number) 
+                            awayDuplicates.has(player.jersey_number)
                               ? 'bg-red-100 text-red-800' 
                               : 'text-gray-500'
                           }`}>

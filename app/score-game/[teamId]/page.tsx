@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import EditGameModal from "../EditGameModal";
 
 // Add TrashIcon component
-const TrashIcon = (props) => (
+const TrashIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg 
     xmlns="http://www.w3.org/2000/svg" 
     fill="none" 
@@ -21,6 +21,13 @@ const TrashIcon = (props) => (
     />
   </svg>
 );
+
+interface Player {
+  jersey_number: string;
+  name: string;
+  position: string;
+  order_number: number;
+}
 
 interface Game {
   away_team_name: string;
