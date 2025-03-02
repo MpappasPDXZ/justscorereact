@@ -17,7 +17,7 @@ export default function Home() {
           Manage Team
         </Link>
         <Link
-          href="/manage-team"
+          href="/score-game"
           className="bg-gradient-to-r from-teal-400 to-cyan-500 text-white px-8 py-3 rounded-full hover:shadow-lg transition-all duration-300 hover:scale-105 inline-block"
         >
           Score a Game

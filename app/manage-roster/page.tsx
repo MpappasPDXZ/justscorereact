@@ -2,11 +2,11 @@
 
 import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import AddPlayerModal from "../components/AddPlayerModal"
+import AddPlayerModal from "./AddPlayerModal"
 import { TrashIcon, PencilIcon } from "@heroicons/react/24/outline"
 import BaseballDiamondModal from "../components/BaseballDiamondModal"
 import { BaseballIcon } from "../components/BaseballIcon"
-import type { PlayerData } from '../components/AddPlayerModal'
+import type { PlayerData } from './AddPlayerModal'
 
 export interface Player {
   player_id: string

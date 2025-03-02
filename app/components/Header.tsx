@@ -19,7 +19,7 @@ const Header = () => {
           </Link>
           <nav className="hidden md:flex space-x-4">
             <NavLink href="/manage-team">Manage Team</NavLink>
-            <NavLink href="/manage-team">Score a Game</NavLink>
+            <NavLink href="/score-game">Score a Game</NavLink>
           </nav>
           <button className="md:hidden" onClick={toggleMenu}>
             {isOpen ? <X size={24} /> : <Menu size={24} />}
@@ -32,7 +32,7 @@ const Header = () => {
             <MobileNavLink href="/manage-team" onClick={toggleMenu}>
               Manage Teams
             </MobileNavLink>
-            <MobileNavLink href="/manage-team" onClick={toggleMenu}>
+            <MobileNavLink href="/score-game" onClick={toggleMenu}>
               Score a Game
             </MobileNavLink>
           </nav>

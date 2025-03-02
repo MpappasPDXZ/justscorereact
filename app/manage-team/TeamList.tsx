@@ -18,7 +18,11 @@ interface TeamMetadata {
   metadata: Team[]
 }
 
-export default function TeamList() {
+interface TeamListProps {
+  onTeamSelect: (teamId: string) => void
+}
+
+export default function TeamList({ onTeamSelect }: TeamListProps) {
   const [teams, setTeams] = useState<Team[]>([])
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -31,7 +35,7 @@ export default function TeamList() {
 
   const fetchTeams = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/read_metadata_duckdb`)
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/teams/read_metadata_duckdb`)
       if (!response.ok) throw new Error('Failed to fetch teams')
       const data: TeamMetadata = await response.json()
       setTeams(data.metadata || [])

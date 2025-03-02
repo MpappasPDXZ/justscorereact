@@ -1,14 +1,41 @@
 "use client"
 
-import { useState } from "react"
-import TeamList from "../components/TeamList"
+import { useState, useEffect } from "react"
+import TeamList from "./TeamList"
 import ManageTeamForm from "./ManageTeamForm"
+import { useRouter } from "next/navigation"
+
+interface Team {
+  team_id: string
+  team_name: string
+}
 
 export default function ManageTeam() {
   const [showCreateForm, setShowCreateForm] = useState(false)
+  const [teams, setTeams] = useState<Team[]>([])
+  const router = useRouter()
+
+  useEffect(() => {
+    fetchTeams()
+  }, [])
+
+  const fetchTeams = async () => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/teams/read_metadata_duckdb`)
+      if (!response.ok) throw new Error('Failed to fetch teams')
+      const data = await response.json()
+      setTeams(data.metadata || [])
+    } catch (error) {
+      console.error('Error fetching teams:', error)
+    }
+  }
+
+  const handleTeamSelect = (teamId: string) => {
+    router.push(`/score-game/games?teamId=${teamId}`);
+  }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-0">
       {/* Header with Create Team Button */}
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Manage Teams</h1>
@@ -37,7 +64,7 @@ export default function ManageTeam() {
         </div>
       ) : (
         <div>
-          <TeamList />
+          <TeamList onTeamSelect={handleTeamSelect} />
         </div>
       )}
     </div>
