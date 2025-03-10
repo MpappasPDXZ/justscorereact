@@ -114,103 +114,6 @@ function AddPlayerModal({
   );
 }
 
-// Add this new modal component for manually adding opponent players
-function AddOpponentPlayerModal({ 
-  isOpen, 
-  onClose, 
-  onAddPlayer 
-}: { 
-  isOpen: boolean; 
-  onClose: () => void; 
-  onAddPlayer: (player: Player) => void; 
-}) {
-  const [jerseyNumber, setJerseyNumber] = useState('');
-  const [name, setName] = useState('');
-  const [position, setPosition] = useState('P'); // Default position
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const newPlayer: Player = {
-      jersey_number: jerseyNumber,
-      name: name,
-      position: position,
-      order_number: 0 // This will be set when adding to the lineup
-    };
-    onAddPlayer(newPlayer);
-    
-    // Reset form
-    setJerseyNumber('');
-    setName('');
-    setPosition('P');
-    
-    onClose();
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-      <div className="relative top-20 mx-auto p-5 border w-[500px] shadow-lg rounded-md bg-white">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-medium">Add Opponent Player</h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
-            &times;
-          </button>
-        </div>
-        <form onSubmit={handleSubmit}>
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700">Jersey #</label>
-            <input 
-              type="text" 
-              value={jerseyNumber} 
-              onChange={(e) => setJerseyNumber(e.target.value)} 
-              required 
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-            />
-          </div>
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700">Name</label>
-            <input 
-              type="text" 
-              value={name} 
-              onChange={(e) => setName(e.target.value)} 
-              required 
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-            />
-          </div>
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700">Position</label>
-            <select 
-              value={position} 
-              onChange={(e) => setPosition(e.target.value)} 
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-            >
-              {['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'EH', 'DP', 'FL', 'SUB'].map(pos => (
-                <option key={pos} value={pos}>{pos}</option>
-              ))}
-            </select>
-          </div>
-          <div className="mt-4 flex justify-end">
-            <button 
-              type="button" 
-              onClick={onClose} 
-              className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 mr-2"
-            >
-              Cancel
-            </button>
-            <button 
-              type="submit" 
-              className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
-            >
-              Add Player
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
 // First, let's create a helper function to determine if this is the first SUB in the sorted lineup
 const isFirstSub = (player: Player, index: number, sortedLineup: Player[]) => {
   // Check if this player is a SUB or has order_number 0
@@ -241,12 +144,124 @@ export default function GameLineup() {
   const [isAddPlayerModalOpen, setIsAddPlayerModalOpen] = useState(false);
   const [availablePlayers, setAvailablePlayers] = useState<RosterPlayer[]>([]);
   const [loadingPlayers, setLoadingPlayers] = useState(false);
-  const [isAddOpponentPlayerModalOpen, setIsAddOpponentPlayerModalOpen] = useState(false);
+  
+  // Move these hooks inside the component
+  const [opponentGridData, setOpponentGridData] = useState<Player[]>([]);
+  const [newOpponentPlayer, setNewOpponentPlayer] = useState<{
+    jersey_number: string;
+    name: string;
+    position: string;
+  }>({
+    jersey_number: '',
+    name: '',
+    position: 'EH'
+  });
+
+  // Add this new state to store the team roster
+  const [teamRoster, setTeamRoster] = useState<RosterPlayer[]>([]);
+  const [loadingRoster, setLoadingRoster] = useState(false);
+
+  // Replace the newTeamPlayer state with a selectedRosterPlayer state
+  const [selectedRosterPlayer, setSelectedRosterPlayer] = useState<string>('');
+  const [selectedPosition, setSelectedPosition] = useState<string>('P');
+
+  // First, let's add a state to track if changes have been made to the lineup
+  const [lineupChanged, setLineupChanged] = useState(false);
+
+  // Add this function to fetch the team roster
+  const fetchTeamRoster = async () => {
+    setLoadingRoster(true);
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/teams/${teamId}/roster`);
+      if (!response.ok) throw new Error('Failed to fetch team roster');
+      const data = await response.json();
+      setTeamRoster(data.roster || []);
+    } catch (error) {
+      console.error('Error fetching team roster:', error);
+    } finally {
+      setLoadingRoster(false);
+    }
+  };
+
+  // Add this function to handle adding a player to the grid
+  const handleAddOpponentToGrid = () => {
+    if (!newOpponentPlayer.jersey_number) {
+      return; // Don't add players without a jersey number
+    }
+    
+    // Determine which lineup to update based on which team is the opponent
+    const isOpponentHome = game?.my_team_ha?.toLowerCase() === 'away';
+    const lineup = isOpponentHome ? [...homeLineup] : [...awayLineup];
+    
+    // Create the new player, using jersey number as name if name is empty
+    const newPlayer: Player = {
+      jersey_number: newOpponentPlayer.jersey_number,
+      name: newOpponentPlayer.name || `#${newOpponentPlayer.jersey_number}`, // Use jersey number if name is empty
+      position: newOpponentPlayer.position,
+      order_number: (newOpponentPlayer.position === 'SUB' || newOpponentPlayer.position === 'FL') ? 0 : 
+        lineup.filter(p => p.position !== 'SUB' && p.position !== 'FL').length + 1
+    };
+    
+    // Update the appropriate lineup
+    if (isOpponentHome) {
+      setHomeLineup([...lineup, newPlayer]);
+    } else {
+      setAwayLineup([...lineup, newPlayer]);
+    }
+    
+    // Reset the form
+    setNewOpponentPlayer({
+      jersey_number: '',
+      name: '',
+      position: 'EH'  // Reset to 'EH' instead of 'P'
+    });
+    
+    // Set lineup as changed
+    setLineupChanged(true);
+  };
+
+  // Update the handleAddTeamPlayerQuick function
+  const handleAddTeamPlayerQuick = () => {
+    if (!selectedRosterPlayer) {
+      return; // Don't add if no player is selected
+    }
+    
+    // Find the selected player from the roster
+    const player = teamRoster.find(p => p.player_name === selectedRosterPlayer);
+    if (!player) return;
+    
+    // Determine which lineup to update
+    const lineup = game?.my_team_ha?.toLowerCase() === 'home' ? [...homeLineup] : [...awayLineup];
+    
+    // Create the new player
+    const newPlayer: Player = {
+      jersey_number: player.jersey_number,
+      name: player.player_name,
+      position: selectedPosition,
+      order_number: (selectedPosition === 'SUB' || selectedPosition === 'FL') ? 0 : 
+        lineup.filter(p => p.position !== 'SUB' && p.position !== 'FL').length + 1
+    };
+    
+    // Update the appropriate lineup
+    if (game?.my_team_ha?.toLowerCase() === 'home') {
+      setHomeLineup([...lineup, newPlayer]);
+    } else {
+      setAwayLineup([...lineup, newPlayer]);
+    }
+    
+    // Reset the form
+    setSelectedRosterPlayer('');
+    setSelectedPosition('P');
+    
+    // Set lineup as changed
+    setLineupChanged(true);
+  };
 
   useEffect(() => {
     if (teamId && gameId) {
       fetchGameDetails();
       fetchLineups();
+      fetchTeamRoster();
     }
   }, [teamId, gameId]);
 
@@ -321,23 +336,28 @@ export default function GameLineup() {
   };
 
   const movePlayerUp = (index: number) => {
-    if (index === 0) return; // Already at the top
+    if (index === 0) return;
     
     const lineup = activeTab === 'home' ? [...homeLineup] : [...awayLineup];
     const temp = lineup[index];
     lineup[index] = lineup[index - 1];
     lineup[index - 1] = temp;
     
-    // Update order numbers
-    lineup.forEach((player, idx) => {
-      player.order_number = idx + 1;
-    });
+    // Update order numbers for non-SUB players
+    if (temp.position !== 'SUB' && temp.position !== 'FL' && lineup[index].position !== 'SUB' && lineup[index].position !== 'FL') {
+      const tempOrder = temp.order_number;
+      temp.order_number = lineup[index].order_number;
+      lineup[index].order_number = tempOrder;
+    }
     
     if (activeTab === 'home') {
       setHomeLineup(lineup);
     } else {
       setAwayLineup(lineup);
     }
+    
+    // Set lineup as changed
+    setLineupChanged(true);
   };
 
   const movePlayerDown = (index: number) => {
@@ -358,6 +378,9 @@ export default function GameLineup() {
     } else {
       setAwayLineup(lineup);
     }
+    
+    // Set lineup as changed
+    setLineupChanged(true);
   };
 
   const deletePlayer = (index: number) => {
@@ -367,8 +390,14 @@ export default function GameLineup() {
     lineup.splice(index, 1);
     
     // Update order numbers for remaining players
-    lineup.forEach((player, idx) => {
-      player.order_number = idx + 1;
+    // Only update order numbers for non-SUB and non-FL players
+    let orderCounter = 1;
+    lineup.forEach((player) => {
+      if (player.position !== 'SUB' && player.position !== 'FL') {
+        player.order_number = orderCounter++;
+      } else {
+        player.order_number = 0;
+      }
     });
     
     // Update the state
@@ -377,11 +406,14 @@ export default function GameLineup() {
     } else {
       setAwayLineup(lineup);
     }
+    
+    // Set lineup as changed
+    setLineupChanged(true);
   };
 
   const saveLineup = async () => {
+    setSaving(true);
     try {
-      setSaving(true);
       const lineup = activeTab === 'home' ? homeLineup : awayLineup;
       
       // Determine if we're saving "my" team or "opponent" based on active tab and my_team_ha
@@ -419,6 +451,9 @@ export default function GameLineup() {
       }
       
       alert(`${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} lineup saved successfully!`);
+      
+      // Reset the changed flag after successful save
+      setLineupChanged(false);
     } catch (error) {
       console.error(`Error saving ${activeTab} lineup:`, error);
       setError(`Failed to save ${activeTab} lineup. Please try again.`);
@@ -486,6 +521,9 @@ export default function GameLineup() {
     }
     
     setIsAddPlayerModalOpen(false);
+    
+    // Set lineup as changed
+    setLineupChanged(true);
   };
 
   // Add this function to check for duplicate jersey numbers
@@ -527,35 +565,48 @@ export default function GameLineup() {
     } else {
       setAwayLineup(lineup);
     }
+    
+    // Set lineup as changed
+    setLineupChanged(true);
   };
 
-  // Add this function to find unused positions
+  // Fix the findUnusedPositions function to correctly identify missing positions
   const findUnusedPositions = (lineup: Player[]): string[] => {
-    const requiredPositions = ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'];
-    const usedPositions = new Set(lineup.map(player => player.position));
+    // Only check for missing positions if this is your team
+    const isMyTeam = (activeTab === 'home' && game?.my_team_ha?.toLowerCase() === 'home') ||
+                    (activeTab === 'away' && game?.my_team_ha?.toLowerCase() === 'away');
     
-    return requiredPositions.filter(pos => !usedPositions.has(pos));
+    if (!isMyTeam) {
+      return []; // Return empty array for opponent team
+    }
+    
+    // Define the required positions
+    const requiredPositions = ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'];
+    
+    // Get all positions currently used in the lineup
+    const usedPositions = lineup.map(player => player.position);
+    
+    // Find positions that are not used
+    return requiredPositions.filter(pos => !usedPositions.includes(pos));
   };
 
-  // Add this function to handle adding an opponent player
-  const handleAddOpponentPlayer = (player: Player) => {
-    // Determine which lineup to update based on which team is the opponent
-    const isOpponentHome = game?.my_team_ha?.toLowerCase() === 'away';
-    const lineup = isOpponentHome ? [...homeLineup] : [...awayLineup];
-    
-    // Set order_number based on position
-    const newPlayer = {
-      ...player,
-      order_number: (player.position === 'SUB' || player.position === 'FL') ? 0 : 
-        lineup.filter(p => p.position !== 'SUB' && p.position !== 'FL').length + 1
-    };
-    
-    // Update the appropriate lineup
-    if (isOpponentHome) {
-      setHomeLineup([...lineup, newPlayer]);
-    } else {
-      setAwayLineup([...lineup, newPlayer]);
-    }
+  // First, let's update the canShowScoreButton function to check if both teams have at least 7 players
+  const canShowScoreButton = () => {
+    const homePlayerCount = homeLineup.filter(p => p.position !== 'SUB').length;
+    const awayPlayerCount = awayLineup.filter(p => p.position !== 'SUB').length;
+    return homePlayerCount >= 7 && awayPlayerCount >= 7;
+  };
+
+  // First, let's fix the isOpponentTab function to correctly identify when we're on the opponent's tab
+  const isOpponentTab = () => {
+    return (game?.my_team_ha?.toLowerCase() === 'home' && activeTab === 'away') || 
+           (game?.my_team_ha?.toLowerCase() === 'away' && activeTab === 'home');
+  };
+
+  // And similarly for the isMyTeamTab function
+  const isMyTeamTab = () => {
+    return (game?.my_team_ha?.toLowerCase() === 'home' && activeTab === 'home') || 
+           (game?.my_team_ha?.toLowerCase() === 'away' && activeTab === 'away');
   };
 
   if (loading && !game) return (
@@ -577,42 +628,51 @@ export default function GameLineup() {
 
   return (
     <div className="container mx-auto px-3 py-0">
-      <h1 className="text-3xl font-bold text-gray-800 mb-1">Game Lineup</h1>
-      <div className="text-gray-600">
-        <div className="flex justify-between items-center">
-          <div>
-            <p className="flex">
-              <span className="font-semibold w-20">Date:</span>
-              <span>{game?.event_date}</span>
-            </p>
-            <p className="flex">
-              <span className="font-semibold w-20">Teams:</span>
-              <span>
-                {game?.my_team_ha?.toLowerCase() === 'home' 
-                  ? `Your Team (Home) vs ${game?.away_team_name} (Away)` 
-                  : `${game?.away_team_name} (Home) vs Your Team (Away)`}
-              </span>
-            </p>
-          </div>
-          <div className="flex space-x-4">
-            <button
-              onClick={saveLineup}
-              disabled={saving}
-              className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 transition-colors disabled:bg-indigo-400"
-            >
-              {saving ? 'Saving...' : 'Save Lineup'}
-            </button>
-            <button
-              onClick={() => router.push(`/score-game/${teamId}`)}
-              className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-            >
-              Back to Games
-            </button>
-          </div>
+      <div className="flex justify-between items-center mb-3">
+        <div>
+          <h1 className="text-2xl font-bold">Game Lineup</h1>
+          {game && (
+            <div className="text-xs text-gray-500 mt-1">
+              {game.event_date} {game.event_hour}:{game.event_minute < 10 ? '0' + game.event_minute : game.event_minute}
+            </div>
+          )}
+        </div>
+        
+        <div className="flex space-x-3">
+          <button
+            onClick={() => router.push(`/score-game/${teamId}`)}
+            className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded transition-colors"
+          >
+            Back to Games
+          </button>
+          
+          <button
+            onClick={saveLineup}
+            disabled={saving || !lineupChanged}
+            className={`px-4 py-2 rounded transition-colors ${
+              lineupChanged 
+                ? 'bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-indigo-400' 
+                : 'border border-indigo-600 text-indigo-600 hover:bg-indigo-50 disabled:border-indigo-300 disabled:text-indigo-300'
+            }`}
+          >
+            {saving ? 'Saving...' : 'Save Lineup'}
+          </button>
+          
+          <button
+            onClick={() => router.push(`/score-game/${teamId}/score/${gameId}`)}
+            disabled={!canShowScoreButton()}
+            className={`px-4 py-2 rounded transition-colors ${
+              canShowScoreButton() 
+                ? 'bg-indigo-600 text-white hover:bg-indigo-700' 
+                : 'border border-indigo-600 text-indigo-600 hover:bg-indigo-50 disabled:border-indigo-300 disabled:text-indigo-300'
+            }`}
+          >
+            Score Game
+          </button>
         </div>
       </div>
       
-      <div className="bg-white rounded-lg shadow overflow-hidden mt-6">
+      <div className="bg-white rounded-lg shadow overflow-hidden mt-3">
         <div className="border-b border-gray-200">
           <nav className="-mb-px flex">
             <button
@@ -641,32 +701,126 @@ export default function GameLineup() {
         <div className="p-6">
           {activeTab === 'home' ? (
             <div>
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold">Home Team Lineup</h2>
-                {game?.my_team_ha?.toLowerCase() === 'home' ? (
-                  <button
-                    onClick={handleAddPlayerClick}
-                    className="bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-700 transition-colors"
-                  >
-                    + Add Player
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => setIsAddOpponentPlayerModalOpen(true)}
-                    className="bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-700 transition-colors"
-                  >
-                    + Add Opponent Player
-                  </button>
+              <div className="flex justify-between items-center mb-2">
+                <h2 className="text-lg font-semibold">Home Team Lineup</h2>
+                
+                {/* Show your team's player selector when home is your team and home tab is active */}
+                {game?.my_team_ha?.toLowerCase() === 'home' && activeTab === 'home' && (
+                  <div className="mb-2 bg-white p-2 rounded-lg shadow">
+                    <div className="flex items-end space-x-2">
+                      <div className="flex-1">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Player</label>
+                        {loadingRoster ? (
+                          <div className="w-full p-1 text-sm text-gray-500">Loading roster...</div>
+                        ) : (
+                          <select
+                            value={selectedRosterPlayer}
+                            onChange={(e) => setSelectedRosterPlayer(e.target.value)}
+                            className="w-full p-1 border border-gray-300 rounded text-sm"
+                          >
+                            <option value="">Select a player</option>
+                            {teamRoster
+                              .filter(player => 
+                                // Filter out players that are already in the lineup
+                                !homeLineup.some(p => p.jersey_number === player.jersey_number && p.name === player.player_name) &&
+                                !awayLineup.some(p => p.jersey_number === player.jersey_number && p.name === player.player_name)
+                              )
+                              .map(player => (
+                                <option key={player.jersey_number} value={player.player_name}>
+                                  #{player.jersey_number} - {player.player_name}
+                                </option>
+                              ))
+                            }
+                          </select>
+                        )}
+                      </div>
+                      <div className="w-20">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Pos</label>
+                        <select
+                          value={selectedPosition}
+                          onChange={(e) => setSelectedPosition(e.target.value)}
+                          className="w-full p-1 border border-gray-300 rounded text-sm"
+                        >
+                          {['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'EH', 'DP', 'FL', 'SUB'].map(pos => (
+                            <option key={pos} value={pos}>{pos}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <button
+                        onClick={handleAddTeamPlayerQuick}
+                        disabled={!selectedRosterPlayer}
+                        className="bg-indigo-600 text-white py-1 px-3 rounded text-sm hover:bg-indigo-700 transition-colors disabled:bg-indigo-300"
+                      >
+                        Add
+                      </button>
+                      <button
+                        onClick={handleAddPlayerClick}
+                        className="bg-gray-200 text-gray-700 py-1 px-3 rounded text-sm hover:bg-gray-300 transition-colors"
+                      >
+                        Roster
+                      </button>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Show opponent player form when home is the opponent and home tab is active */}
+                {game?.my_team_ha?.toLowerCase() === 'away' && activeTab === 'home' && (
+                  <div className="mb-2 bg-white p-2 rounded-lg shadow">
+                    <div className="flex items-end space-x-2">
+                      <div className="w-16">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Jersey #</label>
+                        <input
+                          type="text"
+                          value={newOpponentPlayer.jersey_number}
+                          onChange={(e) => setNewOpponentPlayer({
+                            ...newOpponentPlayer, 
+                            jersey_number: e.target.value
+                          })}
+                          className="w-full p-1 border border-gray-300 rounded text-sm"
+                          placeholder="##"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Name (Optional)</label>
+                        <input
+                          type="text"
+                          value={newOpponentPlayer.name}
+                          onChange={(e) => setNewOpponentPlayer({...newOpponentPlayer, name: e.target.value})}
+                          className="w-full p-1 border border-gray-300 rounded text-sm"
+                          placeholder="Leave blank to use jersey #"
+                        />
+                      </div>
+                      <div className="w-20">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Pos</label>
+                        <select
+                          value={newOpponentPlayer.position}
+                          onChange={(e) => setNewOpponentPlayer({...newOpponentPlayer, position: e.target.value})}
+                          className="w-full p-1 border border-gray-300 rounded text-sm"
+                        >
+                          {['EH', 'P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DP', 'FL', 'SUB'].map(pos => (
+                            <option key={pos} value={pos}>{pos}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <button
+                        onClick={handleAddOpponentToGrid}
+                        disabled={!newOpponentPlayer.jersey_number}
+                        className="bg-indigo-600 text-white py-1 px-3 rounded text-sm hover:bg-indigo-700 transition-colors disabled:bg-indigo-300"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jersey #</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Position</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jersey #</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Position</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -731,53 +885,60 @@ export default function GameLineup() {
                       acc.push(
                         <tr 
                           key={index} 
-                          className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
+                          className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} ${isFirstSub(player, index, sortedArray) ? 'border-t-2 border-gray-300' : ''}`}
                         >
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{player.order_number}</td>
-                          <td className={`px-6 py-4 whitespace-nowrap text-sm ${
-                            homeDuplicates.has(player.jersey_number)
-                              ? 'bg-red-100 text-red-800' 
-                              : 'text-gray-500'
-                          }`}>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                            {player.position === 'SUB' || player.position === 'FL' ? '-' : player.order_number}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                             {player.jersey_number}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{player.name}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {player.name}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                             <select
                               value={player.position}
                               onChange={(e) => editPosition(index, e.target.value)}
-                              className="border rounded px-2 py-1 text-sm"
+                              className="border-gray-300 rounded-md text-sm focus:ring-indigo-500 focus:border-indigo-500"
                             >
                               {['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'EH', 'DP', 'FL', 'SUB'].map(pos => (
                                 <option key={pos} value={pos}>{pos}</option>
                               ))}
                             </select>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                             <div className="flex space-x-2">
-                              <button 
+                              <button
                                 onClick={() => movePlayerUp(index)}
-                                disabled={index === 0}
-                                className="text-indigo-600 hover:text-indigo-900 disabled:text-gray-400"
+                                disabled={player.position === 'SUB' || player.position === 'FL' || index === 0 || isFirstSub(player, index, sortedArray)}
+                                className="text-gray-500 hover:text-gray-700 disabled:text-gray-300 disabled:cursor-not-allowed"
                               >
-                                ↑
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                </svg>
                               </button>
-                              <button 
+                              <button
                                 onClick={() => movePlayerDown(index)}
-                                disabled={index === homeLineup.length - 1}
-                                className="text-indigo-600 hover:text-indigo-900 disabled:text-gray-400"
+                                disabled={
+                                  player.position === 'SUB' || 
+                                  player.position === 'FL' || 
+                                  index === sortedArray.filter(p => p.position !== 'SUB' && p.position !== 'FL').length - 1 ||
+                                  (index < sortedArray.length - 1 && (sortedArray[index + 1].position === 'SUB' || sortedArray[index + 1].position === 'FL'))
+                                }
+                                className="text-gray-500 hover:text-gray-700 disabled:text-gray-300 disabled:cursor-not-allowed"
                               >
-                                ↓
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
                               </button>
-                              <button 
-                                onClick={() => {
-                                  if (window.confirm(`Are you sure you want to remove ${player.name} from the lineup?`)) {
-                                    deletePlayer(index);
-                                  }
-                                }}
-                                className="text-red-600 hover:text-red-900"
+                              <button
+                                onClick={() => deletePlayer(index)}
+                                className="text-red-500 hover:text-red-700"
                               >
-                                ×
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
                               </button>
                             </div>
                           </td>
@@ -791,32 +952,126 @@ export default function GameLineup() {
             </div>
           ) : (
             <div>
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold">Away Team Lineup</h2>
-                {game?.my_team_ha?.toLowerCase() === 'away' ? (
-                  <button
-                    onClick={handleAddPlayerClick}
-                    className="bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-700 transition-colors"
-                  >
-                    + Add Player
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => setIsAddOpponentPlayerModalOpen(true)}
-                    className="bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-700 transition-colors"
-                  >
-                    + Add Opponent Player
-                  </button>
+              <div className="flex justify-between items-center mb-2">
+                <h2 className="text-lg font-semibold">Away Team Lineup</h2>
+                
+                {/* Show your team's player selector when away is your team and away tab is active */}
+                {game?.my_team_ha?.toLowerCase() === 'away' && activeTab === 'away' && (
+                  <div className="mb-2 bg-white p-2 rounded-lg shadow">
+                    <div className="flex items-end space-x-2">
+                      <div className="flex-1">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Player</label>
+                        {loadingRoster ? (
+                          <div className="w-full p-1 text-sm text-gray-500">Loading roster...</div>
+                        ) : (
+                          <select
+                            value={selectedRosterPlayer}
+                            onChange={(e) => setSelectedRosterPlayer(e.target.value)}
+                            className="w-full p-1 border border-gray-300 rounded text-sm"
+                          >
+                            <option value="">Select a player</option>
+                            {teamRoster
+                              .filter(player => 
+                                // Filter out players that are already in the lineup
+                                !homeLineup.some(p => p.jersey_number === player.jersey_number && p.name === player.player_name) &&
+                                !awayLineup.some(p => p.jersey_number === player.jersey_number && p.name === player.player_name)
+                              )
+                              .map(player => (
+                                <option key={player.jersey_number} value={player.player_name}>
+                                  #{player.jersey_number} - {player.player_name}
+                                </option>
+                              ))
+                            }
+                          </select>
+                        )}
+                      </div>
+                      <div className="w-20">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Pos</label>
+                        <select
+                          value={selectedPosition}
+                          onChange={(e) => setSelectedPosition(e.target.value)}
+                          className="w-full p-1 border border-gray-300 rounded text-sm"
+                        >
+                          {['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'EH', 'DP', 'FL', 'SUB'].map(pos => (
+                            <option key={pos} value={pos}>{pos}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <button
+                        onClick={handleAddTeamPlayerQuick}
+                        disabled={!selectedRosterPlayer}
+                        className="bg-indigo-600 text-white py-1 px-3 rounded text-sm hover:bg-indigo-700 transition-colors disabled:bg-indigo-300"
+                      >
+                        Add
+                      </button>
+                      <button
+                        onClick={handleAddPlayerClick}
+                        className="bg-gray-200 text-gray-700 py-1 px-3 rounded text-sm hover:bg-gray-300 transition-colors"
+                      >
+                        Roster
+                      </button>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Show opponent player form when away is the opponent and away tab is active */}
+                {game?.my_team_ha?.toLowerCase() === 'home' && activeTab === 'away' && (
+                  <div className="mb-2 bg-white p-2 rounded-lg shadow">
+                    <div className="flex items-end space-x-2">
+                      <div className="w-16">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Jersey #</label>
+                        <input
+                          type="text"
+                          value={newOpponentPlayer.jersey_number}
+                          onChange={(e) => setNewOpponentPlayer({
+                            ...newOpponentPlayer, 
+                            jersey_number: e.target.value
+                          })}
+                          className="w-full p-1 border border-gray-300 rounded text-sm"
+                          placeholder="##"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Name (Optional)</label>
+                        <input
+                          type="text"
+                          value={newOpponentPlayer.name}
+                          onChange={(e) => setNewOpponentPlayer({...newOpponentPlayer, name: e.target.value})}
+                          className="w-full p-1 border border-gray-300 rounded text-sm"
+                          placeholder="Leave blank to use jersey #"
+                        />
+                      </div>
+                      <div className="w-20">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Pos</label>
+                        <select
+                          value={newOpponentPlayer.position}
+                          onChange={(e) => setNewOpponentPlayer({...newOpponentPlayer, position: e.target.value})}
+                          className="w-full p-1 border border-gray-300 rounded text-sm"
+                        >
+                          {['EH', 'P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DP', 'FL', 'SUB'].map(pos => (
+                            <option key={pos} value={pos}>{pos}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <button
+                        onClick={handleAddOpponentToGrid}
+                        disabled={!newOpponentPlayer.jersey_number}
+                        className="bg-indigo-600 text-white py-1 px-3 rounded text-sm hover:bg-indigo-700 transition-colors disabled:bg-indigo-300"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jersey #</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Position</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jersey #</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Position</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -881,53 +1136,60 @@ export default function GameLineup() {
                       acc.push(
                         <tr 
                           key={index} 
-                          className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
+                          className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} ${isFirstSub(player, index, sortedArray) ? 'border-t-2 border-gray-300' : ''}`}
                         >
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{player.order_number}</td>
-                          <td className={`px-6 py-4 whitespace-nowrap text-sm ${
-                            awayDuplicates.has(player.jersey_number)
-                              ? 'bg-red-100 text-red-800' 
-                              : 'text-gray-500'
-                          }`}>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                            {player.position === 'SUB' || player.position === 'FL' ? '-' : player.order_number}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                             {player.jersey_number}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{player.name}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {player.name}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                             <select
                               value={player.position}
                               onChange={(e) => editPosition(index, e.target.value)}
-                              className="border rounded px-2 py-1 text-sm"
+                              className="border-gray-300 rounded-md text-sm focus:ring-indigo-500 focus:border-indigo-500"
                             >
                               {['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'EH', 'DP', 'FL', 'SUB'].map(pos => (
                                 <option key={pos} value={pos}>{pos}</option>
                               ))}
                             </select>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                             <div className="flex space-x-2">
-                              <button 
+                              <button
                                 onClick={() => movePlayerUp(index)}
-                                disabled={index === 0}
-                                className="text-indigo-600 hover:text-indigo-900 disabled:text-gray-400"
+                                disabled={player.position === 'SUB' || player.position === 'FL' || index === 0 || isFirstSub(player, index, sortedArray)}
+                                className="text-gray-500 hover:text-gray-700 disabled:text-gray-300 disabled:cursor-not-allowed"
                               >
-                                ↑
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                </svg>
                               </button>
-                              <button 
+                              <button
                                 onClick={() => movePlayerDown(index)}
-                                disabled={index === awayLineup.length - 1}
-                                className="text-indigo-600 hover:text-indigo-900 disabled:text-gray-400"
+                                disabled={
+                                  player.position === 'SUB' || 
+                                  player.position === 'FL' || 
+                                  index === sortedArray.filter(p => p.position !== 'SUB' && p.position !== 'FL').length - 1 ||
+                                  (index < sortedArray.length - 1 && (sortedArray[index + 1].position === 'SUB' || sortedArray[index + 1].position === 'FL'))
+                                }
+                                className="text-gray-500 hover:text-gray-700 disabled:text-gray-300 disabled:cursor-not-allowed"
                               >
-                                ↓
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
                               </button>
-                              <button 
-                                onClick={() => {
-                                  if (window.confirm(`Are you sure you want to remove ${player.name} from the lineup?`)) {
-                                    deletePlayer(index);
-                                  }
-                                }}
-                                className="text-red-600 hover:text-red-900"
+                              <button
+                                onClick={() => deletePlayer(index)}
+                                className="text-red-500 hover:text-red-700"
                               >
-                                ×
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
                               </button>
                             </div>
                           </td>
@@ -952,10 +1214,10 @@ export default function GameLineup() {
         loading={loadingPlayers}
       />
 
-      {/* Then add this component to display the unused positions */}
+      {/* Make sure the missing positions warning is displayed in the correct location */}
       {findUnusedPositions(activeTab === 'home' ? homeLineup : awayLineup).length > 0 && (
-        <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
-          <h3 className="text-sm font-medium text-yellow-800 mb-2">Missing Positions:</h3>
+        <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+          <h3 className="text-sm font-medium text-yellow-800 mb-1">Missing Positions:</h3>
           <div className="flex flex-wrap gap-2">
             {findUnusedPositions(activeTab === 'home' ? homeLineup : awayLineup).map(position => (
               <span key={position} className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs">
@@ -965,13 +1227,6 @@ export default function GameLineup() {
           </div>
         </div>
       )}
-
-      {/* Add Opponent Player Modal */}
-      <AddOpponentPlayerModal
-        isOpen={isAddOpponentPlayerModalOpen}
-        onClose={() => setIsAddOpponentPlayerModalOpen(false)}
-        onAddPlayer={handleAddOpponentPlayer}
-      />
     </div>
   );
 } 
