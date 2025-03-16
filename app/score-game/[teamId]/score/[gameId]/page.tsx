@@ -2,6 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import BaseballDiamondCell from '@/app/components/BaseballDiamondCell';
+import PlateAppearanceModal from '@/app/components/PlateAppearanceModal';
+import PositionSelectOptions from '@/app/components/PositionSelectOptions';
 
 // Define types
 interface Game {
@@ -49,15 +52,23 @@ interface ScoreBookEntry {
   batter_jersey_number: string;
   batter_name: string;
   batter_seq_id: number;
-  pa_result: string;
-  detailed_result: string;
+  bases_reached: string;      // 0-4 for bases reached
+  why_base_reached: string;   // H, HH, S, B, C, etc.
+  pa_result: string;         // Legacy field - will be computed from bases_reached and why_base_reached
+  result_type: string;       // Legacy field - will be computed from why_base_reached
+  detailed_result: string;   // Fielder position
   base_running: string;
   balls_before_play: number;
   strikes_before_play: number;
+  strikes_watching: number;   
+  strikes_swinging: number;   
+  strikes_unsure: number;     // New field for strikes where type is unknown
   fouls_after_two_strikes: number;
-  hard_hit: number;
-  bunt_or_slap: number;
   base_running_stolen_base: number;
+  error_on?: string;
+  passed_ball?: number;
+  wild_pitch?: number;
+  round: number;
 }
 
 interface InningDetail {
@@ -78,244 +89,205 @@ interface InningDetail {
   scorebook_entries: ScoreBookEntry[];
 }
 
-// Update the BaseballField component to include a foul counter
-const BaseballField = ({ paResult, baseRunning, balls, strikes, fouls }: { 
-  paResult: string, 
-  baseRunning: string,
-  balls: number,
-  strikes: number,
-  fouls: number
-}) => {
-  // Determine which bases to highlight based on the result
-  const getBaseHighlights = () => {
-    const result = paResult || '';
-    const running = baseRunning || '';
-    
-    // Default - no bases reached
-    const bases = {
-      first: false,
-      second: false,
-      third: false,
-      home: false,
-      out: false
-    };
-    
-    // Check for outs
-    if (['K', 'KK', 'FO', 'GO', 'LO', 'DP', 'TP'].includes(result)) {
-      bases.out = true;
-      return bases;
+interface SubstitutionModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (substitution: PlayerSubstitution) => void;
+  inningNumber: string;
+  teamId: string;
+  gameId: string;
+  currentLineup: LineupEntry[];
+  orderNumber: number;
+}
+
+interface PlayerSubstitution {
+  team_id: string;
+  game_id: string;
+  inning_number: number;
+  order_number: number;
+  jersey_number: string;
+  name: string;
+  position: string;
+}
+
+interface PlateAppearanceModalProps {
+  pa: ScoreBookEntry | null;
+  isOpen: boolean;
+  onClose: () => void;
+  onSave?: (updatedPA: ScoreBookEntry) => void;
+  teamId?: string;
+  gameId?: string;
+  inningNumber?: number;
+  homeOrAway?: string;
+  nextBatterSeqId?: number;
+  myTeamHomeOrAway?: string;
+  onDelete: (paData: {
+    team_id: string;
+    game_id: string;
+    inning_number: number | string;
+    home_or_away: string;
+    batter_seq_id: number;
+  }) => Promise<void>;
+  inningDetail: InningDetail | null;
+}
+
+const SubstitutionModal = ({ 
+  isOpen, 
+  onClose, 
+  onSave, 
+  inningNumber, 
+  teamId, 
+  gameId, 
+  currentLineup,
+  orderNumber
+}: SubstitutionModalProps) => {
+  const [availablePlayers, setAvailablePlayers] = useState<any[]>([]);
+  const [selectedPlayer, setSelectedPlayer] = useState<string>('');
+  const [position, setPosition] = useState<string>('');
+  const [loading, setLoading] = useState(false);
+  
+  // Get the current player in this lineup spot
+  const currentPlayer = currentLineup.find(player => player.order_number === orderNumber);
+  
+  useEffect(() => {
+    if (isOpen) {
+      fetchAvailablePlayers();
     }
-    
-    // Check for hits and walks
-    if (result.includes('1B') || result === 'BB' || result === 'HBP' || result === 'E' || result === 'FC') {
-      bases.first = true;
-    }
-    
-    if (result.includes('2B')) {
-      bases.first = true;
-      bases.second = true;
-    }
-    
-    if (result.includes('3B')) {
-      bases.first = true;
-      bases.second = true;
-      bases.third = true;
-    }
-    
-    if (result.includes('HR')) {
-      bases.first = true;
-      bases.second = true;
-      bases.third = true;
-      bases.home = true;
-    }
-    
-    // Check base running for additional advancement
-    if (running) {
-      if (running.includes('2B') || running.includes('4B')) {
-        bases.second = true;
-      }
+  }, [isOpen]);
+  
+  const fetchAvailablePlayers = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/teams/${teamId}/players`);
+      if (!response.ok) throw new Error("Failed to fetch players");
+      const data = await response.json();
       
-      if (running.includes('3B') || running.includes('4B')) {
-        bases.third = true;
+      if (data && data.players) {
+        setAvailablePlayers(data.players);
       }
-      
-      if (running.includes('4B') || running.includes('HR')) {
-        bases.home = true;
-      }
+    } catch (error) {
+      console.error("Error fetching players:", error);
+    } finally {
+      setLoading(false);
     }
-    
-    return bases;
   };
   
-  const bases = getBaseHighlights();
+  const handleSave = () => {
+    if (!selectedPlayer) {
+      alert("Please select a player");
+      return;
+    }
+    
+    if (!position) {
+      alert("Please select a position");
+      return;
+    }
+    
+    const playerInfo = availablePlayers.find(p => p.jersey_number === selectedPlayer);
+    
+    if (!playerInfo) {
+      alert("Invalid player selection");
+      return;
+    }
+    
+    const substitution: PlayerSubstitution = {
+      team_id: teamId,
+      game_id: gameId,
+      inning_number: parseInt(inningNumber),
+      order_number: orderNumber,
+      jersey_number: selectedPlayer,
+      name: playerInfo.name,
+      position: position
+    };
+    
+    onSave(substitution);
+  };
   
-  // Determine if the result is an out
-  const isOut = ['K', 'KK', 'FO', 'GO', 'LO', 'DP', 'TP'].includes(paResult);
+  if (!isOpen) return null;
   
   return (
-    <div className="relative w-14 h-14 mx-0 ml-0 mb-0 p-0 overflow-visible">
-      {/* Diamond shape */}
-      <svg viewBox="0 0 60 60" className="w-full h-full overflow-visible">
-        {/* Outfield outline - faint arc moved up further */}
-        <path 
-          d="M5,25 Q30,-15 55,25" 
-          fill="none" 
-          stroke="#DDDDDD" 
-          strokeWidth="1.5"
-          strokeDasharray="2,1"
-        />
-        
-        {/* Infield outline - faint square adjusted to match */}
-        <path 
-          d="M18,35 L42,35 L42,11 L18,11 Z" 
-          fill="none" 
-          stroke="#EEEEEE" 
-          strokeWidth="1"
-        />
-        
-        {/* Base paths */}
-        {/* Home to first */}
-        {bases.first && (
-          <line 
-            x1="30" y1="48" 
-            x2="42" y2="36" 
-            stroke="black" 
-            strokeWidth="1.5"
-          />
-        )}
-        
-        {/* First to second */}
-        {bases.second && (
-          <line 
-            x1="42" y1="36" 
-            x2="30" y2="24" 
-            stroke="black" 
-            strokeWidth="1.5"
-          />
-        )}
-        
-        {/* Second to third */}
-        {bases.third && (
-          <line 
-            x1="30" y1="24" 
-            x2="18" y2="36" 
-            stroke="black" 
-            strokeWidth="1.5"
-          />
-        )}
-        
-        {/* Third to home */}
-        {bases.home && (
-          <line 
-            x1="18" y1="36" 
-            x2="30" y2="48" 
-            stroke="black" 
-            strokeWidth="1.5"
-          />
-        )}
-        
-        {/* Base markers */}
-        {/* Home plate */}
-        <rect x="28" y="46" width="4" height="4" fill="white" stroke="black" />
-        
-        {/* First base */}
-        <rect 
-          x="40" y="34" 
-          width="4" height="4" 
-          fill={bases.first ? "black" : "white"} 
-          stroke="black" 
-        />
-        
-        {/* Second base */}
-        <rect 
-          x="28" y="22" 
-          width="4" height="4" 
-          fill={bases.second ? "black" : "white"} 
-          stroke="black" 
-        />
-        
-        {/* Third base */}
-        <rect 
-          x="16" y="34" 
-          width="4" height="4" 
-          fill={bases.third ? "black" : "white"} 
-          stroke="black" 
-        />
-        
-        {/* Out indicator - top left with no padding */}
-        {bases.out && (
-          <circle 
-            cx="5" 
-            cy="5" 
-            r="5" 
-            fill="red" 
-          />
-        )}
-        
-        {/* Ball indicators - top right corner with no padding */}
-        <rect x="54" y="0" width="6" height="6" fill={balls >= 1 ? "#888" : "white"} stroke="#888" strokeWidth="0.5" />
-        <rect x="54" y="8" width="6" height="6" fill={balls >= 2 ? "#888" : "white"} stroke="#888" strokeWidth="0.5" />
-        <rect x="54" y="16" width="6" height="6" fill={balls >= 3 ? "#888" : "white"} stroke="#888" strokeWidth="0.5" />
-        
-        {/* Strike indicators - moved up with no right padding */}
-        <rect x="54" y="30" width="6" height="6" fill={strikes >= 1 ? "black" : "white"} stroke="black" strokeWidth="0.5" />
-        <rect x="54" y="38" width="6" height="6" fill={strikes >= 2 ? "black" : "white"} stroke="black" strokeWidth="0.5" />
-        
-        {/* Foul counter - with outline in bottom right */}
-        {fouls > 0 && (
-          <g transform="translate(54, 54)">
-            <circle 
-              cx="0" 
-              cy="0" 
-              r="6" 
-              fill="#FFF4E5" 
-              stroke="#FF9800" 
-              strokeWidth="1"
-            />
-            <text 
-              x="0" 
-              y="0" 
-              fontSize="8" 
-              textAnchor="middle" 
-              alignmentBaseline="central" 
-              dominantBaseline="central" 
-              fill="#FF9800"
-              fontWeight="bold"
-            >
-              {fouls}
-            </text>
-          </g>
-        )}
-        
-        {/* Result badge in bottom left */}
-        <g transform="translate(0, 60)">
-          {/* Badge background - larger */}
-          <rect 
-            x="0" 
-            y="-12" 
-            width="20" 
-            height="12" 
-            rx="6" 
-            fill="white" 
-            stroke={paResult.includes('E') ? "#9333ea" : isOut ? "#FF0000" : "#888888"} 
-            strokeWidth={paResult.includes('E') ? "1.5" : "1"}
-          />
-          
-          {/* Badge text - perfectly centered and larger */}
-          <text 
-            x="10" 
-            y="-6.5" 
-            fontSize="7" 
-            textAnchor="middle" 
-            alignmentBaseline="central" 
-            dominantBaseline="central" 
-            fill="#666666"
-            style={{ textAlign: 'center' }}
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-lg max-w-md w-full">
+        <div className="p-4 border-b flex justify-between items-center">
+          <h2 className="text-xl font-semibold">
+            Player Substitution - Inning {inningNumber}
+          </h2>
+          <button 
+            onClick={onClose}
+            className="text-gray-500 hover:text-gray-700"
           >
-            {paResult}
-          </text>
-        </g>
-      </svg>
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        <div className="p-4">
+          <div className="mb-4">
+            <div className="text-sm font-medium text-gray-700 mb-2">Current Player:</div>
+            <div className="p-3 bg-gray-50 rounded">
+              {currentPlayer ? (
+                <div className="font-medium">
+                  #{currentPlayer.jersey_number} {currentPlayer.name} ({currentPlayer.position})
+                </div>
+              ) : (
+                <div className="text-gray-500">No player in this position</div>
+              )}
+            </div>
+          </div>
+          
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Substitute Player:
+            </label>
+            {loading ? (
+              <div className="text-center py-2">Loading players...</div>
+            ) : (
+              <select
+                className="w-full p-2 border rounded"
+                value={selectedPlayer}
+                onChange={(e) => setSelectedPlayer(e.target.value)}
+              >
+                <option value="">Select Player</option>
+                {availablePlayers.map((player) => (
+                  <option key={player.jersey_number} value={player.jersey_number}>
+                    #{player.jersey_number} {player.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+          
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Position:
+            </label>
+            <select
+              className="w-full p-2 border rounded"
+              value={position}
+              onChange={(e) => setPosition(e.target.value)}
+            >
+              <option value="">Select Position</option>
+              <PositionSelectOptions />
+            </select>
+          </div>
+          
+          <div className="flex justify-end space-x-3">
+            <button
+              onClick={onClose}
+              className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded transition-colors"
+            >
+              Save Substitution
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
@@ -326,24 +298,19 @@ export default function ScoreGame() {
   const gameId = params.gameId as string;
   const router = useRouter();
   
-  // Basic state
+  // State variables
   const [game, setGame] = useState<Game | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  
-  // Box score state
-  const [boxScoreData, setBoxScoreData] = useState<BoxScoreData | null>(null);
-  const [totalInnings, setTotalInnings] = useState(7);
-  
-  // Inning detail state
+  const [boxScore, setBoxScore] = useState<BoxScoreData | null>(null);
   const [selectedInning, setSelectedInning] = useState<string>('1');
-  const [selectedTeam, setSelectedTeam] = useState<'home' | 'away'>('away');
+  const [selectedTeam, setSelectedTeam] = useState<string>('away');
   const [inningDetail, setInningDetail] = useState<InningDetail | null>(null);
+  const [loading, setLoading] = useState(true);
   const [loadingInningDetail, setLoadingInningDetail] = useState(false);
-  
-  // Selected plate appearance for detail view
+  const [isSubstitutionModalOpen, setIsSubstitutionModalOpen] = useState(false);
+  const [substitutingOrderNumber, setSubstitutingOrderNumber] = useState<number | null>(null);
   const [selectedPA, setSelectedPA] = useState<ScoreBookEntry | null>(null);
-
+  const [isPlateAppearanceModalOpen, setIsPlateAppearanceModalOpen] = useState(false);
+  
   useEffect(() => {
     if (teamId && gameId) {
       fetchGameDetails();
@@ -353,10 +320,10 @@ export default function ScoreGame() {
 
   // When box score is loaded, fetch the first inning details
   useEffect(() => {
-    if (boxScoreData) {
+    if (boxScore) {
       fetchInningDetail('1', 'away');
     }
-  }, [boxScoreData]);
+  }, [boxScore]);
 
   const fetchGameDetails = async () => {
     try {
@@ -371,7 +338,7 @@ export default function ScoreGame() {
       }
     } catch (error) {
       console.error("Error fetching game details:", error);
-      setError("Failed to load game details. Please try again later.");
+      alert("Failed to load game details. Please try again later.");
     }
   };
 
@@ -381,46 +348,81 @@ export default function ScoreGame() {
       if (!response.ok) throw new Error("Failed to fetch box score");
       const data = await response.json();
       
-      setBoxScoreData(data);
-      
-      // Set the total innings based on the data
-      if (data && data.innings) {
-        setTotalInnings(Object.keys(data.innings).length);
-      }
+      setBoxScore(data);
       
       setLoading(false);
     } catch (error) {
       console.error("Error fetching box score:", error);
-      setError("Failed to load box score. Please try again later.");
+      alert("Failed to load box score. Please try again later.");
       setLoading(false);
     }
   };
 
   const fetchInningDetail = async (inningNumber: string, teamChoice: 'home' | 'away') => {
-    setLoadingInningDetail(true);
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/scores/${teamId}/${gameId}/inning/${inningNumber}/scorebook/${teamChoice}`
-      );
-      
-      if (!response.ok) throw new Error("Failed to fetch inning details");
-      
-      const data = await response.json();
-      setInningDetail(data);
+      setLoadingInningDetail(true);
       setSelectedInning(inningNumber);
       setSelectedTeam(teamChoice);
+      
+      // Try the original URL structure but with the correct environment variable
+      const apiUrl = `${process.env.NEXT_PUBLIC_API_URL}/scores/${teamId}/${gameId}/${inningNumber}/${teamChoice}`;
+      console.log('Fetching inning detail from:', apiUrl);
+      
+      const response = await fetch(apiUrl);
+      
+      // Handle 404 specifically as "no data" rather than an error
+      if (response.status === 404) {
+        console.log(`No data available for inning ${inningNumber}, ${teamChoice}`);
+        // Set empty inning detail structure
+        setInningDetail({
+          team_id: teamId,
+          game_id: gameId,
+          inning_number: parseInt(inningNumber),
+          my_team_ha: game?.my_team_ha || 'away',
+          lineup_available: false,
+          stats: {
+            runs: 0,
+            hits: 0,
+            errors: 0,
+            walks: 0,
+            outs: 0,
+            total_plate_appearances: 0
+          },
+          lineup_entries: [],
+          scorebook_entries: []
+        });
+        return;
+      }
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch inning details: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      // Log the response data
+      console.log('Inning detail API response:', data);
+      
+      setInningDetail(data);
     } catch (error) {
       console.error("Error fetching inning details:", error);
+      // Set inningDetail to null or an empty structure on error
       setInningDetail(null);
     } finally {
       setLoadingInningDetail(false);
     }
   };
 
-  // Function to get plate appearances for a specific player
+  // Update the getPlayerPAs function to properly organize PAs by time through the order
   const getPlayerPAs = (orderNumber: number) => {
     if (!inningDetail?.scorebook_entries) return [];
-    return inningDetail.scorebook_entries.filter(entry => entry.order_number === orderNumber);
+    
+    // Get all PAs for this player in this inning
+    const playerPAs = inningDetail.scorebook_entries
+      .filter(entry => entry.order_number === orderNumber)
+      .sort((a, b) => (a.batter_seq_id || 0) - (b.batter_seq_id || 0));
+    
+    return playerPAs;
   };
 
   // Function to get the maximum number of plate appearances for any player
@@ -437,21 +439,225 @@ export default function ScoreGame() {
     return Math.max(...Array.from(paCountsByPlayer.values()), 0);
   };
 
-  // Function to render a plate appearance cell with smaller padding
-  const renderPACell = (pa: ScoreBookEntry | undefined, index: number) => {
-    if (!pa) return <td key={`empty-pa-${index}`} className="border p-0 text-center text-gray-400" style={{ width: '30px' }}>-</td>;
+  // Function to get the current batter index
+  const getCurrentBatterIndex = () => {
+    if (!inningDetail?.scorebook_entries || inningDetail.scorebook_entries.length === 0) {
+      return 0;
+    }
+    
+    // Get the most recent plate appearance
+    const sortedEntries = [...inningDetail.scorebook_entries].sort((a, b) => {
+      // Sort by batter_seq_id (descending)
+      return (b.batter_seq_id || 0) - (a.batter_seq_id || 0);
+    });
+    
+    const lastPA = sortedEntries[0];
+    
+    // Find the index of this player in the lineup
+    const playerIndex = inningDetail.lineup_entries.findIndex(
+      player => player.order_number === lastPA.order_number
+    );
+    
+    return playerIndex >= 0 ? playerIndex : 0;
+  };
+
+  // Updated function to get the next batter sequence ID using the round field
+  const getNextBatterSeqId = () => {
+    console.log("getNextBatterSeqId called");
+    
+    if (!inningDetail?.scorebook_entries || inningDetail.scorebook_entries.length === 0) {
+      console.log("No existing plate appearances, returning sequence ID 1");
+      return 1; // First batter in the inning always gets sequence ID 1
+    }
+    
+    // Get the lineup size
+    const lineupSize = inningDetail.lineup_entries.length || 9;
+    
+    // Find the highest round in the current inning
+    const highestRound = Math.max(...inningDetail.scorebook_entries.map(entry => entry.round || 1));
+    console.log(`Highest round in current inning: ${highestRound}`);
+    
+    // Find the highest order number that has batted in the highest round
+    const highestOrderInRound = Math.max(
+      ...inningDetail.scorebook_entries
+        .filter(entry => entry.round === highestRound)
+        .map(entry => entry.order_number)
+    );
+    console.log(`Highest order number in round ${highestRound}: ${highestOrderInRound}`);
+    
+    // If we've completed the round, start a new round
+    if (highestOrderInRound === lineupSize) {
+      // Start a new round
+      const newRound = highestRound + 1;
+      console.log(`Starting new round ${newRound}, first batter will have sequence ID ${(newRound - 1) * lineupSize + 1}`);
+      return (newRound - 1) * lineupSize + 1;
+    }
+    
+    // Otherwise, get the next batter in the current round
+    const nextOrder = highestOrderInRound + 1;
+    console.log(`Next batter in round ${highestRound} will be order ${nextOrder} with sequence ID ${(highestRound - 1) * lineupSize + nextOrder}`);
+    return (highestRound - 1) * lineupSize + nextOrder;
+  };
+
+  // Function to get the next batter sequence ID for a specific player
+  const getNextBatterSeqIdForPlayer = (orderNumber: number): number => {
+    if (!inningDetail?.scorebook_entries) return 1;
+    
+    // Get all existing PAs for this player
+    const playerPAs = inningDetail.scorebook_entries
+      .filter(entry => entry.order_number === orderNumber)
+      .sort((a, b) => (a.batter_seq_id || 0) - (b.batter_seq_id || 0));
+    
+    // If this player has no PAs yet, we need to calculate their first batter_seq_id
+    if (playerPAs.length === 0) {
+      // Get the global next batter sequence ID
+      return getNextBatterSeqId();
+    }
+    
+    // Otherwise, this player is batting again, so increment their last batter_seq_id
+    // This shouldn't normally happen as each player should only bat once per column
+    const lastSeqId = playerPAs[playerPAs.length - 1].batter_seq_id || 0;
+    return lastSeqId + inningDetail.lineup_entries.length; // Add lineup size to get to next time through order
+  };
+
+  // Function to determine how many PA columns to show
+  const getNumberOfPAColumns = () => {
+    if (!inningDetail?.scorebook_entries || !inningDetail?.lineup_entries) return 1;
+    
+    // Get the number of players in the lineup
+    const lineupSize = inningDetail.lineup_entries.length;
+    
+    if (inningDetail.scorebook_entries.length === 0) return 1;
+    
+    // Find the highest order number in the lineup
+    const highestOrderNumber = Math.max(...inningDetail.lineup_entries.map(entry => entry.order_number));
+    
+    // Check if the last batter (highest order number) has any PAs
+    const lastBatterPAs = inningDetail.scorebook_entries
+      .filter(entry => entry.order_number === highestOrderNumber)
+      .sort((a, b) => (a.batter_seq_id || 0) - (b.batter_seq_id || 0));
+    
+    // If the last batter has no PAs, show only one column
+    if (lastBatterPAs.length === 0) return 1;
+    
+    // Count how many complete cycles through the lineup we've had
+    // Each complete cycle means the last batter has batted
+    return lastBatterPAs.length + 1;
+  };
+
+  // Update the table header to include inning groupings
+  <thead className="bg-gray-50">
+    {/* Add a new row for inning groupings */}
+    <tr>
+      <th className="border p-1 text-xs font-medium text-gray-500 uppercase tracking-wider text-center" style={{ width: '30px' }} rowSpan={2}>
+        #
+      </th>
+      <th className="border p-1 text-xs font-medium text-gray-500 uppercase tracking-wider" style={{ width: '150px' }} rowSpan={2}>
+        Player
+      </th>
+      
+      {/* Create inning groupings */}
+      {Array.from(new Set(Array.from({ length: getNumberOfPAColumns() }).map((_, i) => {
+        // Calculate which inning this column belongs to
+        // Assuming 9 batters per inning
+        const lineupSize = inningDetail?.lineup_entries.length || 9;
+        const inningNumber = Math.floor(i / lineupSize) + 1;
+        return inningNumber;
+      }))).map((inningNumber) => {
+        // Count how many columns belong to this inning
+        const lineupSize = inningDetail?.lineup_entries.length || 9;
+        const columnsInInning = Math.min(
+          lineupSize,
+          getNumberOfPAColumns() - (inningNumber - 1) * lineupSize
+        );
+        
+        return (
+          <th 
+            key={`inning-header-${inningNumber}`}
+            className="border p-1 text-xs font-medium text-gray-500 uppercase tracking-wider text-center"
+            colSpan={columnsInInning}
+          >
+            Inning {inningNumber}
+          </th>
+        );
+      })}
+    </tr>
+    
+    <tr>
+      {/* Create column headers for each PA */}
+      {Array.from({ length: getNumberOfPAColumns() }).map((_, i) => (
+        <th 
+          key={`pa-header-${i+1}`}
+          className="border p-1 text-xs font-medium text-gray-500 uppercase tracking-wider text-center"
+          style={{ width: '60px' }}
+        >
+          PA {i+1}
+        </th>
+      ))}
+    </tr>
+  </thead>
+
+  // Update the renderPACell function to use the round field
+  const renderPACell = (playerPAs: ScoreBookEntry[], columnIndex: number, orderNumber: number) => {
+    // Find the PA that belongs in this column based on the round field
+    const pa = playerPAs.find(pa => pa.round === columnIndex + 1);
+    
+    console.log(`Checking for PA in column ${columnIndex + 1} for order ${orderNumber}:`, 
+      pa ? `Found PA with round=${pa.round}, seq_id=${pa.batter_seq_id}` : 'No PA found');
     
     return (
-      <td 
-        key={`pa-${pa.batter_seq_id}`}
-        className="border p-0 text-center cursor-pointer hover:bg-gray-100" 
-        style={{ width: '30px' }}
-        onClick={() => setSelectedPA(pa)}
-      >
-        <div className="flex flex-col items-center py-1">
-          <div className="font-medium text-xs">{pa.pa_result}</div>
-          {pa.detailed_result && <div className="text-xs text-gray-500">{pa.detailed_result}</div>}
-        </div>
+      <td key={`pa-${columnIndex}`} className="border p-0 text-xs text-center h-12" style={{ verticalAlign: 'bottom' }}>
+        <BaseballDiamondCell 
+          pa={pa || null}
+          onClick={() => {
+            console.log(`Clicked cell for order ${orderNumber}, column ${columnIndex}`);
+            
+            if (pa) {
+              console.log("Editing existing PA:", pa);
+              console.log("Existing PA details:", {
+                order_number: pa.order_number,
+                round: pa.round,
+                batter_seq_id: pa.batter_seq_id,
+                inning_number: pa.inning_number,
+                home_or_away: pa.home_or_away
+              });
+              
+              // Edit existing PA
+              setSelectedPA(pa);
+              setIsPlateAppearanceModalOpen(true);
+            } else {
+              // For a new PA, we'll use the round (column index + 1) to determine the sequence ID
+              console.log(`Creating new PA for order ${orderNumber} in round ${columnIndex + 1}`);
+              
+              // Calculate the sequence ID based on the round and order number
+              const round = columnIndex + 1;
+              const lineupSize = inningDetail?.lineup_entries.length || 9;
+              
+              // The sequence ID is calculated as: (round - 1) * lineupSize + order_number
+              const newSeqId = (round - 1) * lineupSize + orderNumber;
+              
+              console.log(`Calculated sequence ID ${newSeqId} for order ${orderNumber} in round ${round}`);
+              console.log(`Formula: (${round} - 1) * ${lineupSize} + ${orderNumber} = ${newSeqId}`);
+              
+              const newPA = {
+                inning_number: selectedInning,
+                home_or_away: selectedTeam,
+                batting_order_position: orderNumber,
+                order_number: orderNumber,
+                batter_seq_id: newSeqId,
+                round: round,
+                team_id: teamId,
+                game_id: gameId,
+              } as ScoreBookEntry;
+              
+              console.log("New PA data being passed to modal:", newPA);
+              
+              setSelectedPA(newPA);
+              setIsPlateAppearanceModalOpen(true);
+            }
+          }}
+          isInteractive={true}
+        />
       </td>
     );
   };
@@ -490,9 +696,200 @@ export default function ScoreGame() {
     return highestBaseResult;
   };
 
+  // Update the handleDeletePA function to use the new API endpoint
+  const handleDeletePA = async (paData: {
+    team_id: string;
+    game_id: string;
+    inning_number: number | string;
+    home_or_away: string;
+    batter_seq_id: number;
+  }) => {
+    try {
+      // Check if we have all required data
+      if (!paData.team_id || !paData.game_id || !paData.inning_number || 
+          !paData.home_or_away || !paData.batter_seq_id) {
+        console.error("Cannot delete plate appearance: Missing required data");
+        return;
+      }
+      
+      // Construct the URL with the new path parameters
+      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/scores/api/plate-appearance/${
+        paData.team_id}/${paData.game_id}/${paData.inning_number}/${
+        paData.home_or_away}/${paData.batter_seq_id}`;
+      
+      console.log("Deleting plate appearance with URL:", url);
+      
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to delete plate appearance: ${errorText}`);
+      }
+      
+      // Close the modal first
+      setIsPlateAppearanceModalOpen(false);
+      setSelectedPA(null);
+      
+      // Then refresh the inning data to show updated changes
+      // Use setTimeout to ensure the state updates before fetching
+      setTimeout(async () => {
+        await fetchInningDetail(selectedInning, selectedTeam);
+      }, 100);
+    } catch (error) {
+      console.error("Error deleting plate appearance:", error);
+      // Only show alert for errors
+      alert("Failed to delete plate appearance. Please try again.");
+    }
+  };
+
+  // Update the handleSavePAChanges function to remove the alert
+  const handleSavePAChanges = async (updatedPA: ScoreBookEntry) => {
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/scores/api/plate-appearance`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(updatedPA),
+        }
+      );
+      
+      if (!response.ok) throw new Error("Failed to update plate appearance");
+      
+      // Refresh the inning data to show updated changes
+      await fetchInningDetail(selectedInning, selectedTeam);
+      
+      // No success message - just let the UI update
+    } catch (error) {
+      console.error("Error updating plate appearance:", error);
+      // Only show alert for errors
+      alert("Failed to update plate appearance. Please try again.");
+    }
+  };
+
+  // Update the handleSaveSubstitution function to remove the alert
+  const handleSaveSubstitution = async (substitution: PlayerSubstitution) => {
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/scores/${teamId}/${gameId}/${selectedInning}/substitute`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(substitution),
+        }
+      );
+      
+      if (!response.ok) throw new Error("Failed to save substitution");
+      
+      // Refresh the inning data to show updated changes
+      await fetchInningDetail(selectedInning, selectedTeam);
+      
+      // Close the modal without an alert
+      setIsSubstitutionModalOpen(false);
+    } catch (error) {
+      console.error("Error saving substitution:", error);
+      // Only show alert for errors
+      alert("Failed to save substitution. Please try again.");
+    }
+  };
+
+  // Helper function to update legacy fields
+  const updateLegacyFields = (basesReached: string, whyBaseReached: string) => {
+    // Combine the new fields to update the legacy pa_result field
+    if (basesReached && whyBaseReached) {
+      let legacyResult = '';
+      
+      // Map the new fields to the legacy format
+      if (basesReached === '0') {
+        // For outs, use the why_base_reached directly
+        legacyResult = whyBaseReached;
+      } else if (basesReached === '1') {
+        // For first base
+        if (whyBaseReached === 'H' || whyBaseReached === 'HH' || whyBaseReached === 'S' || whyBaseReached === 'B') {
+          legacyResult = '1B';
+        } else if (whyBaseReached === 'C') {
+          legacyResult = 'FC';
+        }
+      } else if (basesReached === '2') {
+        legacyResult = '2B';
+      } else if (basesReached === '3') {
+        legacyResult = '3B';
+      } else if (basesReached === '4') {
+        if (whyBaseReached === 'HR' || whyBaseReached === 'HI' || whyBaseReached === 'GS') {
+          legacyResult = 'HR';
+        }
+      } else if (basesReached.includes('E')) {
+        // For errors, use E plus the base reached
+        legacyResult = basesReached.replace('E', 'BE');
+      }
+      
+      // Update the legacy field
+      handleInputChange('pa_result', legacyResult);
+      
+      // Also update result_type for backward compatibility
+      handleInputChange('result_type', whyBaseReached);
+    }
+  };
+
+  const openPlateAppearanceModal = (pa: ScoreBookEntry) => {
+    setSelectedPA(pa);
+    setIsPlateAppearanceModalOpen(true);
+  };
+
+  // When adding a new plate appearance, check if we've reached the end of the lineup
+  const handleAddPlateAppearance = () => {
+    // Get the current batter index
+    const currentBatterIndex = getCurrentBatterIndex();
+    
+    // Get the total number of batters in the lineup
+    const totalBatters = inningDetail?.lineup_entries.length || 0;
+    
+    // If we're at the last batter, cycle back to the first batter
+    const nextBatterIndex = currentBatterIndex === totalBatters - 1 
+      ? 0  // Go back to the first batter
+      : currentBatterIndex + 1;  // Go to the next batter
+    
+    // Set the next batter as active
+    const nextBatter = inningDetail?.lineup_entries[nextBatterIndex];
+    
+    if (nextBatter) {
+      setSelectedPA(null);
+      setIsPlateAppearanceModalOpen(true);
+    }
+  };
+
+  // Debug function to log the current batter sequence IDs
+  const logBatterSequenceIds = () => {
+    if (!inningDetail?.scorebook_entries) return;
+    
+    console.log("Current batter sequence IDs:");
+    const sortedEntries = [...inningDetail.scorebook_entries].sort(
+      (a, b) => (a.batter_seq_id || 0) - (b.batter_seq_id || 0)
+    );
+    
+    sortedEntries.forEach(entry => {
+      console.log(`Order: ${entry.order_number}, Seq ID: ${entry.batter_seq_id}`);
+    });
+  };
+
+  // Call this in useEffect after fetching inning details
+  useEffect(() => {
+    if (inningDetail) {
+      logBatterSequenceIds();
+    }
+  }, [inningDetail]);
+
   if (loading) return <div className="p-4">Loading game data...</div>;
-  if (error) return <div className="p-4 text-red-500">{error}</div>;
-  if (!boxScoreData) return <div className="p-4">No box score data available.</div>;
+  if (!boxScore) return <div className="p-4">No box score data available.</div>;
 
   return (
     <div className="container mx-auto px-3 py-4">
@@ -530,7 +927,7 @@ export default function ScoreGame() {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Team</th>
-                {Array.from({ length: totalInnings }).map((_, i) => (
+                {Array.from({ length: 7 }).map((_, i) => (
                   <th 
                     key={`inning-header-${i}`}
                     className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
@@ -552,11 +949,11 @@ export default function ScoreGame() {
                   className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 cursor-pointer hover:bg-gray-100"
                   onClick={() => fetchInningDetail(selectedInning, 'away')}
                 >
-                  {boxScoreData.away_team_name}
+                  {boxScore.away_team_name}
                 </td>
-                {Array.from({ length: totalInnings }).map((_, i) => {
+                {Array.from({ length: 7 }).map((_, i) => {
                   const inningKey = (i + 1).toString();
-                  const inningData = boxScoreData.innings[inningKey]?.away_team || { runs: 0, hits: 0, errors: 0, walks: 0, outs: 0 };
+                  const inningData = boxScore.innings[inningKey]?.away_team || { runs: 0, hits: 0, errors: 0, walks: 0, outs: 0 };
                   
                   return (
                     <td 
@@ -569,16 +966,16 @@ export default function ScoreGame() {
                   );
                 })}
                 <td className="px-3 py-4 whitespace-nowrap text-center text-sm font-medium border-l-2 border-gray-300 font-bold">
-                  {boxScoreData.totals.away_team.runs}
+                  {boxScore.totals.away_team.runs}
                 </td>
                 <td className="px-3 py-4 whitespace-nowrap text-center text-sm text-gray-600 border-l-2 border-gray-300">
-                  {boxScoreData.totals.away_team.hits}
+                  {boxScore.totals.away_team.hits}
                 </td>
                 <td className="px-3 py-4 whitespace-nowrap text-center text-sm text-gray-600">
-                  {boxScoreData.totals.away_team.walks}
+                  {boxScore.totals.away_team.walks}
                 </td>
                 <td className="px-3 py-4 whitespace-nowrap text-center text-sm text-gray-600">
-                  {boxScoreData.totals.away_team.errors}
+                  {boxScore.totals.away_team.errors}
                 </td>
               </tr>
               
@@ -588,11 +985,11 @@ export default function ScoreGame() {
                   className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 cursor-pointer hover:bg-gray-100"
                   onClick={() => fetchInningDetail(selectedInning, 'home')}
                 >
-                  {boxScoreData.home_team_name}
+                  {boxScore.home_team_name}
                 </td>
-                {Array.from({ length: totalInnings }).map((_, i) => {
+                {Array.from({ length: 7 }).map((_, i) => {
                   const inningKey = (i + 1).toString();
-                  const inningData = boxScoreData.innings[inningKey]?.home_team || { runs: 0, hits: 0, errors: 0, walks: 0, outs: 0 };
+                  const inningData = boxScore.innings[inningKey]?.home_team || { runs: 0, hits: 0, errors: 0, walks: 0, outs: 0 };
                   
                   return (
                     <td 
@@ -605,16 +1002,16 @@ export default function ScoreGame() {
                   );
                 })}
                 <td className="px-3 py-4 whitespace-nowrap text-center text-sm font-medium border-l-2 border-gray-300 font-bold">
-                  {boxScoreData.totals.home_team.runs}
+                  {boxScore.totals.home_team.runs}
                 </td>
                 <td className="px-3 py-4 whitespace-nowrap text-center text-sm text-gray-600 border-l-2 border-gray-300">
-                  {boxScoreData.totals.home_team.hits}
+                  {boxScore.totals.home_team.hits}
                 </td>
                 <td className="px-3 py-4 whitespace-nowrap text-center text-sm text-gray-600">
-                  {boxScoreData.totals.home_team.walks}
+                  {boxScore.totals.home_team.walks}
                 </td>
                 <td className="px-3 py-4 whitespace-nowrap text-center text-sm text-gray-600">
-                  {boxScoreData.totals.home_team.errors}
+                  {boxScore.totals.home_team.errors}
                 </td>
               </tr>
             </tbody>
@@ -664,32 +1061,31 @@ export default function ScoreGame() {
                   <table className="border border-gray-200 table-fixed" style={{ width: 'auto' }}>
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="border p-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" style={{ width: '20px' }}>
+                        <th className="border p-1 text-xs font-medium text-gray-500 uppercase tracking-wider text-center" style={{ width: '30px' }}>
                           #
                         </th>
-                        <th className="border p-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" style={{ width: '60px' }}>
+                        <th className="border p-1 text-xs font-medium text-gray-500 uppercase tracking-wider" style={{ width: '150px' }}>
                           Player
                         </th>
-                        <th className="border p-1 text-center text-xs font-medium text-gray-500 uppercase tracking-wider" style={{ width: '60px' }}>
-                          Inning {selectedInning}
-                        </th>
-                        {Array.from({ length: getMaxPAs() - 1 }).map((_, i) => (
-                          <th key={`pa-header-${i}`} className="border p-1 text-center text-xs font-medium text-gray-500 uppercase tracking-wider" style={{ width: '30px' }}>
-                            {i + 2}
+                        {/* Create column headers for each PA */}
+                        {Array.from({ length: getNumberOfPAColumns() }).map((_, i) => (
+                          <th 
+                            key={`pa-header-${i+1}`}
+                            className="border p-1 text-xs font-medium text-gray-500 uppercase tracking-wider text-center"
+                            style={{ width: '60px' }}
+                          >
+                            PA {i+1}
                           </th>
                         ))}
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {inningDetail.lineup_entries.map((player, index) => {
+                        // Get all PAs for this player, sorted by batter_seq_id
                         const playerPAs = getPlayerPAs(player.order_number);
-                        // Format player name - if name contains jersey number, just use name
                         const displayName = player.name.includes(player.jersey_number) 
                           ? player.name 
                           : `${player.jersey_number} ${player.name}`;
-                        
-                        // Get the last PA for this player to show in the Result column
-                        const lastPA = playerPAs.length > 0 ? playerPAs[playerPAs.length - 1] : null;
                         
                         return (
                           <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
@@ -697,25 +1093,27 @@ export default function ScoreGame() {
                               {player.order_number}
                             </td>
                             <td className="border p-1 text-xs font-medium text-gray-900 truncate">
-                              {displayName}
-                            </td>
-                            <td className="border p-0 text-xs text-center" style={{ verticalAlign: 'bottom' }}>
-                              <div className="flex justify-start items-end p-0 m-0">
-                                {lastPA ? (
-                                  <BaseballField 
-                                    paResult={lastPA.pa_result} 
-                                    baseRunning={lastPA.base_running}
-                                    balls={lastPA.balls_before_play}
-                                    strikes={lastPA.strikes_before_play}
-                                    fouls={lastPA.fouls_after_two_strikes}
-                                  />
-                                ) : '-'}
+                              <div className="flex justify-between items-center">
+                                <span>{displayName}</span>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSubstitutingOrderNumber(player.order_number);
+                                    setIsSubstitutionModalOpen(true);
+                                  }}
+                                  className="ml-2 text-xs text-indigo-600 hover:text-indigo-800"
+                                  title="Substitute Player"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m-8 6H4m0 0l4 4m-4-4l4-4" />
+                                  </svg>
+                                </button>
                               </div>
                             </td>
-                            {Array.from({ length: getMaxPAs() - 1 }).map((_, i) => {
-                              // Render PAs starting from the second one (index 1)
-                              const pa = playerPAs.find(pa => pa.batter_seq_id === i + 2);
-                              return renderPACell(pa, i);
+                            
+                            {/* Render PA cells for this player by column index */}
+                            {Array.from({ length: getNumberOfPAColumns() }).map((_, i) => {
+                              return renderPACell(playerPAs, i, player.order_number);
                             })}
                           </tr>
                         );
@@ -737,105 +1135,39 @@ export default function ScoreGame() {
         </div>
       </div>
       
-      {/* Plate Appearance Detail Modal */}
-      {selectedPA && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-4 border-b flex justify-between items-center">
-              <h2 className="text-xl font-semibold">
-                Plate Appearance Details - {selectedPA.batter_name} (#{selectedPA.batter_jersey_number})
-              </h2>
-              <button 
-                onClick={() => setSelectedPA(null)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            
-            <div className="p-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-gray-50 p-3 rounded">
-                  <div className="text-xs text-gray-500">Result</div>
-                  <div className="text-xl font-bold">{selectedPA.pa_result}</div>
-                </div>
-                <div className="bg-gray-50 p-3 rounded">
-                  <div className="text-xs text-gray-500">Detail</div>
-                  <div className="text-xl font-bold">{selectedPA.detailed_result || "-"}</div>
-                </div>
-                <div className="bg-gray-50 p-3 rounded">
-                  <div className="text-xs text-gray-500">Base Running</div>
-                  <div className="text-xl font-bold">{selectedPA.base_running}</div>
-                </div>
-                <div className="bg-gray-50 p-3 rounded">
-                  <div className="text-xs text-gray-500">Count</div>
-                  <div className="text-xl font-bold">
-                    {selectedPA.balls_before_play}-{selectedPA.strikes_before_play}
-                    {selectedPA.fouls_after_two_strikes > 0 && ` (${selectedPA.fouls_after_two_strikes} fouls)`}
-                  </div>
-                </div>
-              </div>
-              
-              <div className="mt-4 grid grid-cols-3 gap-4">
-                <div className="bg-gray-50 p-3 rounded flex items-center">
-                  <div className="mr-2">
-                    <div className="text-xs text-gray-500">Hard Hit</div>
-                  </div>
-                  {selectedPA.hard_hit === 1 ? (
-                    <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-green-100 text-green-800">
-                      ✓
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-gray-100 text-gray-400">
-                      -
-                    </span>
-                  )}
-                </div>
-                <div className="bg-gray-50 p-3 rounded flex items-center">
-                  <div className="mr-2">
-                    <div className="text-xs text-gray-500">Bunt/Slap</div>
-                  </div>
-                  {selectedPA.bunt_or_slap > 0 ? (
-                    <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-blue-100 text-blue-800">
-                      {selectedPA.bunt_or_slap === 1 ? 'B' : 'S'}
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-gray-100 text-gray-400">
-                      -
-                    </span>
-                  )}
-                </div>
-                <div className="bg-gray-50 p-3 rounded flex items-center">
-                  <div className="mr-2">
-                    <div className="text-xs text-gray-500">Stolen Base</div>
-                  </div>
-                  {selectedPA.base_running_stolen_base === 1 ? (
-                    <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-purple-100 text-purple-800">
-                      ✓
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-gray-100 text-gray-400">
-                      -
-                    </span>
-                  )}
-                </div>
-              </div>
-              
-              {/* Edit buttons would go here in a real implementation */}
-              <div className="mt-6 flex justify-end">
-                <button
-                  onClick={() => setSelectedPA(null)}
-                  className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded transition-colors"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Substitution Modal */}
+      <SubstitutionModal
+        isOpen={isSubstitutionModalOpen}
+        onClose={() => {
+          setIsSubstitutionModalOpen(false);
+          setSubstitutingOrderNumber(null);
+        }}
+        onSave={handleSaveSubstitution}
+        inningNumber={selectedInning}
+        teamId={teamId}
+        gameId={gameId}
+        currentLineup={inningDetail?.lineup_entries || []}
+        orderNumber={substitutingOrderNumber || 0}
+      />
+      
+      {/* Plate Appearance Modal */}
+      <PlateAppearanceModal
+        pa={selectedPA}
+        isOpen={isPlateAppearanceModalOpen}
+        onClose={() => {
+          setIsPlateAppearanceModalOpen(false);
+          setSelectedPA(null);
+        }}
+        onSave={handleSavePAChanges}
+        onDelete={handleDeletePA}
+        teamId={teamId}
+        gameId={gameId}
+        inningNumber={parseInt(selectedInning)}
+        homeOrAway={selectedTeam}
+        nextBatterSeqId={getNextBatterSeqId()}
+        myTeamHomeOrAway={game?.my_team_ha || 'away'}
+        inningDetail={inningDetail}
+      />
     </div>
   );
 } 

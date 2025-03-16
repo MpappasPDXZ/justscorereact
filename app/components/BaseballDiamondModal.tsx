@@ -13,7 +13,6 @@ interface BaseballDiamondModalProps {
 }
 
 export default function BaseballDiamondModal({ isOpen, onClose, positions }: BaseballDiamondModalProps) {
-  // console.log('Baseball Diamond Modal Positions:', positions)
   
   return (
     <Transition appear show={isOpen} as={Fragment}>

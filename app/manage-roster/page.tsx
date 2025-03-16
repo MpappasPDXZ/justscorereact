@@ -59,7 +59,7 @@ function RosterContent() {
 
     try {
       setLoading(true);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/teams/${teamId}/roster`);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/teams/${teamId}/roster`);
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -158,13 +158,16 @@ function RosterContent() {
       console.log('Formatted data:', formattedData);
       console.log('JSON to send:', JSON.stringify(formattedData, null, 2));
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/teams/${teamId}/player`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(formattedData)
-      });
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/teams/${teamId}/player`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(formattedData)
+        }
+      );
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -194,7 +197,7 @@ function RosterContent() {
   const handleDeletePlayer = async (player: Player) => {
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/teams/${teamId}/player/${player.jersey_number}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/teams/${teamId}/player/${player.jersey_number}`,
         {
           method: "DELETE",
         }
@@ -209,7 +212,7 @@ function RosterContent() {
   // Function to initialize editing (when pencil icon is clicked)
   const initializeEditPlayer = async (jerseyNumber: string) => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/teams/${teamId}/roster`);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/teams/${teamId}/roster`);
       if (!response.ok) throw new Error("Failed to fetch player");
       const data = await response.json();
       const player = data.roster.find((p: Player) => p.jersey_number === jerseyNumber);
@@ -246,7 +249,7 @@ function RosterContent() {
       console.log('JSON to send (edit):', JSON.stringify(formattedData, null, 2));
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/teams/${teamId}/player`,
+        `${process.env.NEXT_PUBLIC_API_URL}/teams/${teamId}/player`,
         {
           method: "POST",
           headers: {
