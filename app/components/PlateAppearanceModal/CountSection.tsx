@@ -4,9 +4,10 @@ interface CountSectionProps {
   editedPA: ScoreBookEntry;
   incrementCounter: (field: string, value?: number) => void;
   decrementCounter: (field: string, value?: number) => void;
+  handleInputChange?: (field: string, value: any) => void;
 }
 
-const CountSection = ({ editedPA, incrementCounter, decrementCounter }: CountSectionProps) => {
+const CountSection = ({ editedPA, incrementCounter, decrementCounter, handleInputChange }: CountSectionProps) => {
   // Calculate current count
   const balls = editedPA.balls_before_play || 0;
   const strikes = editedPA.strikes_before_play || 0;
@@ -77,6 +78,11 @@ const CountSection = ({ editedPA, incrementCounter, decrementCounter }: CountSec
   const redButtonStyle = "px-1.5 py-0.5 text-xs border border-red-500 text-red-600 rounded hover:bg-red-50";
   const grayButtonStyle = "px-1.5 py-0.5 text-xs border border-gray-400 text-gray-500 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed";
   const purpleButtonStyle = "px-1.5 py-0.5 text-xs border border-purple-500 text-purple-600 rounded hover:bg-purple-50 disabled:opacity-50 disabled:cursor-not-allowed";
+  // Updated toggle button style to match Why buttons
+  const toggleButtonStyle = (isActive: boolean) => 
+    `py-0.5 px-2 text-[0.6rem] font-normal rounded ${isActive 
+      ? 'bg-indigo-600 text-white' 
+      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-purple-300'}`;
 
   return (
     <div className="border rounded p-2">
@@ -174,7 +180,7 @@ const CountSection = ({ editedPA, incrementCounter, decrementCounter }: CountSec
         
         {/* Strike Types */}
         <div className="mb-2">
-          <h5 className="text-xs font-medium text-gray-600 mb-1">Strike Breakdown</h5>
+          <h5 className="text-xs font-medium text-gray-600 mb-1 pt-2">Strike Breakdown</h5>
           <div className="grid grid-cols-2 gap-x-2 gap-y-1">
             <div>
               <label className="block text-xs text-gray-500 mb-0.5">Watching: {editedPA.strikes_watching || 0}</label>
@@ -271,54 +277,136 @@ const CountSection = ({ editedPA, incrementCounter, decrementCounter }: CountSec
             </div>
           </div>
         </div>
-      </div>
-      
-      {/* Horizontal divider */}
-      <hr className="my-2 border-gray-200" />
-      
-      {/* Pitching Events Section */}
-      <div>
-        {/* Combined Wild Pitches and Passed Balls */}
-        <div className="grid grid-cols-2 gap-x-2 gap-y-1">
-          <div>
-            <label className="block text-xs text-gray-500 mb-0.5">Wild Pitches: {editedPA.wild_pitch || 0}</label>
-            <div className="flex space-x-1">
-              <button 
-                onClick={() => incrementCounter('wild_pitch')}
-                className={purpleButtonStyle}
-              >
-                +
-              </button>
-              <button 
-                onClick={() => decrementCounter('wild_pitch')}
-                disabled={(editedPA.wild_pitch || 0) <= 0}
-                className={grayButtonStyle}
-              >
-                -
-              </button>
+        
+        {/* NEW: Pitcher and Catcher Stats Section */}
+        <div className="mb-2">
+          <h5 className="text-xs font-medium text-gray-600 mb-1 pt-2">Pitcher and Catcher Stats</h5>
+          <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+            <div>
+              <label className="block text-xs text-gray-500 mb-0.5">Wild Pitches: {editedPA.wild_pitch || 0}</label>
+              <div className="flex space-x-1">
+                <button 
+                  onClick={() => incrementCounter('wild_pitch')}
+                  className={purpleButtonStyle}
+                >
+                  +
+                </button>
+                <button 
+                  onClick={() => decrementCounter('wild_pitch')}
+                  disabled={(editedPA.wild_pitch || 0) <= 0}
+                  className={grayButtonStyle}
+                >
+                  -
+                </button>
+              </div>
+            </div>
+            
+            <div>
+              <label className="block text-xs text-gray-500 mb-0.5">Passed Balls: {editedPA.passed_ball || 0}</label>
+              <div className="flex space-x-1">
+                <button 
+                  onClick={() => incrementCounter('passed_ball')}
+                  className={purpleButtonStyle}
+                >
+                  +
+                </button>
+                <button 
+                  onClick={() => decrementCounter('passed_ball')}
+                  disabled={(editedPA.passed_ball || 0) <= 0}
+                  className={grayButtonStyle}
+                >
+                  -
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {/* Batting Statistics Section */}
+        <div className="mb-2">
+          <h5 className="text-xs font-medium text-gray-600 mb-1 pt-2">Batting Statistics</h5>
+          
+          {/* Counter-based statistics (RBI, Late Swings) */}
+          <div className="grid grid-cols-2 gap-x-2 gap-y-1 mb-2">
+            <div>
+              <label className="block text-xs text-gray-500 mb-0.5">RBI: {editedPA.rbi || 0}</label>
+              <div className="flex space-x-1">
+                <button 
+                  onClick={() => incrementCounter('rbi')}
+                  className={purpleButtonStyle}
+                >
+                  +
+                </button>
+                <button 
+                  onClick={() => decrementCounter('rbi')}
+                  disabled={(editedPA.rbi || 0) <= 0}
+                  className={grayButtonStyle}
+                >
+                  -
+                </button>
+              </div>
+            </div>
+            
+            <div>
+              <label className="block text-xs text-gray-500 mb-0.5">Late Swings: {editedPA.late_swings || 0}</label>
+              <div className="flex space-x-1">
+                <button 
+                  onClick={() => incrementCounter('late_swings')}
+                  className={purpleButtonStyle}
+                >
+                  +
+                </button>
+                <button 
+                  onClick={() => decrementCounter('late_swings')}
+                  disabled={(editedPA.late_swings || 0) <= 0}
+                  className={grayButtonStyle}
+                >
+                  -
+                </button>
+              </div>
             </div>
           </div>
           
+          {/* Toggle-based statistics (QAB, Hard Hit) - Styled like Why buttons */}
           <div>
-            <label className="block text-xs text-gray-500 mb-0.5">Passed Balls: {editedPA.passed_ball || 0}</label>
-            <div className="flex space-x-1">
-              <button 
-                onClick={() => incrementCounter('passed_ball')}
-                className={purpleButtonStyle}
+            <label className="block text-xs font-medium text-gray-600 mb-1 pt-2">
+              Quality Indicators
+            </label>
+            <div className="grid grid-cols-2 gap-1">
+              <button
+                onClick={() => {
+                  // Toggle QAB between 'QAB' and null
+                  const newValue = editedPA.qab === 'QAB' ? null : 'QAB';
+                  if (handleInputChange) {
+                    handleInputChange('qab', newValue);
+                  }
+                }}
+                className={toggleButtonStyle(editedPA.qab === 'QAB')}
+                title="Quality At Bat"
               >
-                +
+                Quality AB
               </button>
-              <button 
-                onClick={() => decrementCounter('passed_ball')}
-                disabled={(editedPA.passed_ball || 0) <= 0}
-                className={grayButtonStyle}
+              
+              <button
+                onClick={() => {
+                  // Toggle Hard Hit between 'HH' and null
+                  const newValue = editedPA.hh === 'HH' ? null : 'HH';
+                  if (handleInputChange) {
+                    // Update both hh and hard_hit fields for consistency
+                    handleInputChange('hh', newValue);
+                  }
+                }}
+                className={toggleButtonStyle(editedPA.hh === 'HH')}
+                title="Hard Hit"
               >
-                -
+                Hard Hit
               </button>
             </div>
           </div>
         </div>
       </div>
+      
+      {/* Horizontal divider - No longer needed since we moved Wild Pitches and Passed Balls */}
     </div>
   );
 };
