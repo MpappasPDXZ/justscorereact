@@ -390,13 +390,12 @@ const CountSection = ({ editedPA, incrementCounter, decrementCounter, handleInpu
               <button
                 onClick={() => {
                   // Toggle Hard Hit between 'HH' and null
-                  const newValue = editedPA.hh === 'HH' ? null : 'HH';
+                  const newValue = editedPA.hard_hit === 'HH' ? null : 'HH';
                   if (handleInputChange) {
-                    // Update both hh and hard_hit fields for consistency
-                    handleInputChange('hh', newValue);
+                    handleInputChange('hard_hit', newValue);
                   }
                 }}
-                className={toggleButtonStyle(editedPA.hh === 'HH')}
+                className={toggleButtonStyle(editedPA.hard_hit === 'HH')}
                 title="Hard Hit"
               >
                 Hard Hit

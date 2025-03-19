@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import BaseballDiamondCell from '@/app/components/BaseballDiamondCell';
 import PlateAppearanceModal from '@/app/components/PlateAppearanceModal';
 import PositionSelectOptions from '@/app/components/PositionSelectOptions';
+import BoxScoreInningCell from '@/app/components/BoxScoreInningCell';
 
 // Define types
 interface Game {
@@ -325,6 +326,7 @@ export default function ScoreGame() {
   const [substitutingOrderNumber, setSubstitutingOrderNumber] = useState<number | null>(null);
   const [selectedPA, setSelectedPA] = useState<ScoreBookEntry | null>(null);
   const [isPlateAppearanceModalOpen, setIsPlateAppearanceModalOpen] = useState(false);
+  const [debugMode, setDebugMode] = useState(false);
   
   useEffect(() => {
     if (teamId && gameId) {
@@ -992,17 +994,17 @@ export default function ScoreGame() {
                 {Array.from({ length: 7 }).map((_, i) => (
                   <th 
                     key={`inning-header-${i}`}
-                    className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                    className="p-0 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 w-20"
                     onClick={() => fetchInningDetail((i + 1).toString(), selectedTeam)}
                   >
-                    {i + 1}
+                    <div className="p-2">{i + 1}</div>
                   </th>
                 ))}
                 <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-l-2 border-gray-300 font-bold">Runs</th>
                 <th className="px-3 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider border-l-2 border-gray-300">Hits</th>
                 <th className="px-3 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">Errors</th>
                 <th className="px-3 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">Walks</th>
-                <th className="px-3 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">K's</th>
+                <th className="px-3 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">K&apos;s</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -1016,15 +1018,32 @@ export default function ScoreGame() {
                 </td>
                 {Array.from({ length: 7 }).map((_, i) => {
                   const inningKey = (i + 1).toString();
-                  const inningData = boxScore.innings && boxScore.innings[inningKey]?.away || { runs: 0, hits: 0, errors: 0, walks: 0, outs: 0, strikeouts: 0 };
+                  const inningData = boxScore.innings && boxScore.innings[inningKey]?.away || { 
+                    runs: 0, hits: 0, errors: 0, walks: 0, outs: 0, strikeouts: 0, 
+                    strike_percent: 0, on_base_percent: 0, hard_hits: 0 
+                  };
+                  
+                  // You might need to derive this from other data in your box score
+                  const runnersData = {
+                    // These are just examples - replace with actual data or logic
+                    runner_on_first: inningData.runners_on_base && inningData.runners_on_base.includes('1B'),
+                    runner_on_second: inningData.runners_on_base && inningData.runners_on_base.includes('2B'),
+                    runner_on_third: inningData.runners_on_base && inningData.runners_on_base.includes('3B'),
+                  };
                   
                   return (
                     <td 
                       key={`away-inning-${i}`}
-                      className="px-3 py-4 whitespace-nowrap text-center text-sm cursor-pointer hover:bg-gray-100"
-                      onClick={() => fetchInningDetail(inningKey, 'away')}
+                      className="p-0"
                     >
-                      {inningData.runs}
+                      <BoxScoreInningCell 
+                        inningData={inningData} 
+                        onClick={() => fetchInningDetail(inningKey, 'away')}
+                        isActive={selectedInning === inningKey && selectedTeam === 'away'}
+                        inningNumber={inningKey}
+                        teamType="away"
+                        runnersData={runnersData}
+                      />
                     </td>
                   );
                 })}
@@ -1055,15 +1074,32 @@ export default function ScoreGame() {
                 </td>
                 {Array.from({ length: 7 }).map((_, i) => {
                   const inningKey = (i + 1).toString();
-                  const inningData = boxScore.innings && boxScore.innings[inningKey]?.home || { runs: 0, hits: 0, errors: 0, walks: 0, outs: 0, strikeouts: 0 };
+                  const inningData = boxScore.innings && boxScore.innings[inningKey]?.home || { 
+                    runs: 0, hits: 0, errors: 0, walks: 0, outs: 0, strikeouts: 0, 
+                    strike_percent: 0, on_base_percent: 0, hard_hits: 0 
+                  };
+                  
+                  // You might need to derive this from other data in your box score
+                  const runnersData = {
+                    // These are just examples - replace with actual data or logic
+                    runner_on_first: inningData.runners_on_base && inningData.runners_on_base.includes('1B'),
+                    runner_on_second: inningData.runners_on_base && inningData.runners_on_base.includes('2B'),
+                    runner_on_third: inningData.runners_on_base && inningData.runners_on_base.includes('3B'),
+                  };
                   
                   return (
                     <td 
                       key={`home-inning-${i}`}
-                      className="px-3 py-4 whitespace-nowrap text-center text-sm cursor-pointer hover:bg-gray-100"
-                      onClick={() => fetchInningDetail(inningKey, 'home')}
+                      className="p-0"
                     >
-                      {inningData.runs}
+                      <BoxScoreInningCell 
+                        inningData={inningData} 
+                        onClick={() => fetchInningDetail(inningKey, 'home')}
+                        isActive={selectedInning === inningKey && selectedTeam === 'home'}
+                        inningNumber={inningKey}
+                        teamType="home"
+                        runnersData={runnersData}
+                      />
                     </td>
                   );
                 })}
@@ -1291,6 +1327,14 @@ export default function ScoreGame() {
         myTeamHomeOrAway={boxScore?.game_header?.my_team_ha || 'home'}
         inningDetail={inningDetail as any}
       />
+      
+      {/* Debug Toggle Button */}
+      <button 
+        onClick={() => setDebugMode(!debugMode)} 
+        className="text-xs bg-gray-200 px-2 py-1 rounded text-gray-700"
+      >
+        {debugMode ? 'Disable Debug' : 'Enable Debug'}
+      </button>
     </div>
   );
 } 
