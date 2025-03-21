@@ -9,10 +9,11 @@ interface InningStats {
   strikeouts: number;
   strike_percent: number;
   on_base_percent: number;
-  hard_hits: number;
+  hard_hit: number;
   on_first_base: number;
   on_second_base: number;
   on_third_base: number;
+  runners_on_base?: string[];
 }
 
 interface BoxScoreInningCellProps {
@@ -22,6 +23,11 @@ interface BoxScoreInningCellProps {
   inningNumber?: string;
   teamType?: 'home' | 'away';
   debug?: boolean;
+  runnersData?: {
+    runner_on_first: boolean;
+    runner_on_second: boolean;
+    runner_on_third: boolean;
+  };
 }
 
 const BoxScoreInningCell: React.FC<BoxScoreInningCellProps> = ({ 
@@ -30,7 +36,8 @@ const BoxScoreInningCell: React.FC<BoxScoreInningCellProps> = ({
   isActive = false,
   inningNumber = '',
   teamType = 'home',
-  debug = false
+  debug = false,
+  runnersData
 }) => {
   // Only log data when debug is true
   if (debug) {
@@ -53,10 +60,10 @@ const BoxScoreInningCell: React.FC<BoxScoreInningCellProps> = ({
   // Determine background color based on active state
   const bgColor = isActive ? 'bg-indigo-50' : 'bg-white';
   
-  // Check for runners on bases - using the integer fields (0 or 1)
-  const hasRunnerOnFirst = inningData.on_first_base === 1;
-  const hasRunnerOnSecond = inningData.on_second_base === 1;
-  const hasRunnerOnThird = inningData.on_third_base === 1;
+  // Check for runners on bases - using the integer fields (0 or 1) or the runnersData prop
+  const hasRunnerOnFirst = runnersData ? runnersData.runner_on_first : inningData.on_first_base === 1;
+  const hasRunnerOnSecond = runnersData ? runnersData.runner_on_second : inningData.on_second_base === 1;
+  const hasRunnerOnThird = runnersData ? runnersData.runner_on_third : inningData.on_third_base === 1;
   
   return (
     <div 
@@ -76,7 +83,7 @@ const BoxScoreInningCell: React.FC<BoxScoreInningCellProps> = ({
       {/* Top Right: Hard Hits - directly in corner */}
       <div className="absolute top-0.5 right-0.5">
         <div className="flex items-baseline">
-          <span className={`text-[10px] font-bold ${purpleColor}`}>{inningData.hard_hits}</span>
+          <span className={`text-[10px] font-bold ${purpleColor}`}>{inningData.hard_hit}</span>
           <span className="text-[8px] font-medium text-gray-500">hh</span>
         </div>
       </div>

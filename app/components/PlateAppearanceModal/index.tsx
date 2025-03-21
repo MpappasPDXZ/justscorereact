@@ -8,11 +8,10 @@ import ResultSection from './ResultSection';
 // Extend the ScoreBookEntry interface to include our new fields
 // This is a local extension since we can't modify the imported type directly
 interface ExtendedScoreBookEntry extends ScoreBookEntry {
-  qab?: string | null;
-  hh?: string | null;
-  hard_hit?: string | null;
-  rbi?: number;
-  risp?: string | null;
+  qab?: number;
+  hard_hit?: number;
+  slap?: number;
+  sac?: number;
 }
 
 // Define the exact structure for the backend API
@@ -29,13 +28,17 @@ interface ScoreBookEntryStructure {
   gameId: string;
   out: number;
   my_team_ha: string;
-  // One-off tracking
-  rbi: number | null;
-  passed_ball: number | null;
+  // Pitcher and Catcher Stats
   wild_pitch: number | null;
-  qab: string | null;
-  hard_hit: string | null;
+  passed_ball: number | null;
+  //Batting Statistics
+  rbi: number | null;
   late_swings: number | null;
+  //Quality Indicators
+  qab: number;
+  hard_hit: number;
+  slap: number;
+  sac: number;
   // At the plate
   out_at: number;
   pa_why: string;
@@ -106,10 +109,17 @@ const PlateAppearanceModal = ({
   const [jsonData, setJsonData] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
+  // Define quality indicators array once for reuse
+  const qualityIndicators = ['qab', 'hard_hit', 'slap', 'sac'];
+
   useEffect(() => {
     if (pa) {
+      console.log("PlateAppearanceModal received pa data:", pa);
+      
+      // Ensure we have strings for jersey_number and name
       let updatedJerseyNumber = pa.batter_jersey_number || '';
       let updatedPlayerName = pa.batter_name || '';
+      
       // If jersey number or name is missing, try to find it in the lineup entries
       if ((!updatedJerseyNumber || !updatedPlayerName) && inningDetail?.lineup_entries) {
         const orderNumber = pa.order_number;
@@ -186,11 +196,11 @@ const PlateAppearanceModal = ({
           pa.pa_result ? parseInt(pa.pa_result) : 0
         ),
         // Initialize our new fields
-        qab: (pa as ExtendedScoreBookEntry).qab || null,
-        hh: (pa as ExtendedScoreBookEntry).hh || null,
-        hard_hit: (pa as ExtendedScoreBookEntry).hard_hit || (pa as ExtendedScoreBookEntry).hh || null, // Sync with hh
+        qab: (pa as ExtendedScoreBookEntry).qab !== undefined ? Number((pa as ExtendedScoreBookEntry).qab) : 0,
+        hh: 0, // Just use 0 instead of HH string
+        hard_hit: (pa as ExtendedScoreBookEntry).hard_hit !== undefined ? Number((pa as ExtendedScoreBookEntry).hard_hit) : 0,
         rbi: (pa as ExtendedScoreBookEntry).rbi || 0,
-        risp: (pa as ExtendedScoreBookEntry).risp || null,
+        risp: null,
         // Parse array fields from API
         pa_error_on: parseArrayField(pa.pa_error_on),
         br_error_on: parseArrayField(pa.br_error_on),
@@ -207,21 +217,25 @@ const PlateAppearanceModal = ({
       // We're transitioning to using pa_why as the primary field
       updatedPA.why_base_reached = updatedPA.pa_why;
       
-      // If pa_why is 'HH', ensure hh field is set
+      // If pa_why is 'HH', ensure hard_hit field is set to 1
       if (updatedPA.pa_why === 'HH') {
-        updatedPA.hh = 'HH';
-        updatedPA.hard_hit = 'HH'; // Also set hard_hit for API compatibility
+        updatedPA.hard_hit = 1;
       }
       
       // If this is a sacrifice fly/bunt or hard hit, it's a QAB
       if (['SF', 'SB', 'HH'].includes(updatedPA.pa_why || '')) {
-        updatedPA.qab = 'QAB';
+        updatedPA.qab = 1;
       }
       
       // If RBI is greater than 0, set RISP
       if (updatedPA.rbi && updatedPA.rbi > 0) {
         updatedPA.risp = 'RISP';
       }
+      
+      // Set default values for all quality indicators
+      qualityIndicators.forEach(field => {
+        updatedPA[field] = updatedPA[field] !== undefined ? Number(updatedPA[field]) : 0;
+      });
       
       setEditedPA(updatedPA);
     } else if (isOpen) {
@@ -276,17 +290,19 @@ const PlateAppearanceModal = ({
         out_at: 0, // Ensure out_at is a number for type compatibility
         pitch_count: 0,
         // Initialize our new fields
-        qab: null,
-        hh: null,
-        hard_hit: null, // Initialize hard_hit field
+        qab: 0,
+        hh: 0,
+        hard_hit: 0, // Initialize hard_hit field as 0
         rbi: 0,
-        risp: null,
         // Add missing required properties
         pa_why: '', // This is the field we'll use going forward
-        why_base_reached: '', // Required by ScoreBookEntry interface, but we'll mirror pa_why here
-        detailed_result: '',
         result_type: '' // Required by ScoreBookEntry interface
       };
+      
+      // Set default values for all quality indicators
+      qualityIndicators.forEach(field => {
+        newPA[field] = 0;
+      });
       
       setEditedPA(newPA);
     }
@@ -469,74 +485,19 @@ const PlateAppearanceModal = ({
         // Copy the value to pa_why and continue using pa_why going forward
         updated.pa_why = value;
       }
-      
-      // Handle QAB toggle
-      if (field === 'qab') {
-        // Toggle QAB between 'QAB' and null
-        updated.qab = value === 'QAB' ? 'QAB' : null;
+      // Handle all Quality Indicators with numeric values (1/0)
+      if (['qab', 'hard_hit', 'slap', 'sac'].includes(field)) {
+        updated[field] = value === 1 ? 1 : 0;
       }
-      
-      // Handle HH toggle
-      if (field === 'hh') {
-        // Toggle HH between 'HH' and null
-        updated.hh = value === 'HH' ? 'HH' : null;
-        
-        // Also update hard_hit to keep them in sync (for API compatibility)
-        updated.hard_hit = updated.hh;
-        
-        // If setting HH, also update pa_why to 'HH' if it's a hit
-        if (value === 'HH' && (updated.pa_why === 'H' || updated.pa_why === 'S')) {
-          updated.pa_why = 'HH';
-        }
-        // If removing HH and pa_why is 'HH', change it back to 'H'
-        else if (value !== 'HH' && updated.pa_why === 'HH') {
-          updated.pa_why = 'H';
-        }
-      }
-      
-      // If hard_hit is changed directly, sync with hh
-      if (field === 'hard_hit') {
-        updated.hh = value;
-      }
-      
-      // Handle RISP toggle
-      if (field === 'risp') {
-        // Toggle RISP between 'RISP' and null
-        updated.risp = value === 'RISP' ? 'RISP' : null;
-      }
-      
-      // Handle RBI increment/decrement
+      // Handle RBI increment/decrement without RISP
       if (field === 'rbi') {
         // Ensure RBI is a number
         updated.rbi = typeof value === 'number' ? value : 0;
-        
-        // If RBI is greater than 0, automatically set RISP
-        if (value > 0) {
-          updated.risp = 'RISP';
-        }
       }
-      
-      // If a base is stolen, update br_result to match the highest base reached
-      if (field === 'stolen_bases') {
-        // Check if the value is an array (it should be)
-        if (Array.isArray(value)) {
-          // Find the highest base number in the stolen_bases array
-          const highestBase = value.reduce((max, base) => {
-            const baseNum = parseInt(base.toString());
-            return baseNum > max ? baseNum : max;
-          }, 0);
-          
-          // If there are stolen bases, set br_result to the highest base
-          if (highestBase > 0) {
-            // Only update br_result if the stolen base is higher than current br_result
-            const currentBrResult = updated.br_result || 0;
-            if (highestBase > currentBrResult) {
-              updated.br_result = highestBase;
-            }
-          }
-        }
+      // Remove any existing RISP references
+      if (updated.hasOwnProperty('risp')) {
+        delete updated.risp;
       }
-      
       return updated;
     });
   };
@@ -545,12 +506,9 @@ const PlateAppearanceModal = ({
   const incrementCounter = (field: string, value: number = 1) => {
     setEditedPA((prev: ScoreBookEntry | null) => {
       if (!prev) return null;
-      
       const updatedPA = { ...prev };
-      
       // Update the specific counter
       updatedPA[field] = (updatedPA[field] || 0) + value;
-      
       // Recalculate strikes_before_play based on the rules
       if (field !== 'strikes_before_play') {
         // Calculate the sum of all strike types
@@ -560,9 +518,8 @@ const PlateAppearanceModal = ({
           (updatedPA.strikes_unsure || 0) +
           (updatedPA.ball_swinging || 0)
         );
-        
+
         const fouls = updatedPA.fouls || 0;
-        
         // Apply the rules for strikes_before_play
         if (strikeTypeSum >= 2) {
           // If we already have 2 strikes from the types, don't count fouls
@@ -694,17 +651,17 @@ const PlateAppearanceModal = ({
   // Create a helper function to generate the API data structure
   const createApiData = (): ScoreBookEntryStructure | null => {
     if (!editedPA) return null;
-    
     // Create a copy of the edited data to ensure we don't modify the original
     const paData: ExtendedScoreBookEntry = { 
       ...editedPA,
-      // Ensure our new fields are included
-      qab: (editedPA as ExtendedScoreBookEntry).qab || null,
-      hh: (editedPA as ExtendedScoreBookEntry).hh || null,
-      hard_hit: (editedPA as ExtendedScoreBookEntry).hh || null, // Ensure hard_hit is synced with hh
       rbi: (editedPA as ExtendedScoreBookEntry).rbi || 0,
-      risp: (editedPA as ExtendedScoreBookEntry).risp || null,
-      // Ensure pa_why is set (use why_base_reached as fallback for backward compatibility if needed)
+      late_swings: (editedPA as ExtendedScoreBookEntry).late_swings || 0,
+      // Quality Indicators - ensure all are numbers
+      qab: (editedPA as ExtendedScoreBookEntry).qab !== undefined ? Number((editedPA as ExtendedScoreBookEntry).qab) : 0,
+      hard_hit: (editedPA as ExtendedScoreBookEntry).hard_hit !== undefined ? Number((editedPA as ExtendedScoreBookEntry).hard_hit) : 0,
+      slap: (editedPA as ExtendedScoreBookEntry).slap !== undefined ? Number((editedPA as ExtendedScoreBookEntry).slap) : 0,
+      sac: (editedPA as ExtendedScoreBookEntry).sac !== undefined ? Number((editedPA as ExtendedScoreBookEntry).sac) : 0,
+      // Ensure pa_why is set
       pa_why: editedPA.pa_why || editedPA.why_base_reached || ''
     };
     
@@ -764,28 +721,28 @@ const PlateAppearanceModal = ({
       gameId: paData.game_id || gameId || '',
       out: (paData.pa_result === '0' || paData.bases_reached === '0' || (paData.out_at && paData.out_at !== 0)) ? 1 : 0,
       my_team_ha: myTeamHomeOrAway || 'away',
-      
+      //pitcher and catcher stats
+      wild_pitch: paData.wild_pitch !== undefined ? Number(paData.wild_pitch) : 0,
+      passed_ball: paData.passed_ball !== undefined ? Number(paData.passed_ball) : 0,
       // One-off tracking
-      rbi: paData.rbi !== undefined ? Number(paData.rbi) : null,
-      passed_ball: paData.passed_ball !== undefined ? Number(paData.passed_ball) : null,
-      wild_pitch: paData.wild_pitch !== undefined ? Number(paData.wild_pitch) : null,
-      qab: paData.qab || null,
-      hard_hit: paData.hard_hit || null,
-      late_swings: paData.late_swings !== undefined ? Number(paData.late_swings) : null,
-      
+      rbi: paData.rbi !== undefined ? Number(paData.rbi) : 0,
+      late_swings: paData.late_swings !== undefined ? Number(paData.late_swings) : 0,
+      //Quality Indicators
+      qab: paData.qab !== undefined ? Number(paData.qab) : 0,
+      hard_hit: paData.hard_hit !== undefined ? Number(paData.hard_hit) : 0,
+      slap: paData.slap !== undefined ? Number(paData.slap) : 0,
+      sac: paData.sac !== undefined ? Number(paData.sac) : 0,
       // At the plate
       out_at: paData.out_at ? Number(paData.out_at) : 0,
       pa_why: paData.pa_why || '', // Primary field for plate appearance reason
       pa_result: paData.pa_result || '',
       hit_to: paData.hit_to || paData.detailed_result || '',
       pa_error_on: parseArrayField(paData.pa_error_on),
-      
       // Base running
       br_result: paData.br_result !== undefined ? Number(paData.br_result) : null,
       br_stolen_bases: parseArrayField(paData.stolen_bases),
       base_running_hit_around: parseArrayField(paData.hit_around_bases),
       br_error_on: parseArrayField(paData.br_error_on),
-      
       // Balls and strikes
       pitch_count: Number(paData.pitch_count) || 0,
       balls_before_play: Number(paData.balls_before_play) || 0,
@@ -813,24 +770,6 @@ const PlateAppearanceModal = ({
     // Get the API data using our helper function
     const apiData = createApiData();
     if (!apiData) return;
-    
-    // Log the complete payload for debugging
-    console.log("COMPLETE JSON PAYLOAD BEING SENT:", apiData);
-    
-    // Debug log for pitch count
-    if (editedPA) {
-      console.log("PITCH COUNT DEBUG:", {
-        total_pitch_count: editedPA.pitch_count,
-        balls: editedPA.balls_before_play || 0,
-        strikes_watching: editedPA.strikes_watching || 0,
-        strikes_swinging: editedPA.strikes_swinging || 0,
-        strikes_unsure: editedPA.strikes_unsure || 0,
-        ball_swinging: editedPA.ball_swinging || 0,
-        fouls: editedPA.fouls || 0,
-        pa_why: editedPA.pa_why,
-        why_base_reached: editedPA.why_base_reached
-      });
-    }
     
     // Call the onSave function with the prepared data
     if (onSave) {

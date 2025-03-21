@@ -20,23 +20,22 @@ const ResultSection = ({
 }: ResultSectionProps) => {
   // Define the whyOptions array that was missing
   const whyOptions = [
-    { value: 'H', label: 'Hit', type: 'hit' },
-    { value: 'B', label: 'Bunt', type: 'hit' },
-    { value: 'BB', label: 'Walk', type: 'hit' },
-    { value: 'HBP', label: 'Hit By Pitch', type: 'hit' },
-    { value: 'HR', label: 'Home Run', type: 'hit' },
-    { value: 'GS', label: 'Grand Slam', type: 'hit' },
+    { value: 'H', label: 'Hit - Single (1B)', type: 'hit' },
+    { value: 'B', label: 'Bunt - Successful bunt hit', type: 'hit' },
+    { value: 'BB', label: 'Base on Balls - Walk (4 balls)', type: 'hit' },
+    { value: 'HBP', label: 'Hit By Pitch - Batter hit by pitch', type: 'hit' },
+    { value: 'HR', label: 'Home Run - Ball hit over fence', type: 'hit' },
+    { value: 'GS', label: 'Grand Slam - HR with bases loaded', type: 'hit' },
     //
-    { value: 'E', label: 'Error', type: 'other' },
-    { value: 'C', label: 'Fielder\'s Choice', type: 'other' },
+    { value: 'E', label: 'Error - Reached on fielding error', type: 'other' },
+    { value: 'C', label: 'Fielder\'s Choice - Out made on another runner', type: 'other' },
     //
-    { value: 'K', label: 'Strikeout', type: 'out' },
-    { value: 'KK', label: 'Strikeout Looking', type: 'out' },
-    { value: 'GO', label: 'Ground Out', type: 'out' },
-    { value: 'FO', label: 'Fly Out', type: 'out' },
-    { value: 'LO', label: 'Line Out', type: 'out' },
-    { value: 'FB', label: 'Foul Ball Out', type: 'out' }
-
+    { value: 'K', label: 'Strikeout Swinging - Out on swinging strike', type: 'out' },
+    { value: 'KK', label: 'Strikeout Looking - Out on called strike', type: 'out' },
+    { value: 'GO', label: 'Ground Out - Out on ball hit on ground', type: 'out' },
+    { value: 'FO', label: 'Fly Out - Out on ball hit in the air', type: 'out' },
+    { value: 'LO', label: 'Line Out - Out on line drive', type: 'out' },
+    { value: 'FB', label: 'Foul Ball Out - Out on caught foul ball', type: 'out' }
   ];
   // Group options by type
   const hitOptions = whyOptions.filter(option => option.type === 'hit');
@@ -217,9 +216,9 @@ const ResultSection = ({
         handleInputChange('detailed_result', '');
       }
       
-      // For BB (walk), set balls_before_play to 4 if not already set
-      if (editedPA.pa_why === 'BB' && (editedPA.balls_before_play === undefined || editedPA.balls_before_play < 4)) {
-        handleInputChange('balls_before_play', 4);
+      // For BB (walk), set balls_before_play to 3 (maximum allowed value)
+      if (editedPA.pa_why === 'BB') {
+        handleInputChange('balls_before_play', 3);
       }
       
       // For HBP, increment pitch_count by 1 if it wasn't already counted
@@ -240,9 +239,19 @@ const ResultSection = ({
         handleInputChange('bases_reached', '1');
       }
     } else if (editedPA.pa_why === 'K' || editedPA.pa_why === 'KK') {
-      // For strikeouts, set strikes_before_play to 3 if not already set
-      if (editedPA.strikes_before_play === undefined || editedPA.strikes_before_play < 3) {
-        handleInputChange('strikes_before_play', 3);
+      // For strikeouts, set strikes_before_play to 2 (not 3)
+      handleInputChange('strikes_before_play', 2);
+      
+      // If there were no strikes registered, add them to strikes_unsure
+      const totalStrikes = (editedPA.strikes_watching || 0) + 
+                          (editedPA.strikes_swinging || 0) + 
+                          (editedPA.strikes_unsure || 0);
+                          
+      if (totalStrikes < 2) {
+        // Calculate how many strikes are missing
+        const missingStrikes = 2 - totalStrikes;
+        // Add the missing strikes to strikes_unsure
+        handleInputChange('strikes_unsure', (editedPA.strikes_unsure || 0) + missingStrikes);
       }
       
       // Set bases_reached to 0 for strikeouts
@@ -251,8 +260,20 @@ const ResultSection = ({
       }
       
       // For KK (looking), ensure at least one strike is watching
-      if (editedPA.pa_why === 'KK' && (editedPA.strikes_watching === undefined || editedPA.strikes_watching < 1)) {
-        handleInputChange('strikes_watching', Math.max(1, editedPA.strikes_watching || 0));
+      if (editedPA.pa_why === 'KK') {
+        // Set at least one watching strike, preserving any existing value
+        const currentWatching = editedPA.strikes_watching || 0;
+        if (currentWatching === 0) {
+          // Adjust strikes distribution: convert one unsure strike to watching
+          const currentUnsure = editedPA.strikes_unsure || 0;
+          if (currentUnsure > 0) {
+            handleInputChange('strikes_watching', 1);
+            handleInputChange('strikes_unsure', currentUnsure - 1);
+          } else {
+            // If no unsure strikes, just add a watching strike
+            handleInputChange('strikes_watching', 1);
+          }
+        }
       }
     } else if (editedPA.pa_why === 'GO' || editedPA.pa_why === 'FO' || editedPA.pa_why === 'LO' || editedPA.pa_why === 'FB') {
       // For all types of outs, set bases_reached to 0
@@ -422,19 +443,31 @@ const ResultSection = ({
                 key={option.value}
                 type="button"
                 onClick={() => {
-                  // Update both pa_why and why_base_reached for consistency
-                  handleInputChange('pa_why', option.value);
-                  handleInputChange('why_base_reached', option.value);
-                  
-                  // Set appropriate bases_reached based on the option
-                  if (option.value === 'HR' || option.value === 'GS') {
-                    // Home run or grand slam - set to 4
-                    handleInputChange('bases_reached', '4');
-                    handleInputChange('pa_result', '4');
-                  } else if (option.value === 'H' || option.value === 'B' || option.value === 'BB' || option.value === 'HBP') {
-                    // Hit, bunt, walk, or hit by pitch - set to 1
-                    handleInputChange('bases_reached', '1');
-                    handleInputChange('pa_result', '1');
+                  // Toggle selection - if already selected, clear it
+                  if (selectedWhyBaseReached === option.value) {
+                    // Clear both pa_why and why_base_reached
+                    handleInputChange('pa_why', '');
+                    handleInputChange('why_base_reached', '');
+                  } else {
+                    // Update both pa_why and why_base_reached for consistency
+                    handleInputChange('pa_why', option.value);
+                    handleInputChange('why_base_reached', option.value);
+                    
+                    // For BB (walk), set balls_before_play to 3 (maximum allowed value)
+                    if (option.value === 'BB') {
+                      handleInputChange('balls_before_play', 3);
+                    }
+                    
+                    // Set appropriate bases_reached based on the option
+                    if (option.value === 'HR' || option.value === 'GS') {
+                      // Home run or grand slam - set to 4
+                      handleInputChange('bases_reached', '4');
+                      handleInputChange('pa_result', '4');
+                    } else if (option.value === 'H' || option.value === 'B' || option.value === 'BB' || option.value === 'HBP') {
+                      // Hit, bunt, walk, or hit by pitch - set to 1
+                      handleInputChange('bases_reached', '1');
+                      handleInputChange('pa_result', '1');
+                    }
                   }
                 }}
                 className={`py-0.75 px-1.5 text-[0.66rem] font-normal rounded ${
@@ -456,15 +489,22 @@ const ResultSection = ({
                 key={option.value}
                 type="button"
                 onClick={() => {
-                  // Update both pa_why and why_base_reached for consistency
-                  handleInputChange('pa_why', option.value);
-                  handleInputChange('why_base_reached', option.value);
-                  
-                  // Set appropriate bases_reached based on the option
-                  if (option.value === 'E' || option.value === 'C') {
-                    // Error or fielder's choice - set to 1
-                    handleInputChange('bases_reached', '1');
-                    handleInputChange('pa_result', '1');
+                  // Toggle selection - if already selected, clear it
+                  if (selectedWhyBaseReached === option.value) {
+                    // Clear both pa_why and why_base_reached
+                    handleInputChange('pa_why', '');
+                    handleInputChange('why_base_reached', '');
+                  } else {
+                    // Update both pa_why and why_base_reached for consistency
+                    handleInputChange('pa_why', option.value);
+                    handleInputChange('why_base_reached', option.value);
+                    
+                    // Set appropriate bases_reached based on the option
+                    if (option.value === 'E' || option.value === 'C') {
+                      // Error or fielder's choice - set to 1
+                      handleInputChange('bases_reached', '1');
+                      handleInputChange('pa_result', '1');
+                    }
                   }
                 }}
                 className={`py-0.75 px-1.5 text-[0.66rem] font-normal rounded ${
@@ -480,19 +520,61 @@ const ResultSection = ({
           </div>
           
           {/* Out options (bottom row) with red outline */}
-          <div className="grid grid-cols-7 gap-1">
+          <div className="grid grid-cols-7 gap-1 mb-1">
             {outOptions.map((option) => (
               <button
                 key={option.value}
                 type="button"
                 onClick={() => {
-                  // Update both pa_why and why_base_reached for consistency
-                  handleInputChange('pa_why', option.value);
-                  handleInputChange('why_base_reached', option.value);
-                  
-                  // All out options set bases_reached to 0
-                  handleInputChange('bases_reached', '0');
-                  handleInputChange('pa_result', '0');
+                  // Toggle selection - if already selected, clear it
+                  if (selectedWhyBaseReached === option.value) {
+                    // Clear both pa_why and why_base_reached
+                    handleInputChange('pa_why', '');
+                    handleInputChange('why_base_reached', '');
+                  } else {
+                    // Update both pa_why and why_base_reached for consistency
+                    handleInputChange('pa_why', option.value);
+                    handleInputChange('why_base_reached', option.value);
+                    
+                    // Out options always set bases_reached to 0
+                    handleInputChange('bases_reached', '0');
+                    handleInputChange('pa_result', '0');
+                    
+                    // For strikeouts (K and KK)
+                    if (option.value === 'K' || option.value === 'KK') {
+                      // Set strikes_before_play to 2
+                      handleInputChange('strikes_before_play', 2);
+                      
+                      // If there were no strikes registered, add them to strikes_unsure
+                      const totalStrikes = (editedPA.strikes_watching || 0) + 
+                                          (editedPA.strikes_swinging || 0) + 
+                                          (editedPA.strikes_unsure || 0);
+                                          
+                      if (totalStrikes < 2) {
+                        // Calculate how many strikes are missing
+                        const missingStrikes = 2 - totalStrikes;
+                        // Add the missing strikes to strikes_unsure
+                        handleInputChange('strikes_unsure', (editedPA.strikes_unsure || 0) + missingStrikes);
+                      }
+                      
+                      // For KK (looking), ensure at least one strike is watching
+                      if (option.value === 'KK') {
+                        // Set at least one watching strike, preserving any existing value
+                        const currentWatching = editedPA.strikes_watching || 0;
+                        if (currentWatching === 0) {
+                          // Adjust strikes distribution: convert one unsure strike to watching
+                          const currentUnsure = editedPA.strikes_unsure || 0;
+                          if (currentUnsure > 0) {
+                            handleInputChange('strikes_watching', 1);
+                            handleInputChange('strikes_unsure', currentUnsure - 1);
+                          } else {
+                            // If no unsure strikes, just add a watching strike
+                            handleInputChange('strikes_watching', 1);
+                          }
+                        }
+                      }
+                    }
+                  }
                 }}
                 className={`py-0.75 px-1.5 text-[0.66rem] font-normal rounded ${
                   selectedWhyBaseReached === option.value
@@ -537,7 +619,17 @@ const ResultSection = ({
                             ? 'bg-white text-indigo-600 border border-indigo-600' 
                             : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                         }`}
-                        title={`${pos} - ${pos === 7 ? 'Left Field' : pos === 8 ? 'Center Field' : 'Right Field'}`}
+                        title={`Ball hit to ${pos} - ${
+                          pos === 1 ? 'Pitcher - P' : 
+                          pos === 2 ? 'Catcher - C' : 
+                          pos === 3 ? 'First Base - 1B' : 
+                          pos === 4 ? 'Second Base - 2B' : 
+                          pos === 5 ? 'Third Base - 3B' : 
+                          pos === 6 ? 'Shortstop - SS' :
+                          pos === 7 ? 'Left Field - LF' : 
+                          pos === 8 ? 'Center Field - CF' : 
+                          'Right Field - RF'
+                        }`}
                       >
                         {pos}
                       </div>
@@ -562,12 +654,16 @@ const ResultSection = ({
                             ? 'bg-white text-indigo-600 border border-indigo-600' 
                             : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                         }`}
-                        title={`${pos} - ${
-                          pos === 1 ? 'Pitcher' : 
-                          pos === 2 ? 'Catcher' : 
-                          pos === 3 ? 'First Base' : 
-                          pos === 4 ? 'Second Base' : 
-                          pos === 5 ? 'Third Base' : 'Shortstop'
+                        title={`Ball hit to ${pos} - ${
+                          pos === 1 ? 'Pitcher - P' : 
+                          pos === 2 ? 'Catcher - C' : 
+                          pos === 3 ? 'First Base - 1B' : 
+                          pos === 4 ? 'Second Base - 2B' : 
+                          pos === 5 ? 'Third Base - 3B' : 
+                          pos === 6 ? 'Shortstop - SS' :
+                          pos === 7 ? 'Left Field - LF' : 
+                          pos === 8 ? 'Center Field - CF' : 
+                          'Right Field - RF'
                         }`}
                       >
                         {pos}
@@ -614,7 +710,17 @@ const ResultSection = ({
                             ? 'bg-white text-red-500 border border-red-500' 
                             : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                         }`}
-                        title={`${pos} - ${pos === 7 ? 'Left Field' : pos === 8 ? 'Center Field' : 'Right Field'}`}
+                        title={`Error by ${pos} - ${
+                          pos === 1 ? 'Pitcher - P' : 
+                          pos === 2 ? 'Catcher - C' : 
+                          pos === 3 ? 'First Base - 1B' : 
+                          pos === 4 ? 'Second Base - 2B' : 
+                          pos === 5 ? 'Third Base - 3B' : 
+                          pos === 6 ? 'Shortstop - SS' :
+                          pos === 7 ? 'Left Field - LF' : 
+                          pos === 8 ? 'Center Field - CF' : 
+                          'Right Field - RF'
+                        }`}
                       >
                         {pos}
                       </div>
@@ -652,12 +758,16 @@ const ResultSection = ({
                             ? 'bg-white text-red-500 border border-red-500' 
                             : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                         }`}
-                        title={`${pos} - ${
-                          pos === 1 ? 'Pitcher' : 
-                          pos === 2 ? 'Catcher' : 
-                          pos === 3 ? 'First Base' : 
-                          pos === 4 ? 'Second Base' : 
-                          pos === 5 ? 'Third Base' : 'Shortstop'
+                        title={`Error by ${pos} - ${
+                          pos === 1 ? 'Pitcher - P' : 
+                          pos === 2 ? 'Catcher - C' : 
+                          pos === 3 ? 'First Base - 1B' : 
+                          pos === 4 ? 'Second Base - 2B' : 
+                          pos === 5 ? 'Third Base - 3B' : 
+                          pos === 6 ? 'Shortstop - SS' :
+                          pos === 7 ? 'Left Field - LF' : 
+                          pos === 8 ? 'Center Field - CF' : 
+                          'Right Field - RF'
                         }`}
                       >
                         {pos}
@@ -799,7 +909,17 @@ const ResultSection = ({
                               ? 'bg-white text-red-500 border border-red-500'
                               : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                           }`}
-                          title={`Base Running Error on Position ${pos}`}
+                          title={`Base Running Error by ${pos} - ${
+                            pos === 1 ? 'Pitcher - P' : 
+                            pos === 2 ? 'Catcher - C' : 
+                            pos === 3 ? 'First Base - 1B' : 
+                            pos === 4 ? 'Second Base - 2B' : 
+                            pos === 5 ? 'Third Base - 3B' : 
+                            pos === 6 ? 'Shortstop - SS' :
+                            pos === 7 ? 'Left Field - LF' : 
+                            pos === 8 ? 'Center Field - CF' : 
+                            'Right Field - RF'
+                          }`}
                         >
                           {pos}
                         </div>
@@ -837,7 +957,17 @@ const ResultSection = ({
                               ? 'bg-white text-red-500 border border-red-500'
                               : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                           }`}
-                          title={`Base Running Error on Position ${pos}`}
+                          title={`Base Running Error by ${pos} - ${
+                            pos === 1 ? 'Pitcher - P' : 
+                            pos === 2 ? 'Catcher - C' : 
+                            pos === 3 ? 'First Base - 1B' : 
+                            pos === 4 ? 'Second Base - 2B' : 
+                            pos === 5 ? 'Third Base - 3B' : 
+                            pos === 6 ? 'Shortstop - SS' :
+                            pos === 7 ? 'Left Field - LF' : 
+                            pos === 8 ? 'Center Field - CF' : 
+                            'Right Field - RF'
+                          }`}
                         >
                           {pos}
                         </div>

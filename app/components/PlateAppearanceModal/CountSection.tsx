@@ -19,9 +19,8 @@ const CountSection = ({ editedPA, incrementCounter, decrementCounter, handleInpu
     }
   };
   
-  // Handle strike increment - count as unsure
+  // Handle strike increment with special logic for unsure strikes
   const handleStrikeIncrement = () => {
-    // Only increment strikes_unsure, not strikes_before_play
     incrementCounter('strikes_unsure');
   };
 
@@ -132,6 +131,14 @@ const CountSection = ({ editedPA, incrementCounter, decrementCounter, handleInpu
               >
                 -
               </button>
+              <button 
+                onClick={() => handleInputChange?.('balls_before_play', 0)}
+                disabled={balls <= 0}
+                className={`${grayButtonStyle} ml-1`}
+                title="Clear balls count"
+              >
+                ×
+              </button>
             </div>
           </div>
           
@@ -163,7 +170,8 @@ const CountSection = ({ editedPA, incrementCounter, decrementCounter, handleInpu
             <div className="flex space-x-1">
               <button 
                 onClick={handleStrikeIncrement}
-                className={redButtonStyle}
+                disabled={strikes >= 2}
+                className={`${redButtonStyle} ${strikes >= 2 ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 +
               </button>
@@ -173,6 +181,20 @@ const CountSection = ({ editedPA, incrementCounter, decrementCounter, handleInpu
                 className={grayButtonStyle}
               >
                 -
+              </button>
+              <button 
+                onClick={() => {
+                  // Clear all strike-related counts
+                  handleInputChange?.('strikes_before_play', 0);
+                  handleInputChange?.('strikes_watching', 0);
+                  handleInputChange?.('strikes_swinging', 0);
+                  handleInputChange?.('strikes_unsure', 0);
+                }}
+                disabled={strikes <= 0}
+                className={`${grayButtonStyle} ml-1`}
+                title="Clear strikes count"
+              >
+                ×
               </button>
             </div>
           </div>
@@ -367,39 +389,41 @@ const CountSection = ({ editedPA, incrementCounter, decrementCounter, handleInpu
             </div>
           </div>
           
-          {/* Toggle-based statistics (QAB, Hard Hit) - Styled like Why buttons */}
+          {/* Quality Indicators - centralized logic for all indicators */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1 pt-2">
               Quality Indicators
             </label>
             <div className="grid grid-cols-2 gap-1">
-              <button
-                onClick={() => {
-                  // Toggle QAB between 'QAB' and null
-                  const newValue = editedPA.qab === 'QAB' ? null : 'QAB';
-                  if (handleInputChange) {
-                    handleInputChange('qab', newValue);
-                  }
-                }}
-                className={toggleButtonStyle(editedPA.qab === 'QAB')}
-                title="Quality At Bat"
-              >
-                Quality AB
-              </button>
-              
-              <button
-                onClick={() => {
-                  // Toggle Hard Hit between 'HH' and null
-                  const newValue = editedPA.hard_hit === 'HH' ? null : 'HH';
-                  if (handleInputChange) {
-                    handleInputChange('hard_hit', newValue);
-                  }
-                }}
-                className={toggleButtonStyle(editedPA.hard_hit === 'HH')}
-                title="Hard Hit"
-              >
-                Hard Hit
-              </button>
+              {/* Map through all indicators with consistent behavior */}
+              {[
+                { id: 'qab', label: 'Quality AB' },
+                { id: 'hard_hit', label: 'Hard Hit' },
+                { id: 'slap', label: 'Slapper' },
+                { id: 'sac', label: 'Sacrifice Fly' }
+              ].map(indicator => {
+                // Get current value, defaulting to 0
+                const currentValue = typeof editedPA[indicator.id] === 'number' ? editedPA[indicator.id] : 0;
+                const isActive = currentValue === 1;
+                
+                return (
+                  <button
+                    key={indicator.id}
+                    type="button"
+                    onClick={() => {
+                      // Toggle between 0 and 1
+                      const newValue = isActive ? 0 : 1;
+                      
+                      if (handleInputChange) {
+                        handleInputChange(indicator.id, newValue);
+                      }
+                    }}
+                    className={toggleButtonStyle(isActive)}
+                  >
+                    {indicator.label} {isActive ? '✓' : ''}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
