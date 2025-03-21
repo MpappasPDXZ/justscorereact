@@ -215,7 +215,7 @@ const PlateAppearanceModal = ({
       
       // Always keep why_base_reached in sync with pa_why for backward compatibility
       // We're transitioning to using pa_why as the primary field
-      updatedPA.why_base_reached = updatedPA.pa_why;
+      updatedPA.why_base_reached = updatedPA.pa_why || '';
       
       // If pa_why is 'HH', ensure hard_hit field is set to 1
       if (updatedPA.pa_why === 'HH') {
@@ -296,6 +296,8 @@ const PlateAppearanceModal = ({
         rbi: 0,
         // Add missing required properties
         pa_why: '', // This is the field we'll use going forward
+        why_base_reached: '', // For backward compatibility
+        detailed_result: '', // Add detailed_result field
         result_type: '' // Required by ScoreBookEntry interface
       };
       
