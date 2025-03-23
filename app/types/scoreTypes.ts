@@ -18,25 +18,25 @@ export interface ScoreBookEntry {
   bases_reached: string;
   why_base_reached: string;
   pa_why?: string;
-  pa_result: string;
+  pa_result?: number;
   result_type: string;
   detailed_result: string;
-  hit_to?: string;
+  hit_to?: number;
   
   // Base running
   base_running: string;
   br_result?: number;
-  br_error_on?: any[];
-  br_stolen_bases?: any[];
-  base_running_hit_around?: any[];
+  br_error_on?: number[];
+  br_stolen_bases?: number[];
+  base_running_hit_around?: number[];
   base_running_stolen_base: number;
   hit_around?: number;
-  hit_around_bases?: any[];
-  stolen_bases?: any[];
+  hit_around_bases?: number[];
+  stolen_bases?: number[];
   
   // Out information
   out?: number;
-  out_at: number;
+  out_at?: number;
   
   // Pitch count and details
   pitch_count: number;
@@ -51,7 +51,7 @@ export interface ScoreBookEntry {
   
   // Error information
   error_on?: string;
-  pa_error_on?: any[];
+  pa_error_on?: number[];
   
   // Quality indicators and special stats
   qab?: number;

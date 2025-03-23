@@ -42,13 +42,13 @@ const BaseballField = ({
 
   // Function to determine the result from the PA object
   function determineResult(pa: ScoreBookEntry): string {
-    // If pa_result is already set and not just a numeric value, use it
-    if (pa.pa_result && !['0', '1', '2', '3', '4'].includes(pa.pa_result)) {
-      return pa.pa_result;
+    // If pa_result is already set and not just a numeric value, use it as a string
+    if (pa.pa_result !== undefined && ![0, 1, 2, 3, 4].includes(pa.pa_result)) {
+      return String(pa.pa_result);
     }
     
     // Otherwise, determine from pa_result and pa_why
-    const pa_resultb = pa.pa_result || '0';
+    const pa_resultb = pa.pa_result !== undefined ? pa.pa_result : 0;
     const pa_whyb = pa.pa_why || '';
     
     // Return BB, HBP, FC directly if that's the pa_why
@@ -58,15 +58,15 @@ const BaseballField = ({
     
     // Special case for 'B' to return base number + 'B' for bunts
     if (pa_whyb === 'B') {
-      if (pa_resultb === '1') return '1B';
-      if (pa_resultb === '2') return '2B';
-      if (pa_resultb === '3') return '3B';
-      if (pa_resultb === '4') return '4B';
+      if (pa_resultb === 1) return '1B';
+      if (pa_resultb === 2) return '2B';
+      if (pa_resultb === 3) return '3B';
+      if (pa_resultb === 4) return '4B';
       return 'BB'; // Default to BB if no base specified (walk)
     }
     
     // For outs
-    if (pa_resultb === '0') {
+    if (pa_resultb === 0) {
       if (pa_whyb === 'K') return 'K';
       if (pa_whyb === 'KK') return 'KK';
       if (pa_whyb === 'GO') return 'GO';
@@ -84,14 +84,14 @@ const BaseballField = ({
     }
     
     // For hits and other ways to reach base
-    if (pa_resultb === '1') {
+    if (pa_resultb === 1) {
       if (pa_whyb === 'H') return '1B';
       if (pa_whyb === 'S') return '1B';
       return '1B';
     }
-    if (pa_resultb === '2') return '2B';
-    if (pa_resultb === '3') return '3B';
-    if (pa_resultb === '4') {
+    if (pa_resultb === 2) return '2B';
+    if (pa_resultb === 3) return '3B';
+    if (pa_resultb === 4) {
       if (pa_whyb === 'GS') return 'GS';
       return 'HR';
     }
@@ -205,17 +205,18 @@ const BaseballField = ({
     if (!pa) return 0;
     
     // Get base from pa_result - handle numeric values
-    if (pa.pa_result) {
+    if (pa.pa_result !== undefined) {
       // If pa_result is a number between 0-4, use it directly
-      if (['0', '1', '2', '3', '4'].includes(pa.pa_result)) {
-        return parseInt(pa.pa_result);
+      if ([0, 1, 2, 3, 4].includes(pa.pa_result)) {
+        return pa.pa_result;
       }
       
-      // Otherwise check for text descriptions
-      if (pa.pa_result.includes('1B')) return 1;
-      if (pa.pa_result.includes('2B')) return 2;
-      if (pa.pa_result.includes('3B')) return 3;
-      if (pa.pa_result.includes('HR') || pa.pa_result.includes('4B')) return 4;
+      // Otherwise check for text descriptions in String(pa_result)
+      const paResultStr = String(pa.pa_result);
+      if (paResultStr.includes('1B')) return 1;
+      if (paResultStr.includes('2B')) return 2;
+      if (paResultStr.includes('3B')) return 3;
+      if (paResultStr.includes('HR') || paResultStr.includes('4B')) return 4;
     }
     
     // Check pa_why for BB and HBP
@@ -236,9 +237,9 @@ const BaseballField = ({
   const playerReachedBase = () => {
     if (!pa) return false;
     // Check pa_result
-    if (pa.pa_result) {
+    if (pa.pa_result !== undefined) {
       // If pa_result is a number between 1-4, player reached base
-      if (['1', '2', '3', '4'].includes(pa.pa_result)) {
+      if ([1, 2, 3, 4].includes(pa.pa_result)) {
         return true;
       }
     }
@@ -276,23 +277,25 @@ const BaseballField = ({
     }
     
     // Check pa_result for hit-related values
-    if (pa.pa_result) {
+    if (pa.pa_result !== undefined) {
+      const paResultStr = String(pa.pa_result);
+      
       // Check for standard hit notations
-      if (pa.pa_result.includes('1B') || pa.pa_result.includes('2B') || 
-          pa.pa_result.includes('3B') || pa.pa_result.includes('HR') ||
-          pa.pa_result.includes('HH') || pa.pa_result.includes('GS')) {
+      if (paResultStr.includes('1B') || paResultStr.includes('2B') || 
+          paResultStr.includes('3B') || paResultStr.includes('HR') ||
+          paResultStr.includes('HH') || paResultStr.includes('GS')) {
         return true;
       }
       
       // If pa_result contains 'E', it's an error, not a hit
-      if (pa.pa_result.includes('E')) {
+      if (paResultStr.includes('E')) {
         return false;
       }
       
       // If pa_result is numeric, check if it's 1-4 and pa_why indicates a hit
-      if (['1', '2', '3', '4'].includes(pa.pa_result)) {
+      if ([1, 2, 3, 4].includes(pa.pa_result)) {
         // For base 1, check pa_why
-        if (pa.pa_result === '1') {
+        if (pa.pa_result === 1) {
           // Not a hit if it's a walk, error, or fielder's choice
           if (pa.pa_why === 'BB' || pa.pa_why === 'B' || pa.pa_why === 'HBP' ||
               pa.pa_why === 'E' || pa.pa_why === 'FC') {
@@ -325,7 +328,7 @@ const BaseballField = ({
     }
 
     // Special case for walks with pa_why = 'B'
-    const isWalkWithB = pa.pa_why === 'B' && pa.pa_result === '1';
+    const isWalkWithB = pa.pa_why === 'B' && pa.pa_result === 1;
     
     // Determine the result type
     const isHit = playerGotHit();
@@ -333,13 +336,13 @@ const BaseballField = ({
     const isError = pa.pa_why === 'E';
     const isWalk = ['BB', 'HBP'].includes(pa.pa_why || '') || isWalkWithB;
     const isFC = pa.pa_why === 'FC';
-    const isBunt = pa.pa_why === 'B' && ['1', '2', '3', '4'].includes(pa.pa_result || '');
+    const isBunt = pa.pa_why === 'B' && pa.pa_result !== undefined && [1, 2, 3, 4].includes(pa.pa_result);
 
     // Get the display text
     let displayText = '';
     
     // Special case for bunts with pa_why = 'B'
-    if (isBunt) {
+    if (isBunt && pa.pa_result !== undefined) {
       displayText = `${pa.pa_result}B`; // Return base number + B for bunts
     }
     // Special case for walks with pa_why = 'B'
@@ -347,13 +350,12 @@ const BaseballField = ({
       displayText = 'BB';
     }
     // For errors, show the base number with E
-    else if (isError) {
-      const pa_resultb = pa.pa_result || '1'; // Default to 1 if not specified
-      displayText = `${pa_resultb}E`;
+    else if (isError && pa.pa_result !== undefined) {
+      displayText = `${pa.pa_result}E`;
     }
     // For hits, show the base number
     else if (isHit) {
-      const pa_resultb = pa.pa_result || '1'; // Default to 1 if not specified
+      const pa_resultb = pa.pa_result !== undefined ? pa.pa_result : 1; // Default to 1 if not specified
       
       // Special cases
       if (pa.pa_why === 'HR' || pa.pa_why === 'GS') {
@@ -362,10 +364,10 @@ const BaseballField = ({
         displayText = 'HH'; // Keep HH as is
       } else {
         // For other hits, show the base number
-        if (pa_resultb === '1') displayText = '1B';
-        else if (pa_resultb === '2') displayText = '2B';
-        else if (pa_resultb === '3') displayText = '3B';
-        else if (pa_resultb === '4') displayText = 'HR';
+        if (pa_resultb === 1) displayText = '1B';
+        else if (pa_resultb === 2) displayText = '2B';
+        else if (pa_resultb === 3) displayText = '3B';
+        else if (pa_resultb === 4) displayText = 'HR';
       }
     }
     // For walks and other results, use pa_why
@@ -378,10 +380,10 @@ const BaseballField = ({
       }
     }
     // If we have a pa_result, convert it to a more descriptive text
-    else if (pa.pa_result) {
+    else if (pa.pa_result !== undefined) {
       // Handle numeric pa_result values
-      if (pa.pa_result === '0') displayText = 'OUT';
-      else if (pa.pa_result === '1') {
+      if (pa.pa_result === 0) displayText = 'OUT';
+      else if (pa.pa_result === 1) {
         // For base 1, check pa_why to determine if it's a hit, walk, etc.
         const pa_whyb = pa.pa_why || '';
         if (pa_whyb === 'BB' || pa_whyb === 'B') displayText = 'BB';
@@ -391,35 +393,38 @@ const BaseballField = ({
         else if (pa_whyb === 'HH') displayText = 'HH';
         else displayText = '1B'; // Default to 1B for base 1
       }
-      else if (pa.pa_result === '2') {
+      else if (pa.pa_result === 2) {
         // Check if it was an error
         const pa_whyb = pa.pa_why || '';
         if (pa_whyb === 'E') displayText = '2E';
         else displayText = '2B';
       }
-      else if (pa.pa_result === '3') {
+      else if (pa.pa_result === 3) {
         // Check if it was an error
         const pa_whyb = pa.pa_why || '';
         if (pa_whyb === 'E') displayText = '3E';
         else displayText = '3B';
       }
-      else if (pa.pa_result === '4') {
+      else if (pa.pa_result === 4) {
         // Check if it was an error
         const pa_whyb = pa.pa_why || '';
         if (pa_whyb === 'E') displayText = '4E';
         else displayText = 'HR';
       }
       // Handle non-numeric pa_result values
-      else if (pa.pa_result.includes('1B') || pa.pa_result.includes('2B') || 
-               pa.pa_result.includes('3B') || pa.pa_result.includes('HR') ||
-               pa.pa_result.includes('BB') || pa.pa_result.includes('HBP') ||
-               pa.pa_result.includes('K') || pa.pa_result.includes('OUT') ||
-               pa.pa_result.includes('FC') || pa.pa_result.includes('E')) {
-        // Use the pa_result directly if it's already a descriptive value
-        displayText = pa.pa_result;
-      }
       else {
-        displayText = pa.pa_result;
+        const paResultStr = String(pa.pa_result);
+        if (paResultStr.includes('1B') || paResultStr.includes('2B') || 
+            paResultStr.includes('3B') || paResultStr.includes('HR') ||
+            paResultStr.includes('BB') || paResultStr.includes('HBP') ||
+            paResultStr.includes('K') || paResultStr.includes('OUT') ||
+            paResultStr.includes('FC') || paResultStr.includes('E')) {
+          // Use the pa_result directly if it's already a descriptive value
+          displayText = paResultStr;
+        }
+        else {
+          displayText = String(pa.pa_result);
+        }
       }
     }
     else {
@@ -608,7 +613,7 @@ const BaseballField = ({
       )}
       
       {/* Hit marker - small X with color based on whether player reached base or if there was an error */}
-      {hitDirection && hitDirection !== "0" && (
+      {hitDirection && hitDirection !== 0 && (
         <div 
           className={`absolute z-40 font-bold text-[10px] ${hitMarkerColor} flex items-center justify-center`}
           style={{ 
@@ -644,6 +649,45 @@ const BaseballField = ({
         <div className="absolute bottom-0.5 right-4 w-3 h-3 rounded-full bg-white border border-yellow-400 flex items-center justify-center">
           <span className="text-yellow-500 text-[8px] font-semibold">{foulsValue}</span>
         </div>
+      )}
+      
+      {/* Add bottom left indicator for SLAP, LATE, or BUNT */}
+      {pa && (
+        (() => {
+          let indicator = '';
+          let indicatorColor = '';
+          
+          if (pa.slap === 1) {
+            indicator = 'SLAP';
+            indicatorColor = 'border-purple-600';
+          } else if (pa.late_swings !== undefined && pa.late_swings > 1) {
+            indicator = 'LATE';
+            indicatorColor = 'border-red-600';
+          } else if (pa.pa_why === 'B') {
+            indicator = 'BUNT';
+            indicatorColor = 'border-purple-600';
+          }
+          
+          if (indicator) {
+            return (
+              <div 
+                className={`absolute text-gray-700 font-bold text-opacity-90 border ${indicatorColor} rounded-full flex items-center justify-center`}
+                style={{ 
+                  fontSize: '0.5rem', // Slightly smaller than before
+                  bottom: '1px',
+                  left: '1px',
+                  padding: '1px 2px',
+                  lineHeight: '1',
+                  borderWidth: '1px'
+                }}
+              >
+                {indicator}
+              </div>
+            );
+          }
+          
+          return null;
+        })()
       )}
       
       {/* Add plate appearance indicator (only shown when interactive and empty) - adjusted position */}

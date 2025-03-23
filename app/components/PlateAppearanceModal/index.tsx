@@ -42,14 +42,14 @@ interface ScoreBookEntryStructure {
   // At the plate
   out_at: number;
   pa_why: string;
-  pa_result: string;
-  hit_to: string;
-  pa_error_on: any[];
+  pa_result: number;
+  hit_to: number;
+  pa_error_on: number[];
   // Base running
   br_result: number | null;
-  br_stolen_bases: any[];
-  base_running_hit_around: any[];
-  br_error_on: any[];
+  br_stolen_bases: number[];
+  base_running_hit_around: number[];
+  br_error_on: number[];
   // Balls and strikes
   pitch_count: number;
   balls_before_play: number;
@@ -114,7 +114,7 @@ const PlateAppearanceModal = ({
 
   useEffect(() => {
     if (pa) {
-      console.log("PlateAppearanceModal received pa data:", pa);
+      // Create a copy of the PA with default values for missing fields
       
       // Ensure we have strings for jersey_number and name
       let updatedJerseyNumber = pa.batter_jersey_number || '';
@@ -132,12 +132,14 @@ const PlateAppearanceModal = ({
       }
       
       // Helper function to parse array fields from API
-      const parseArrayField = (value: any): any[] => {
+      const parseArrayField = (value: any, convertToNumbers: boolean = false): any[] => {
         if (!value) return [];
         
-        // If it's already an array, return it
+        // If it's already an array, convert values if needed and return
         if (Array.isArray(value)) {
-          return value;
+          return convertToNumbers 
+            ? value.map(item => typeof item === 'string' ? Number(item) : item)
+            : value;
         }
         
         // If it's a string representation of an array, parse it
@@ -146,7 +148,9 @@ const PlateAppearanceModal = ({
             // Try to parse as JSON
             const parsed = JSON.parse(value);
             if (Array.isArray(parsed)) {
-              return parsed;
+              return convertToNumbers 
+                ? parsed.map(item => typeof item === 'string' ? Number(item) : item)
+                : parsed;
             }
             
             // Handle string format like "['2', '3', '4']"
@@ -154,24 +158,29 @@ const PlateAppearanceModal = ({
               // Remove the outer quotes and brackets, then split by comma
               const cleanedStr = value.replace(/^\[|\]$/g, '').replace(/'/g, '').replace(/"/g, '');
               if (cleanedStr.trim() === '') return [];
-              return cleanedStr.split(',').map(item => item.trim());
+              const items = cleanedStr.split(',').map(item => item.trim());
+              return convertToNumbers ? items.map(item => Number(item)) : items;
             }
             
             // Handle comma-separated values
             if (value.includes(',')) {
-              return value.split(',').map(item => item.trim());
+              const items = value.split(',').map(item => item.trim());
+              return convertToNumbers ? items.map(item => Number(item)) : items;
             }
             
             // Single value
-            return [value];
+            const result = [value];
+            return convertToNumbers ? result.map(item => Number(item)) : result;
           } catch (e) {
             // If parsing fails, return as a single-item array
             if (value.includes('[') && value.includes(']')) {
               const cleanedStr = value.replace(/^\[|\]$/g, '').replace(/'/g, '').replace(/"/g, '');
               if (cleanedStr.trim() === '') return [];
-              return cleanedStr.split(',').map(item => item.trim());
+              const items = cleanedStr.split(',').map(item => item.trim());
+              return convertToNumbers ? items.map(item => Number(item)) : items;
             }
-            return [value];
+            const result = [value];
+            return convertToNumbers ? result.map(item => Number(item)) : result;
           }
         }
         
@@ -187,13 +196,14 @@ const PlateAppearanceModal = ({
         batter_jersey_number: updatedJerseyNumber,
         batter_name: updatedPlayerName,
         // Ensure hit_to and detailed_result are synced - use whichever one is available
-        hit_to: pa.hit_to || pa.detailed_result || '0',
-        detailed_result: pa.detailed_result || pa.hit_to || '0',
+        hit_to: pa.hit_to !== undefined ? Number(pa.hit_to) : 
+               (pa.detailed_result ? Number(pa.detailed_result) : 0),
+        detailed_result: (pa.detailed_result || String(pa.hit_to || 0) || '0'),
         // Ensure pa_result is properly set - this is the initial base reached
-        pa_result: pa.pa_result || '0',
+        pa_result: pa.pa_result ? Number(pa.pa_result) : 0,
         // Ensure br_result is properly set - this is the final base reached
         br_result: pa.br_result !== undefined ? Number(pa.br_result) : (
-          pa.pa_result ? parseInt(pa.pa_result) : 0
+          pa.pa_result ? Number(pa.pa_result) : 0
         ),
         // Initialize our new fields
         qab: (pa as ExtendedScoreBookEntry).qab !== undefined ? Number((pa as ExtendedScoreBookEntry).qab) : 0,
@@ -201,11 +211,11 @@ const PlateAppearanceModal = ({
         hard_hit: (pa as ExtendedScoreBookEntry).hard_hit !== undefined ? Number((pa as ExtendedScoreBookEntry).hard_hit) : 0,
         rbi: (pa as ExtendedScoreBookEntry).rbi || 0,
         risp: null,
-        // Parse array fields from API
-        pa_error_on: parseArrayField(pa.pa_error_on),
-        br_error_on: parseArrayField(pa.br_error_on),
-        stolen_bases: parseArrayField(pa.br_stolen_bases),
-        hit_around_bases: parseArrayField(pa.base_running_hit_around)
+        // Parse array fields from API as number arrays
+        pa_error_on: parseArrayField(pa.pa_error_on, true),
+        br_error_on: parseArrayField(pa.br_error_on, true),
+        stolen_bases: parseArrayField(pa.br_stolen_bases, true),
+        hit_around_bases: parseArrayField(pa.base_running_hit_around, true)
       };
       
       // If why_base_reached exists but pa_why doesn't, copy the value for backward compatibility
@@ -273,7 +283,7 @@ const PlateAppearanceModal = ({
         batter_name: playerName,
         batter_seq_id: seqId,
         round: round,
-        pa_result: '',
+        pa_result: 0,
         bases_reached: '', // Required by ScoreBookEntry interface but duplicative with pa_result
         base_running: '',
         balls_before_play: 0,
@@ -282,6 +292,8 @@ const PlateAppearanceModal = ({
         strikes_swinging: 0,
         strikes_unsure: 0,
         fouls_after_two_strikes: 0,
+        fouls: 0, // Explicitly set fouls to 0
+        ball_swinging: 0, // Explicitly set ball_swinging to 0
         base_running_stolen_base: 0,
         team_id: teamId || '',
         game_id: gameId || '',
@@ -298,7 +310,12 @@ const PlateAppearanceModal = ({
         pa_why: '', // This is the field we'll use going forward
         why_base_reached: '', // For backward compatibility
         detailed_result: '', // Add detailed_result field
-        result_type: '' // Required by ScoreBookEntry interface
+        result_type: '', // Required by ScoreBookEntry interface
+        // Explicitly initialize arrays to empty
+        pa_error_on: [],
+        br_error_on: [],
+        stolen_bases: [],
+        hit_around_bases: []
       };
       
       // Set default values for all quality indicators
@@ -322,59 +339,65 @@ const PlateAppearanceModal = ({
       // Create updated object with the new field value
       const updated = { ...prev };
       
-      // Handle array fields
-      const ARRAY_FIELDS = ["hit_around_bases", "stolen_bases", "pa_error_on", "br_error_on"];
-      if (ARRAY_FIELDS.includes(field)) {
-        // Ensure the value is an array
+      // Helper function to safely parse array fields and convert to numbers
+      const parseArrayField = (value: any, convertToNumbers: boolean = true): any[] => {
+        if (!value) return [];
+        
+        // If it's already an array, convert values if needed and return
         if (Array.isArray(value)) {
-          updated[field] = value;
-        } else if (typeof value === 'string') {
+          return convertToNumbers 
+            ? value.map(item => typeof item === 'string' ? Number(item) : Number(item))
+            : value;
+        }
+        
+        // If it's a string representation of an array, parse it
+        if (typeof value === 'string') {
           try {
             // Try to parse as JSON
             const parsed = JSON.parse(value);
             if (Array.isArray(parsed)) {
-              updated[field] = parsed;
-            } else {
-              // Handle string format like "['2', '3', '4']"
-              if (value.includes('[') && value.includes(']')) {
-                const cleanedStr = value.replace(/^\[|\]$/g, '').replace(/'/g, '').replace(/"/g, '');
-                if (cleanedStr.trim() === '') {
-                  updated[field] = [];
-                } else {
-                  updated[field] = cleanedStr.split(',').map(item => item.trim());
-                }
-              } else if (value.includes(',')) {
-                // Handle comma-separated values
-                updated[field] = value.split(',').map(item => item.trim());
-              } else if (value.trim() !== '') {
-                // Single value
-                updated[field] = [value.trim()];
-              } else {
-                // Empty string
-                updated[field] = [];
-              }
+              return convertToNumbers 
+                ? parsed.map(item => typeof item === 'string' ? Number(item) : Number(item))
+                : parsed;
             }
-          } catch (e) {
-            // If parsing fails, handle as a string
+            
+            // Handle string format like "['2', '3', '4']"
             if (value.includes('[') && value.includes(']')) {
+              // Remove the outer quotes and brackets, then split by comma
               const cleanedStr = value.replace(/^\[|\]$/g, '').replace(/'/g, '').replace(/"/g, '');
-              if (cleanedStr.trim() === '') {
-                updated[field] = [];
-              } else {
-                updated[field] = cleanedStr.split(',').map(item => item.trim());
-              }
-            } else if (value.includes(',')) {
-              updated[field] = value.split(',').map(item => item.trim());
-            } else if (value.trim() !== '') {
-              updated[field] = [value.trim()];
-            } else {
-              updated[field] = [];
+              if (cleanedStr.trim() === '') return [];
+              const items = cleanedStr.split(',').map(item => item.trim());
+              return convertToNumbers ? items.map(item => Number(item)) : items;
             }
+            
+            // Handle comma-separated values
+            if (value.includes(',')) {
+              const items = value.split(',').map(item => item.trim());
+              return convertToNumbers ? items.map(item => Number(item)) : items;
+            }
+            
+            // Single value
+            const result = [value];
+            return convertToNumbers ? result.map(item => Number(item)) : result;
+          } catch (e) {
+            // If parsing fails, return as a single-item array
+            const result = [value];
+            return convertToNumbers ? result.map(item => Number(item)) : result;
           }
-        } else {
-          // For any other type, set as empty array
-          updated[field] = [];
         }
+        
+        return [];
+      };
+      
+      // Handle array fields
+      const ARRAY_FIELDS = ["hit_around_bases", "stolen_bases", "pa_error_on", "br_error_on"];
+      if (ARRAY_FIELDS.includes(field)) {
+        // For fields that need to be arrays of numbers
+        const NUMBER_ARRAY_FIELDS = ["pa_error_on", "br_error_on", "hit_around_bases", "stolen_bases"];
+        const shouldConvertToNumbers = NUMBER_ARRAY_FIELDS.includes(field);
+        
+        // Use the parseArrayField helper function
+        updated[field] = parseArrayField(value, shouldConvertToNumbers);
       } else {
         // For non-array fields, just set the value directly
         updated[field] = value;
@@ -390,21 +413,23 @@ const PlateAppearanceModal = ({
       // If changing pa_result directly, ensure br_result is updated appropriately
       if (field === 'pa_result') {
         // Also update bases_reached to keep them in sync
-        updated.bases_reached = value;
+        updated.bases_reached = typeof value === 'number' ? value.toString() : value;
         
         // If br_result is not set or less than pa_result, update it too
-        if (updated.br_result === undefined || updated.br_result < parseInt(value)) {
-          updated.br_result = parseInt(value);
+        const numValue = typeof value === 'number' ? value : parseInt(value);
+        if (updated.br_result === undefined || updated.br_result < numValue) {
+          updated.br_result = numValue;
         }
       }
       
       // If changing bases_reached, also update pa_result to keep them in sync
       if (field === 'bases_reached' && value) {
-        updated.pa_result = value;
+        updated.pa_result = parseInt(value);
         
         // If br_result is not set or less than the initial base, update it too
-        if (updated.br_result === undefined || updated.br_result < parseInt(value)) {
-          updated.br_result = parseInt(value);
+        const numValue = parseInt(value);
+        if (updated.br_result === undefined || updated.br_result < numValue) {
+          updated.br_result = numValue;
         }
       }
       
@@ -509,65 +534,74 @@ const PlateAppearanceModal = ({
     setEditedPA((prev: ScoreBookEntry | null) => {
       if (!prev) return null;
       const updatedPA = { ...prev };
+      
+      // Skip processing for newly created PA with no interactions
+      const isNewlyCreatedPA = !prev.pa_why && prev.pitch_count === 0 && 
+                              prev.balls_before_play === 0 && prev.strikes_before_play === 0;
+      
       // Update the specific counter
       updatedPA[field] = (updatedPA[field] || 0) + value;
-      // Recalculate strikes_before_play based on the rules
-      if (field !== 'strikes_before_play') {
-        // Calculate the sum of all strike types
-        const strikeTypeSum = (
-          (updatedPA.strikes_watching || 0) + 
-          (updatedPA.strikes_swinging || 0) + 
-          (updatedPA.strikes_unsure || 0) +
-          (updatedPA.ball_swinging || 0)
-        );
+      
+      // Only recalculate if this is not a brand new PA
+      if (!isNewlyCreatedPA) {
+        // Recalculate strikes_before_play based on the rules
+        if (field !== 'strikes_before_play') {
+          // Calculate the sum of all strike types
+          const strikeTypeSum = (
+            (updatedPA.strikes_watching || 0) + 
+            (updatedPA.strikes_swinging || 0) + 
+            (updatedPA.strikes_unsure || 0) +
+            (updatedPA.ball_swinging || 0)
+          );
 
-        const fouls = updatedPA.fouls || 0;
-        // Apply the rules for strikes_before_play
-        if (strikeTypeSum >= 2) {
-          // If we already have 2 strikes from the types, don't count fouls
-          updatedPA.strikes_before_play = Math.min(2, strikeTypeSum);
-        } else if (strikeTypeSum === 1 && fouls >= 1) {
-          // If we have 1 strike from types and at least 1 foul, count as 2 strikes
-          updatedPA.strikes_before_play = 2;
-        } else if (strikeTypeSum === 0 && fouls >= 2) {
-          // If we have 0 strikes from types but 2+ fouls, count as 2 strikes
-          updatedPA.strikes_before_play = 2;
-        } else if (strikeTypeSum === 0 && fouls === 1) {
-          // If we have 0 strikes from types and 1 foul, count as 1 strike
-          updatedPA.strikes_before_play = 1;
-        } else {
-          // Otherwise, just use the sum of strike types
-          updatedPA.strikes_before_play = strikeTypeSum;
+          const fouls = updatedPA.fouls || 0;
+          // Apply the rules for strikes_before_play
+          if (strikeTypeSum >= 2) {
+            // If we already have 2 strikes from the types, don't count fouls
+            updatedPA.strikes_before_play = Math.min(2, strikeTypeSum);
+          } else if (strikeTypeSum === 1 && fouls >= 1) {
+            // If we have 1 strike from types and at least 1 foul, count as 2 strikes
+            updatedPA.strikes_before_play = 2;
+          } else if (strikeTypeSum === 0 && fouls >= 2) {
+            // If we have 0 strikes from types but 2+ fouls, count as 2 strikes
+            updatedPA.strikes_before_play = 2;
+          } else if (strikeTypeSum === 0 && fouls === 1) {
+            // If we have 0 strikes from types and 1 foul, count as 1 strike
+            updatedPA.strikes_before_play = 1;
+          } else {
+            // Otherwise, just use the sum of strike types
+            updatedPA.strikes_before_play = strikeTypeSum;
+          }
         }
-      }
-      
-      // Calculate pitch_count as the sum of all pitch-related fields
-      updatedPA.pitch_count = (
-        (updatedPA.balls_before_play || 0) +
-        (updatedPA.strikes_watching || 0) +
-        (updatedPA.strikes_swinging || 0) +
-        (updatedPA.strikes_unsure || 0) +
-        (updatedPA.ball_swinging || 0) +
-        (updatedPA.fouls || 0)
-      );
-      
-      // Add additional pitches based on the outcome (pa_why)
-      if (updatedPA.pa_why) {
-        if (updatedPA.pa_why === 'BB') {
-          // For walks (BB), ensure we count the final pitch that resulted in the walk
-          // if it's not already included in balls_before_play
-          if ((updatedPA.balls_before_play || 0) < 4) {
-            updatedPA.pitch_count += (4 - (updatedPA.balls_before_play || 0));
+        
+        // Calculate pitch_count as the sum of all pitch-related fields
+        updatedPA.pitch_count = (
+          (updatedPA.balls_before_play || 0) +
+          (updatedPA.strikes_watching || 0) +
+          (updatedPA.strikes_swinging || 0) +
+          (updatedPA.strikes_unsure || 0) +
+          (updatedPA.ball_swinging || 0) +
+          (updatedPA.fouls || 0)
+        );
+        
+        // Add additional pitches based on the outcome (pa_why)
+        if (updatedPA.pa_why) {
+          if (updatedPA.pa_why === 'BB') {
+            // For walks (BB), ensure we count the final pitch that resulted in the walk
+            // if it's not already included in balls_before_play
+            if ((updatedPA.balls_before_play || 0) < 4) {
+              updatedPA.pitch_count += (4 - (updatedPA.balls_before_play || 0));
+            }
+          } else if (updatedPA.pa_why === 'K' || updatedPA.pa_why === 'KK') {
+            // For strikeouts (K or KK), ensure we count the final pitch that resulted in the strikeout
+            // if it's not already included in strikes_before_play
+            if ((updatedPA.strikes_before_play || 0) < 3) {
+              updatedPA.pitch_count += (3 - (updatedPA.strikes_before_play || 0));
+            }
+          } else {
+            // For all other outcomes, add 1 for the final pitch that resulted in the play
+            updatedPA.pitch_count += 1;
           }
-        } else if (updatedPA.pa_why === 'K' || updatedPA.pa_why === 'KK') {
-          // For strikeouts (K or KK), ensure we count the final pitch that resulted in the strikeout
-          // if it's not already included in strikes_before_play
-          if ((updatedPA.strikes_before_play || 0) < 3) {
-            updatedPA.pitch_count += (3 - (updatedPA.strikes_before_play || 0));
-          }
-        } else {
-          // For all other outcomes, add 1 for the final pitch that resulted in the play
-          updatedPA.pitch_count += 1;
         }
       }
       
@@ -582,67 +616,74 @@ const PlateAppearanceModal = ({
       
       const updatedPA = { ...prev };
       
+      // Skip processing for newly created PA with no interactions
+      const isNewlyCreatedPA = !prev.pa_why && prev.pitch_count === 0 && 
+                              prev.balls_before_play === 0 && prev.strikes_before_play === 0;
+      
       // Update the specific counter (don't go below 0)
       updatedPA[field] = Math.max(0, (updatedPA[field] || 0) - value);
       
-      // Recalculate strikes_before_play based on the rules
-      if (field !== 'strikes_before_play') {
-        // Calculate the sum of all strike types
-        const strikeTypeSum = (
-          (updatedPA.strikes_watching || 0) + 
-          (updatedPA.strikes_swinging || 0) + 
+      // Only recalculate if this is not a brand new PA
+      if (!isNewlyCreatedPA) {
+        // Recalculate strikes_before_play based on the rules
+        if (field !== 'strikes_before_play') {
+          // Calculate the sum of all strike types
+          const strikeTypeSum = (
+            (updatedPA.strikes_watching || 0) + 
+            (updatedPA.strikes_swinging || 0) + 
+            (updatedPA.strikes_unsure || 0) +
+            (updatedPA.ball_swinging || 0)
+          );
+          
+          const fouls = updatedPA.fouls || 0;
+          
+          // Apply the rules for strikes_before_play
+          if (strikeTypeSum >= 2) {
+            // If we already have 2 strikes from the types, don't count fouls
+            updatedPA.strikes_before_play = Math.min(2, strikeTypeSum);
+          } else if (strikeTypeSum === 1 && fouls >= 1) {
+            // If we have 1 strike from types and at least 1 foul, count as 2 strikes
+            updatedPA.strikes_before_play = 2;
+          } else if (strikeTypeSum === 0 && fouls >= 2) {
+            // If we have 0 strikes from types but 2+ fouls, count as 2 strikes
+            updatedPA.strikes_before_play = 2;
+          } else if (strikeTypeSum === 0 && fouls === 1) {
+            // If we have 0 strikes from types and 1 foul, count as 1 strike
+            updatedPA.strikes_before_play = 1;
+          } else {
+            // Otherwise, just use the sum of strike types
+            updatedPA.strikes_before_play = strikeTypeSum;
+          }
+        }
+        
+        // Calculate pitch_count as the sum of all pitch-related fields
+        updatedPA.pitch_count = (
+          (updatedPA.balls_before_play || 0) +
+          (updatedPA.strikes_watching || 0) +
+          (updatedPA.strikes_swinging || 0) +
           (updatedPA.strikes_unsure || 0) +
-          (updatedPA.ball_swinging || 0)
+          (updatedPA.ball_swinging || 0) +
+          (updatedPA.fouls || 0)
         );
         
-        const fouls = updatedPA.fouls || 0;
-        
-        // Apply the rules for strikes_before_play
-        if (strikeTypeSum >= 2) {
-          // If we already have 2 strikes from the types, don't count fouls
-          updatedPA.strikes_before_play = Math.min(2, strikeTypeSum);
-        } else if (strikeTypeSum === 1 && fouls >= 1) {
-          // If we have 1 strike from types and at least 1 foul, count as 2 strikes
-          updatedPA.strikes_before_play = 2;
-        } else if (strikeTypeSum === 0 && fouls >= 2) {
-          // If we have 0 strikes from types but 2+ fouls, count as 2 strikes
-          updatedPA.strikes_before_play = 2;
-        } else if (strikeTypeSum === 0 && fouls === 1) {
-          // If we have 0 strikes from types and 1 foul, count as 1 strike
-          updatedPA.strikes_before_play = 1;
-        } else {
-          // Otherwise, just use the sum of strike types
-          updatedPA.strikes_before_play = strikeTypeSum;
-        }
-      }
-      
-      // Calculate pitch_count as the sum of all pitch-related fields
-      updatedPA.pitch_count = (
-        (updatedPA.balls_before_play || 0) +
-        (updatedPA.strikes_watching || 0) +
-        (updatedPA.strikes_swinging || 0) +
-        (updatedPA.strikes_unsure || 0) +
-        (updatedPA.ball_swinging || 0) +
-        (updatedPA.fouls || 0)
-      );
-      
-      // Add additional pitches based on the outcome (pa_why)
-      if (updatedPA.pa_why) {
-        if (updatedPA.pa_why === 'BB') {
-          // For walks (BB), ensure we count the final pitch that resulted in the walk
-          // if it's not already included in balls_before_play
-          if ((updatedPA.balls_before_play || 0) < 4) {
-            updatedPA.pitch_count += (4 - (updatedPA.balls_before_play || 0));
+        // Add additional pitches based on the outcome (pa_why)
+        if (updatedPA.pa_why) {
+          if (updatedPA.pa_why === 'BB') {
+            // For walks (BB), ensure we count the final pitch that resulted in the walk
+            // if it's not already included in balls_before_play
+            if ((updatedPA.balls_before_play || 0) < 4) {
+              updatedPA.pitch_count += (4 - (updatedPA.balls_before_play || 0));
+            }
+          } else if (updatedPA.pa_why === 'K' || updatedPA.pa_why === 'KK') {
+            // For strikeouts (K or KK), ensure we count the final pitch that resulted in the strikeout
+            // if it's not already included in strikes_before_play
+            if ((updatedPA.strikes_before_play || 0) < 3) {
+              updatedPA.pitch_count += (3 - (updatedPA.strikes_before_play || 0));
+            }
+          } else {
+            // For all other outcomes, add 1 for the final pitch that resulted in the play
+            updatedPA.pitch_count += 1;
           }
-        } else if (updatedPA.pa_why === 'K' || updatedPA.pa_why === 'KK') {
-          // For strikeouts (K or KK), ensure we count the final pitch that resulted in the strikeout
-          // if it's not already included in strikes_before_play
-          if ((updatedPA.strikes_before_play || 0) < 3) {
-            updatedPA.pitch_count += (3 - (updatedPA.strikes_before_play || 0));
-          }
-        } else {
-          // For all other outcomes, add 1 for the final pitch that resulted in the play
-          updatedPA.pitch_count += 1;
         }
       }
       
@@ -667,13 +708,15 @@ const PlateAppearanceModal = ({
       pa_why: editedPA.pa_why || editedPA.why_base_reached || ''
     };
     
-    // Helper function to safely parse array fields
-    const parseArrayField = (value: any): any[] => {
+    // Helper function to safely parse array fields and convert to numbers
+    const parseArrayField = (value: any, convertToNumbers: boolean = true): any[] => {
       if (!value) return [];
       
-      // If it's already an array, return it
+      // If it's already an array, convert values if needed and return
       if (Array.isArray(value)) {
-        return value;
+        return convertToNumbers 
+          ? value.map(item => typeof item === 'string' ? Number(item) : Number(item))
+          : value;
       }
       
       // If it's a string representation of an array, parse it
@@ -682,7 +725,9 @@ const PlateAppearanceModal = ({
           // Try to parse as JSON
           const parsed = JSON.parse(value);
           if (Array.isArray(parsed)) {
-            return parsed;
+            return convertToNumbers 
+              ? parsed.map(item => typeof item === 'string' ? Number(item) : Number(item))
+              : parsed;
           }
           
           // Handle string format like "['2', '3', '4']"
@@ -690,19 +735,23 @@ const PlateAppearanceModal = ({
             // Remove the outer quotes and brackets, then split by comma
             const cleanedStr = value.replace(/^\[|\]$/g, '').replace(/'/g, '').replace(/"/g, '');
             if (cleanedStr.trim() === '') return [];
-            return cleanedStr.split(',').map(item => item.trim());
+            const items = cleanedStr.split(',').map(item => item.trim());
+            return convertToNumbers ? items.map(item => Number(item)) : items;
           }
           
           // Handle comma-separated values
           if (value.includes(',')) {
-            return value.split(',').map(item => item.trim());
+            const items = value.split(',').map(item => item.trim());
+            return convertToNumbers ? items.map(item => Number(item)) : items;
           }
           
           // Single value
-          return [value];
+          const result = [value];
+          return convertToNumbers ? result.map(item => Number(item)) : result;
         } catch (e) {
           // If parsing fails, return as a single-item array
-          return [value];
+          const result = [value];
+          return convertToNumbers ? result.map(item => Number(item)) : result;
         }
       }
       
@@ -721,7 +770,10 @@ const PlateAppearanceModal = ({
       teamId: paData.team_id || teamId || '',
       game_id: paData.game_id || gameId || '',
       gameId: paData.game_id || gameId || '',
-      out: (paData.pa_result === '0' || paData.bases_reached === '0' || (paData.out_at && paData.out_at !== 0)) ? 1 : 0,
+      out: (typeof paData.pa_result === 'number' && paData.pa_result === 0) || 
+           (typeof paData.pa_result === 'string' && paData.pa_result === '0') || 
+           paData.bases_reached === '0' || 
+           (paData.out_at && paData.out_at !== 0) ? 1 : 0,
       my_team_ha: myTeamHomeOrAway || 'away',
       //pitcher and catcher stats
       wild_pitch: paData.wild_pitch !== undefined ? Number(paData.wild_pitch) : 0,
@@ -737,14 +789,14 @@ const PlateAppearanceModal = ({
       // At the plate
       out_at: paData.out_at ? Number(paData.out_at) : 0,
       pa_why: paData.pa_why || '', // Primary field for plate appearance reason
-      pa_result: paData.pa_result || '',
-      hit_to: paData.hit_to || paData.detailed_result || '',
-      pa_error_on: parseArrayField(paData.pa_error_on),
+      pa_result: Number(paData.pa_result || 0),
+      hit_to: Number(paData.hit_to || paData.detailed_result || 0),
+      pa_error_on: parseArrayField(paData.pa_error_on, true),
       // Base running
       br_result: paData.br_result !== undefined ? Number(paData.br_result) : null,
-      br_stolen_bases: parseArrayField(paData.stolen_bases),
-      base_running_hit_around: parseArrayField(paData.hit_around_bases),
-      br_error_on: parseArrayField(paData.br_error_on),
+      br_stolen_bases: parseArrayField(paData.stolen_bases, true),
+      base_running_hit_around: parseArrayField(paData.hit_around_bases, true),
+      br_error_on: parseArrayField(paData.br_error_on, true),
       // Balls and strikes
       pitch_count: Number(paData.pitch_count) || 0,
       balls_before_play: Number(paData.balls_before_play) || 0,
@@ -843,14 +895,14 @@ const PlateAppearanceModal = ({
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+      <div className="flex items-start justify-center min-h-screen pt-16 px-4 pb-20 text-center sm:block sm:p-0">
         <div className="fixed inset-0 transition-opacity" aria-hidden="true">
           <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
         </div>
         
         <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
         
-        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full sm:max-h-[95vh]">
+        <div className="inline-block align-top bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-4 sm:align-middle sm:max-w-4xl sm:w-full sm:max-h-[90vh]">
           <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4 max-h-[calc(95vh-120px)] overflow-y-auto">
             <div className="sm:flex sm:items-start">
               <div className="mt-3 text-center sm:mt-0 sm:text-left w-full">

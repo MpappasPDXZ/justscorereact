@@ -901,10 +901,10 @@ export default function ScoreGame() {
   <thead className="bg-gray-50">
     {/* Add a new row for inning groupings */}
     <tr>
-      <th className="border p-1 text-xs font-medium text-gray-500 uppercase tracking-wider text-center" style={{ width: '30px' }} rowSpan={2}>
+      <th className="border p-1 text-center text-xs font-medium text-gray-500 uppercase tracking-wider" style={{ width: '30px' }} rowSpan={2}>
         #
       </th>
-      <th className="border p-1 text-xs font-medium text-gray-500 uppercase tracking-wider" style={{ width: '150px' }} rowSpan={2}>
+      <th className="border p-1 text-center text-xs font-medium text-gray-500 uppercase tracking-wider" style={{ width: '150px' }} rowSpan={2}>
         Player
       </th>
       
@@ -926,7 +926,7 @@ export default function ScoreGame() {
         return (
           <th 
             key={`inning-header-${inningNumber}`}
-            className="border p-1 text-xs font-medium text-gray-500 uppercase tracking-wider text-center"
+            className="border p-1 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
             colSpan={columnsInInning}
           >
             Inning {inningNumber}
@@ -940,7 +940,7 @@ export default function ScoreGame() {
       {Array.from({ length: getNumberOfPAColumns() }).map((_, i) => (
         <th 
           key={`pa-header-${i+1}`}
-          className="border p-1 text-xs font-medium text-gray-500 uppercase tracking-wider text-center"
+          className="border p-1 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
           style={{ width: '60px' }}
         >
           PA {i+1}
@@ -959,18 +959,12 @@ export default function ScoreGame() {
     // Find the PA with the matching batter_seq_id, if any
     const pa = playerPAs.find(pa => pa.batter_seq_id === expectedSeqId);
     
-    // Debug log to see what's in the PA data
-    if (pa) {
-      console.log(`PA cell for order ${orderNumber}, column ${columnIndex}, with seqId ${expectedSeqId}:`, pa);
-    }
-    
     return (
       <td key={`pa-${columnIndex}`} className="border p-0 text-xs text-center h-12" style={{ verticalAlign: 'bottom' }}>
         <BaseballDiamondCell 
           pa={pa as any || null}
           onClick={() => {
             if (pa) {
-              console.log("Setting selectedPA with data:", pa);
               setSelectedPA(pa);
               setIsPlateAppearanceModalOpen(true);
             } else {
@@ -1245,7 +1239,7 @@ export default function ScoreGame() {
   if (!boxScore) return <div className="p-4">No box score data available.</div>;
 
   return (
-    <div className="container mx-auto px-3 py-4">
+    <div className="container mx-auto px-1.5 py-4">
       <div className="flex justify-between items-center mb-4">
         <div>
           <h1 className="text-2xl font-bold">Box Score</h1>
@@ -1280,142 +1274,200 @@ export default function ScoreGame() {
       </div>
       
       {/* Box Score Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden mb-6">
+      <div className="bg-white rounded-lg shadow overflow-hidden mb-6 w-auto" style={{ width: 'auto', maxWidth: '920px' }}>
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Team</th>
-                {Array.from({ length: 7 }).map((_, i) => (
-                  <th 
-                    key={`inning-header-${i}`}
-                    className="p-0 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 w-20"
-                    onClick={() => fetchInningDetail((i + 1).toString(), selectedTeam)}
-                  >
-                    <div className="p-2">{i + 1}</div>
+          <div style={{ width: 'fit-content', margin: '0' }}>
+            <table className="border-collapse" cellSpacing="0" cellPadding="0" style={{ borderCollapse: 'collapse', borderSpacing: 0 }}>
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider" style={{ width: '120px', minWidth: '120px' }}>Team</th>
+                  {Array.from({ length: 7 }).map((_, i) => (
+                    <th 
+                      key={`inning-header-${i}`}
+                      className={`p-0 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 border-t border-b border-l ${i === 6 ? 'border-r' : ''} border-gray-200`}
+                      style={{ width: '4.4rem' }}
+                      onClick={() => fetchInningDetail((i + 1).toString(), selectedTeam)}
+                    >
+                      <div className="p-2">{i + 1}</div>
+                    </th>
+                  ))}
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider border-l-2 border-gray-300 font-bold" style={{ width: '3.5rem' }}>
+                    <span className="hidden sm:inline">Runs</span>
+                    <span className="inline sm:hidden">R</span>
                   </th>
-                ))}
-                <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-l-2 border-gray-300 font-bold">Runs</th>
-                <th className="px-3 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider border-l-2 border-gray-300">Hits</th>
-                <th className="px-3 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">Errors</th>
-                <th className="px-3 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">Walks</th>
-                <th className="px-3 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">K&apos;s</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {/* Away Team Row */}
-              <tr>
-                <td 
-                  className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 cursor-pointer hover:bg-gray-100"
-                  onClick={() => fetchInningDetail(selectedInning, 'away')}
-                >
-                  {boxScore.game_header.my_team_ha === 'away' ? 'My Team' : boxScore.game_header.opponent_name}
-                </td>
-                {Array.from({ length: 7 }).map((_, i) => {
-                  const inningKey = (i + 1).toString();
-                  const inningData = boxScore.innings && boxScore.innings[inningKey]?.away || { 
-                    runs: 0, hits: 0, errors: 0, walks: 0, outs: 0, strikeouts: 0, 
-                    strike_percent: 0, on_base_percent: 0, hard_hit: 0 
-                  };
-                  
-                  // You might need to derive this from other data in your box score
-                  const runnersData = {
-                    // These are just examples - replace with actual data or logic
-                    runner_on_first: Boolean(inningData.runners_on_base?.includes('1B')),
-                    runner_on_second: Boolean(inningData.runners_on_base?.includes('2B')),
-                    runner_on_third: Boolean(inningData.runners_on_base?.includes('3B')),
-                  };
-                  
-                  return (
-                    <td 
-                      key={`away-inning-${i}`}
-                      className="p-0"
-                    >
-                      <BoxScoreInningCell 
-                        inningData={inningData} 
-                        onClick={() => fetchInningDetail(inningKey, 'away')}
-                        isActive={selectedInning === inningKey && selectedTeam === 'away'}
-                        inningNumber={inningKey}
-                        teamType="away"
-                        runnersData={runnersData}
-                      />
-                    </td>
-                  );
-                })}
-                <td className="px-3 py-4 whitespace-nowrap text-center text-sm font-medium border-l-2 border-gray-300 font-bold">
-                  {boxScore.totals.away.runs}
-                </td>
-                <td className="px-3 py-4 whitespace-nowrap text-center text-sm text-gray-600 border-l-2 border-gray-300">
-                  {boxScore.totals.away.hits}
-                </td>
-                <td className="px-3 py-4 whitespace-nowrap text-center text-sm text-gray-600">
-                  {boxScore.totals.away.errors}
-                </td>
-                <td className="px-3 py-4 whitespace-nowrap text-center text-sm text-gray-600">
-                  {boxScore.totals.away.walks}
-                </td>
-                <td className="px-3 py-4 whitespace-nowrap text-center text-sm text-gray-600">
-                  {boxScore.totals.away.strikeouts || 0}
-                </td>
-              </tr>
-              
-              {/* Home Team Row */}
-              <tr>
-                <td 
-                  className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 cursor-pointer hover:bg-gray-100"
-                  onClick={() => fetchInningDetail(selectedInning, 'home')}
-                >
-                  {boxScore.game_header.my_team_ha === 'home' ? 'My Team' : boxScore.game_header.opponent_name}
-                </td>
-                {Array.from({ length: 7 }).map((_, i) => {
-                  const inningKey = (i + 1).toString();
-                  const inningData = boxScore.innings && boxScore.innings[inningKey]?.home || { 
-                    runs: 0, hits: 0, errors: 0, walks: 0, outs: 0, strikeouts: 0, 
-                    strike_percent: 0, on_base_percent: 0, hard_hit: 0 
-                  };
-                  
-                  // You might need to derive this from other data in your box score
-                  const runnersData = {
-                    // These are just examples - replace with actual data or logic
-                    runner_on_first: Boolean(inningData.runners_on_base?.includes('1B')),
-                    runner_on_second: Boolean(inningData.runners_on_base?.includes('2B')),
-                    runner_on_third: Boolean(inningData.runners_on_base?.includes('3B')),
-                  };
-                  
-                  return (
-                    <td 
-                      key={`home-inning-${i}`}
-                      className="p-0"
-                    >
-                      <BoxScoreInningCell 
-                        inningData={inningData} 
-                        onClick={() => fetchInningDetail(inningKey, 'home')}
-                        isActive={selectedInning === inningKey && selectedTeam === 'home'}
-                        inningNumber={inningKey}
-                        teamType="home"
-                        runnersData={runnersData}
-                      />
-                    </td>
-                  );
-                })}
-                <td className="px-3 py-4 whitespace-nowrap text-center text-sm font-medium border-l-2 border-gray-300 font-bold">
-                  {boxScore.totals.home.runs}
-                </td>
-                <td className="px-3 py-4 whitespace-nowrap text-center text-sm text-gray-600 border-l-2 border-gray-300">
-                  {boxScore.totals.home.hits}
-                </td>
-                <td className="px-3 py-4 whitespace-nowrap text-center text-sm text-gray-600">
-                  {boxScore.totals.home.errors}
-                </td>
-                <td className="px-3 py-4 whitespace-nowrap text-center text-sm text-gray-600">
-                  {boxScore.totals.home.walks}
-                </td>
-                <td className="px-3 py-4 whitespace-nowrap text-center text-sm text-gray-600">
-                  {boxScore.totals.home.strikeouts || 0}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-l-2 border-gray-300 font-bold" style={{ width: '3.5rem' }}>
+                    <span className="hidden sm:inline">Hits</span>
+                    <span className="inline sm:hidden">H</span>
+                  </th>
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider font-bold" style={{ width: '3.5rem' }}>
+                    <span className="hidden sm:inline">Errors</span>
+                    <span className="inline sm:hidden">E</span>
+                  </th>
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider font-bold" style={{ width: '3.5rem' }}>
+                    <span className="hidden sm:inline">Walks</span>
+                    <span className="inline sm:hidden">BB</span>
+                  </th>
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider font-bold" style={{ width: '3.5rem' }}>
+                    <span className="hidden sm:inline">K&apos;s</span>
+                    <span className="inline sm:hidden">K</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {/* Away Team Row */}
+                <tr className={boxScore.totals.away.runs > boxScore.totals.home.runs ? "bg-indigo-50" : ""}>
+                  <td 
+                    className="px-3 py-2 whitespace-nowrap text-left text-sm font-medium text-gray-900 cursor-pointer hover:bg-gray-100"
+                    onClick={() => fetchInningDetail(selectedInning, 'away')}
+                    style={{ width: '120px', minWidth: '120px' }}
+                  >
+                    <span className="block truncate max-w-[110px] text-left">
+                      {boxScore.game_header.my_team_ha === 'away' ? 'My Team' : boxScore.game_header.opponent_name}
+                    </span>
+                  </td>
+                  {Array.from({ length: 7 }).map((_, i) => {
+                    const inningKey = (i + 1).toString();
+                    const inningData = boxScore.innings && boxScore.innings[inningKey]?.away || { 
+                      runs: 0, hits: 0, errors: 0, walks: 0, outs: 0, strikeouts: 0, 
+                      strike_percent: 0, on_base_percent: 0, hard_hit: 0,
+                      on_first_base: 0, on_second_base: 0, on_third_base: 0
+                    };
+                    
+                    // Set runners data based on on_first_base, on_second_base, on_third_base fields
+                    const runnersData = {
+                      runner_on_first: inningData.on_first_base > 0,
+                      runner_on_second: inningData.on_second_base > 0,
+                      runner_on_third: inningData.on_third_base > 0,
+                    };
+                    
+                    return (
+                      <td 
+                        key={`away-inning-${i}`}
+                        className="p-0 align-top"
+                        style={{ padding: 0, borderSpacing: 0, width: '4.4rem' }}
+                      >
+                        <BoxScoreInningCell 
+                          inningData={inningData} 
+                          onClick={() => fetchInningDetail(inningKey, 'away')}
+                          isActive={selectedInning === inningKey && selectedTeam === 'away'}
+                          inningNumber={inningKey}
+                          teamType="away"
+                          runnersData={runnersData}
+                          isLastInning={i === 6}
+                        />
+                      </td>
+                    );
+                  })}
+                  <td className={`px-2 py-4 whitespace-nowrap text-center text-sm font-medium border-l-2 border-gray-300 font-bold ${boxScore.totals.away.runs > boxScore.totals.home.runs ? 'text-indigo-600 text-lg font-extrabold' : 'text-black'}`}>
+                    {boxScore.totals.away.runs > boxScore.totals.home.runs ? (
+                      <div className="relative inline-flex items-center justify-center">
+                        <div className="absolute w-8 h-8 rounded-full border-2 border-indigo-600 animate-[pulse_6s_ease-in-out_infinite]"></div>
+                        <span>{boxScore.totals.away.runs}</span>
+                      </div>
+                    ) : (
+                      boxScore.totals.away.runs
+                    )}
+                  </td>
+                  <td className="px-2 py-4 whitespace-nowrap text-center text-sm border-l-2 border-gray-300">
+                    <span className={boxScore.totals.away.hits === 0 ? "text-gray-500" : "text-indigo-600"}>
+                      {boxScore.totals.away.hits}
+                    </span>
+                  </td>
+                  <td className="px-2 py-4 whitespace-nowrap text-center text-sm">
+                    <span className={boxScore.totals.away.errors === 0 ? "text-gray-500" : "text-red-600"}>
+                      {boxScore.totals.away.errors}
+                    </span>
+                  </td>
+                  <td className="px-2 py-4 whitespace-nowrap text-center text-sm">
+                    <span className={boxScore.totals.away.walks === 0 ? "text-gray-500" : "text-indigo-600"}>
+                      {boxScore.totals.away.walks}
+                    </span>
+                  </td>
+                  <td className="px-2 py-4 whitespace-nowrap text-center text-sm">
+                    <span className={boxScore.totals.away.strikeouts === 0 ? "text-gray-500" : "text-indigo-600"}>
+                      {boxScore.totals.away.strikeouts || 0}
+                    </span>
+                  </td>
+                </tr>
+                
+                {/* Home Team Row */}
+                <tr className={boxScore.totals.home.runs > boxScore.totals.away.runs ? "bg-indigo-50" : ""}>
+                  <td 
+                    className="px-3 py-4 whitespace-nowrap text-left text-sm font-medium text-gray-900 cursor-pointer hover:bg-gray-100"
+                    onClick={() => fetchInningDetail(selectedInning, 'home')}
+                    style={{ width: '120px', minWidth: '120px' }}
+                  >
+                    <span className="block truncate max-w-[110px] text-left">
+                      {boxScore.game_header.my_team_ha === 'home' ? 'My Team' : boxScore.game_header.opponent_name}
+                    </span>
+                  </td>
+                  {Array.from({ length: 7 }).map((_, i) => {
+                    const inningKey = (i + 1).toString();
+                    const inningData = boxScore.innings && boxScore.innings[inningKey]?.home || { 
+                      runs: 0, hits: 0, errors: 0, walks: 0, outs: 0, strikeouts: 0, 
+                      strike_percent: 0, on_base_percent: 0, hard_hit: 0,
+                      on_first_base: 0, on_second_base: 0, on_third_base: 0
+                    };
+                    
+                    // Set runners data based on on_first_base, on_second_base, on_third_base fields
+                    const runnersData = {
+                      runner_on_first: inningData.on_first_base > 0,
+                      runner_on_second: inningData.on_second_base > 0,
+                      runner_on_third: inningData.on_third_base > 0,
+                    };
+                    
+                    return (
+                      <td 
+                        key={`home-inning-${i}`}
+                        className="p-0 align-top"
+                        style={{ padding: 0, borderSpacing: 0, width: '4.4rem' }}
+                      >
+                        <BoxScoreInningCell 
+                          inningData={inningData} 
+                          onClick={() => fetchInningDetail(inningKey, 'home')}
+                          isActive={selectedInning === inningKey && selectedTeam === 'home'}
+                          inningNumber={inningKey}
+                          teamType="home"
+                          runnersData={runnersData}
+                          isLastInning={i === 6}
+                        />
+                      </td>
+                    );
+                  })}
+                  <td className={`px-2 py-4 whitespace-nowrap text-center text-sm font-medium border-l-2 border-gray-300 font-bold ${boxScore.totals.home.runs > boxScore.totals.away.runs ? 'text-indigo-600 text-lg font-extrabold' : 'text-black'}`}>
+                    {boxScore.totals.home.runs > boxScore.totals.away.runs ? (
+                      <div className="relative inline-flex items-center justify-center">
+                        <div className="absolute w-8 h-8 rounded-full border-2 border-indigo-600 animate-[pulse_6s_ease-in-out_infinite]"></div>
+                        <span>{boxScore.totals.home.runs}</span>
+                      </div>
+                    ) : (
+                      boxScore.totals.home.runs
+                    )}
+                  </td>
+                  <td className="px-2 py-4 whitespace-nowrap text-center text-sm border-l-2 border-gray-300">
+                    <span className={boxScore.totals.home.hits === 0 ? "text-gray-500" : "text-indigo-600"}>
+                      {boxScore.totals.home.hits}
+                    </span>
+                  </td>
+                  <td className="px-2 py-4 whitespace-nowrap text-center text-sm">
+                    <span className={boxScore.totals.home.errors === 0 ? "text-gray-500" : "text-red-600"}>
+                      {boxScore.totals.home.errors}
+                    </span>
+                  </td>
+                  <td className="px-2 py-4 whitespace-nowrap text-center text-sm">
+                    <span className={boxScore.totals.home.walks === 0 ? "text-gray-500" : "text-indigo-600"}>
+                      {boxScore.totals.home.walks}
+                    </span>
+                  </td>
+                  <td className="px-2 py-4 whitespace-nowrap text-center text-sm">
+                    <span className={boxScore.totals.home.strikeouts === 0 ? "text-gray-500" : "text-indigo-600"}>
+                      {boxScore.totals.home.strikeouts || 0}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
       
@@ -1478,14 +1530,14 @@ export default function ScoreGame() {
             <div>
               {inningDetail.lineup_entries && inningDetail.lineup_entries.length > 0 ? (
                 <div className="overflow-x-auto">
-                  <table className="border border-gray-200 table-fixed" style={{ width: 'auto' }}>
+                  <table className="border border-gray-200" style={{ width: 'auto' }}>
                     <thead className="bg-gray-50">
                       {/* Add a new row for inning groupings */}
                       <tr>
-                        <th className="border p-1 text-xs font-medium text-gray-500 uppercase tracking-wider text-center" style={{ width: '30px' }} rowSpan={2}>
+                        <th className="border p-1 text-center text-xs font-medium text-gray-500 uppercase tracking-wider" style={{ width: '30px' }} rowSpan={2}>
                           #
                         </th>
-                        <th className="border p-1 text-xs font-medium text-gray-500 uppercase tracking-wider" style={{ width: '150px' }} rowSpan={2}>
+                        <th className="border p-1 text-center text-xs font-medium text-gray-500 uppercase tracking-wider" style={{ width: '150px' }} rowSpan={2}>
                           Player
                         </th>
                         
@@ -1507,7 +1559,7 @@ export default function ScoreGame() {
                           return (
                             <th 
                               key={`inning-header-${inningNumber}`}
-                              className="border p-1 text-xs font-medium text-gray-500 uppercase tracking-wider text-center"
+                              className="border p-1 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
                               colSpan={columnsInInning}
                             >
                               Inning {inningNumber}
@@ -1521,7 +1573,7 @@ export default function ScoreGame() {
                         {Array.from({ length: getNumberOfPAColumns() }).map((_, i) => (
                           <th 
                             key={`pa-header-${i+1}`}
-                            className="border p-1 text-xs font-medium text-gray-500 uppercase tracking-wider text-center"
+                            className="border p-1 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
                             style={{ width: '60px' }}
                           >
                             PA {i+1}
@@ -1542,8 +1594,8 @@ export default function ScoreGame() {
                             <td className="border p-1 text-xs text-gray-500 truncate text-center">
                               {player.order_number}
                             </td>
-                            <td className="border p-1 text-xs font-medium text-gray-900 truncate">
-                              <div className="flex justify-between items-center">
+                            <td className="border p-1 text-xs font-medium text-gray-900 truncate text-center">
+                              <div className="flex justify-center items-center">
                                 <span>{displayName}</span>
                                 <button
                                   onClick={(e) => {

@@ -28,6 +28,7 @@ interface BoxScoreInningCellProps {
     runner_on_second: boolean;
     runner_on_third: boolean;
   };
+  isLastInning?: boolean;
 }
 
 const BoxScoreInningCell: React.FC<BoxScoreInningCellProps> = ({ 
@@ -37,7 +38,8 @@ const BoxScoreInningCell: React.FC<BoxScoreInningCellProps> = ({
   inningNumber = '',
   teamType = 'home',
   debug = false,
-  runnersData
+  runnersData,
+  isLastInning = false
 }) => {
   // Only log data when debug is true
   if (debug) {
@@ -60,35 +62,18 @@ const BoxScoreInningCell: React.FC<BoxScoreInningCellProps> = ({
   // Determine background color based on active state
   const bgColor = isActive ? 'bg-indigo-50' : 'bg-white';
   
-  // Check for runners on bases - using the integer fields (0 or 1) or the runnersData prop
-  const hasRunnerOnFirst = runnersData ? runnersData.runner_on_first : inningData.on_first_base === 1;
-  const hasRunnerOnSecond = runnersData ? runnersData.runner_on_second : inningData.on_second_base === 1;
-  const hasRunnerOnThird = runnersData ? runnersData.runner_on_third : inningData.on_third_base === 1;
+  // Check for runners on bases - using the integer fields or the runnersData prop
+  const hasRunnerOnFirst = runnersData ? runnersData.runner_on_first : inningData.on_first_base > 0;
+  const hasRunnerOnSecond = runnersData ? runnersData.runner_on_second : inningData.on_second_base > 0;
+  const hasRunnerOnThird = runnersData ? runnersData.runner_on_third : inningData.on_third_base > 0;
   
   return (
     <div 
-      className={`relative w-20 h-16 border border-gray-200 ${bgColor} cursor-pointer hover:bg-gray-50`}
+      className={`relative w-[4.4rem] h-16 border-t border-b border-l ${isLastInning ? 'border-r' : ''} border-gray-200 ${bgColor} cursor-pointer hover:bg-gray-50`}
+      style={{ margin: 0, boxSizing: 'border-box', flexShrink: 0, display: 'block' }}
       onClick={onClick}
     >
-      {/* Removed the vertical divider */}
-      
-      {/* Top Left: Strike Percentage - directly in corner */}
-      <div className="absolute top-0.5 left-0.5">
-        <div className="flex items-baseline">
-          <span className={`text-[10px] font-bold ${strikePercentTextColor}`}>{strikePercentFormatted}</span>
-          <span className="text-[8px] font-medium text-gray-500">S%</span>
-        </div>
-      </div>
-      
-      {/* Top Right: Hard Hits - directly in corner */}
-      <div className="absolute top-0.5 right-0.5">
-        <div className="flex items-baseline">
-          <span className={`text-[10px] font-bold ${purpleColor}`}>{inningData.hard_hit}</span>
-          <span className="text-[8px] font-medium text-gray-500">hh</span>
-        </div>
-      </div>
-      
-      {/* Middle section: Unfilled Diamond with Runs */}
+      {/* Middle section: Unfilled Diamond with Runs - moved to the left side */}
       <div className="absolute top-[60%] left-1/2 transform -translate-x-1/2 -translate-y-1/2">
         <div className="relative w-10 h-10 flex items-center justify-center">
           {/* Diamond shape - unfilled (transparent background) */}
@@ -123,6 +108,22 @@ const BoxScoreInningCell: React.FC<BoxScoreInningCellProps> = ({
               <div className="w-2 h-2 rounded-full bg-indigo-600 border border-white"></div>
             </div>
           )}
+        </div>
+      </div>
+      
+      {/* Top Left: Strike Percentage - directly in corner */}
+      <div className="absolute top-0.5 left-0.5">
+        <div className="flex items-baseline">
+          <span className={`text-[10px] font-bold ${strikePercentTextColor}`}>{strikePercentFormatted}</span>
+          <span className="text-[8px] font-medium text-gray-500">S%</span>
+        </div>
+      </div>
+      
+      {/* Top Right: Hard Hits - directly in corner */}
+      <div className="absolute top-0.5 right-0.5">
+        <div className="flex items-baseline">
+          <span className={`text-[10px] font-bold ${purpleColor}`}>{inningData.hard_hit}</span>
+          <span className="text-[8px] font-medium text-gray-500">hh</span>
         </div>
       </div>
       

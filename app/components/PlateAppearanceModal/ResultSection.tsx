@@ -49,106 +49,76 @@ const ResultSection = ({
   // Get the current bases reached as a number
   const basesReached = parseInt(editedPA.bases_reached || '0');
   
-  // Safe array access helper function - improved to handle more edge cases
-  const safeArray = (value: any, fieldName?: string): any[] => {
-    if (!value) return [];
+  // Add a helper function to check if a position is in the br_error_on field
+  const isErrorOnPosition = (errorOn: any, position: string | number): boolean => {
+    if (!errorOn) return false;
     
-    // If it's already an array, ensure values are strings if it's one of our special array fields
-    if (Array.isArray(value)) {
-      if (fieldName && ARRAY_FIELDS.includes(fieldName)) {
-        return value.map(item => item.toString());
-      }
-      return value;
+    const positionNum = typeof position === 'string' ? Number(position) : position;
+    
+    // Handle string type (comma-separated values)
+    if (typeof errorOn === 'string') {
+      return errorOn.split(',').map(p => Number(p.trim())).includes(positionNum);
     }
     
-    // Handle string representations of arrays
+    // Handle array type
+    if (Array.isArray(errorOn)) {
+      return errorOn.some(p => Number(p) === positionNum);
+    }
+    
+    return false;
+  };
+  
+  // Helper function to safely ensure we have an array of numbers
+  const safeArray = (value: any, fieldName: string): number[] => {
+    if (!value) return [];
+    
+    if (Array.isArray(value)) {
+      return value.map(item => typeof item === 'string' ? Number(item) : Number(item));
+    }
+    
     if (typeof value === 'string') {
       try {
         // Try to parse as JSON
         const parsed = JSON.parse(value);
         if (Array.isArray(parsed)) {
-          if (fieldName && ARRAY_FIELDS.includes(fieldName)) {
-            return parsed.map(item => item.toString());
-          }
-          return parsed;
+          return parsed.map(item => typeof item === 'string' ? Number(item) : Number(item));
         }
         
         // Handle string format like "['2', '3', '4']"
         if (value.includes('[') && value.includes(']')) {
-          // Remove the outer quotes and brackets, then split by comma
           const cleanedStr = value.replace(/^\[|\]$/g, '').replace(/'/g, '').replace(/"/g, '');
           if (cleanedStr.trim() === '') return [];
-          const items = cleanedStr.split(',').map(item => item.trim());
-          if (fieldName && ARRAY_FIELDS.includes(fieldName)) {
-            return items;
-          }
-          return items.map(item => {
-            const num = Number(item);
-            return isNaN(num) ? item : num;
-          });
+          return cleanedStr.split(',').map(item => Number(item.trim()));
         }
         
-        // If it's not valid JSON, check if it's a comma-separated string
+        // Handle comma-separated values
         if (value.includes(',')) {
-          const items = value.split(',').map(item => item.trim());
-          if (fieldName && ARRAY_FIELDS.includes(fieldName)) {
-            return items;
-          }
-          return items.map(item => {
-            const num = Number(item);
-            return isNaN(num) ? item : num;
-          });
+          return value.split(',').map(item => Number(item.trim()));
         }
-        // If it's a single value, return as a one-item array
-        if (fieldName && ARRAY_FIELDS.includes(fieldName)) {
-          return [value.trim()];
+        
+        // Single value
+        if (value.trim() !== '') {
+          return [Number(value.trim())];
         }
-        const num = Number(value.trim());
-        return [isNaN(num) ? value.trim() : num];
       } catch (e) {
-        // If parsing fails, check if it's a string representation of an array
-        if (value.includes('[') && value.includes(']')) {
-          // Remove the outer quotes and brackets, then split by comma
-          const cleanedStr = value.replace(/^\[|\]$/g, '').replace(/'/g, '').replace(/"/g, '');
-          if (cleanedStr.trim() === '') return [];
-          const items = cleanedStr.split(',').map(item => item.trim());
-          if (fieldName && ARRAY_FIELDS.includes(fieldName)) {
-            return items;
-          }
-          return items.map(item => {
-            const num = Number(item);
-            return isNaN(num) ? item : num;
-          });
-        }
-        
-        // If it's a comma-separated string
+        // If parsing fails, try simpler methods
         if (value.includes(',')) {
-          const items = value.split(',').map(item => item.trim());
-          if (fieldName && ARRAY_FIELDS.includes(fieldName)) {
-            return items;
-          }
-          return items.map(item => {
-            const num = Number(item);
-            return isNaN(num) ? item : num;
-          });
+          return value.split(',').map(item => Number(item.trim()));
         }
-        // For a single value
-        if (fieldName && ARRAY_FIELDS.includes(fieldName)) {
-          return [value.trim()];
+        if (value.trim() !== '') {
+          return [Number(value.trim())];
         }
-        const num = Number(value.trim());
-        return [isNaN(num) ? value.trim() : num];
       }
     }
     
-    // For any other type, return empty array
     return [];
   };
   
-  // Safe includes check
-  const safeIncludes = (arr: any, value: any): boolean => {
-    const safeArr = Array.isArray(arr) ? arr : [];
-    return safeArr.some(item => item.toString() === value.toString());
+  // Helper function to safely check if a value is in an array
+  const safeIncludes = (array: any[], value: string | number): boolean => {
+    if (!array || !Array.isArray(array)) return false;
+    const numValue = typeof value === 'string' ? Number(value) : value;
+    return array.some(item => Number(item) === numValue);
   };
   
   // Effect to ensure "out" is set correctly based on br_result and out_at
@@ -180,8 +150,8 @@ const ResultSection = ({
       const hitAround = safeArray(editedPA.hit_around_bases, 'hit_around_bases');
       
       // Get the maximum base from each array
-      const maxStolenBase = stolenBases.length > 0 ? Math.max(...stolenBases.map(b => parseInt(b))) : 0;
-      const maxHitBase = hitAround.length > 0 ? Math.max(...hitAround.map(b => parseInt(b))) : 0;
+      const maxStolenBase = stolenBases.length > 0 ? Math.max(...stolenBases) : 0;
+      const maxHitBase = hitAround.length > 0 ? Math.max(...hitAround) : 0;
       
       // Calculate the maximum base reached through stealing or hitting
       const maxAdvancedBase = Math.max(maxStolenBase, maxHitBase);
@@ -205,6 +175,13 @@ const ResultSection = ({
     // Only run this effect if editedPA is properly loaded
     if (!editedPA) return;
     
+    // Skip processing for newly created PA with no interactions
+    const isNewlyCreatedPA = !editedPA.pa_why && editedPA.pitch_count === 0 && 
+                            editedPA.balls_before_play === 0 && editedPA.strikes_before_play === 0;
+    
+    // Don't run effects if this is a newly created PA that hasn't been interacted with yet
+    if (isNewlyCreatedPA) return;
+    
     if (editedPA.pa_why === 'BB' || editedPA.pa_why === 'HBP') {
       // Set bases_reached to 1 if not already
       if (editedPA.bases_reached !== '1') {
@@ -217,7 +194,7 @@ const ResultSection = ({
       }
       
       // For BB (walk), set balls_before_play to 3 (maximum allowed value)
-      if (editedPA.pa_why === 'BB') {
+      if (editedPA.pa_why === 'BB' && editedPA.balls_before_play < 3) {
         handleInputChange('balls_before_play', 3);
       }
       
@@ -239,8 +216,10 @@ const ResultSection = ({
         handleInputChange('bases_reached', '1');
       }
     } else if (editedPA.pa_why === 'K' || editedPA.pa_why === 'KK') {
-      // For strikeouts, set strikes_before_play to 2 (not 3)
-      handleInputChange('strikes_before_play', 2);
+      // For strikeouts, update strikes_before_play only if not already set properly
+      if (editedPA.strikes_before_play < 2) {
+        handleInputChange('strikes_before_play', 2);
+      }
       
       // If there were no strikes registered, add them to strikes_unsure
       const totalStrikes = (editedPA.strikes_watching || 0) + 
@@ -335,30 +314,31 @@ const ResultSection = ({
   // Handle hit around toggle
   const handleHitAroundToggle = (base: number) => {
     try {
+      // Safely get arrays
       const hitAround = safeArray(editedPA.hit_around_bases, 'hit_around_bases');
       const stolenBases = safeArray(editedPA.stolen_bases, 'stolen_bases');
       
       // Check if this base is already selected in stolen bases
-      if (safeIncludes(stolenBases, base.toString())) {
+      if (safeIncludes(stolenBases, base)) {
         return; // Don't allow toggling if already stolen
       }
       
       // Toggle selection
       let newHitAround = [...hitAround];
-      if (safeIncludes(hitAround, base.toString())) {
+      if (safeIncludes(hitAround, base)) {
         // If already selected, remove it
-        newHitAround = newHitAround.filter(b => b !== base.toString());
+        newHitAround = newHitAround.filter(b => b !== base);
       } else {
         // If not selected, add it
-        newHitAround.push(base.toString());
+        newHitAround.push(base);
       }
       
       handleInputChange('hit_around_bases', newHitAround);
       
       // Update Final Base if this is now the maximum base
-      const maxBase = newHitAround.length > 0 ? Math.max(...newHitAround.map(b => parseInt(b))) : 0;
-      const maxStolenBase = stolenBases.length > 0 ? Math.max(...stolenBases.map(b => parseInt(b))) : 0;
-      const currentBrResult = editedPA.br_result !== undefined ? editedPA.br_result : basesReached;
+      const maxBase = newHitAround.length > 0 ? Math.max(...newHitAround) : 0;
+      const maxStolenBase = stolenBases.length > 0 ? Math.max(...stolenBases) : 0;
+      const currentBrResult = editedPA.br_result !== undefined ? Number(editedPA.br_result) : basesReached;
       
       if (maxBase > currentBrResult && maxBase > maxStolenBase) {
         handleInputChange('br_result', maxBase);
@@ -370,23 +350,6 @@ const ResultSection = ({
   
   // Use only pa_why, not why_base_reached
   const selectedWhyBaseReached = editedPA?.pa_why || '';
-  
-  // Add a helper function to check if a position is in the br_error_on field
-  const isErrorOnPosition = (errorOn: any, position: string): boolean => {
-    if (!errorOn) return false;
-    
-    // Handle string type (comma-separated values)
-    if (typeof errorOn === 'string') {
-      return errorOn.split(',').map(p => p.trim()).includes(position);
-    }
-    
-    // Handle array type
-    if (Array.isArray(errorOn)) {
-      return errorOn.some(p => p.toString() === position);
-    }
-    
-    return false;
-  };
   
   // Ensure we have valid data before rendering
   if (!editedPA) {
@@ -413,11 +376,13 @@ const ResultSection = ({
                     key={`base-${base}`}
                     onClick={() => {
                       // Update both pa_result and bases_reached
-                      handleInputChange('pa_result', base.toString());
+                      handleInputChange('pa_result', base);
                       handleInputChange('bases_reached', base.toString());
                     }}
                     className={`transform rotate-45 w-6 h-6 flex items-center justify-center cursor-pointer ${
-                      editedPA.bases_reached === base.toString() || editedPA.pa_result === base.toString()
+                      (typeof editedPA.pa_result === 'number' && editedPA.pa_result === base) || 
+                      (typeof editedPA.pa_result === 'string' && editedPA.pa_result === base.toString()) ||
+                      editedPA.bases_reached === base.toString()
                         ? isPlayerOut 
                           ? 'bg-red-500 text-white' // Red if out
                           : 'bg-indigo-600 text-white' // Same indigo as Why buttons if not out
@@ -462,11 +427,11 @@ const ResultSection = ({
                     if (option.value === 'HR' || option.value === 'GS') {
                       // Home run or grand slam - set to 4
                       handleInputChange('bases_reached', '4');
-                      handleInputChange('pa_result', '4');
+                      handleInputChange('pa_result', 4);
                     } else if (option.value === 'H' || option.value === 'B' || option.value === 'BB' || option.value === 'HBP') {
                       // Hit, bunt, walk, or hit by pitch - set to 1
                       handleInputChange('bases_reached', '1');
-                      handleInputChange('pa_result', '1');
+                      handleInputChange('pa_result', 1);
                     }
                   }
                 }}
@@ -503,7 +468,7 @@ const ResultSection = ({
                     if (option.value === 'E' || option.value === 'C') {
                       // Error or fielder's choice - set to 1
                       handleInputChange('bases_reached', '1');
-                      handleInputChange('pa_result', '1');
+                      handleInputChange('pa_result', 1);
                     }
                   }
                 }}
@@ -538,7 +503,7 @@ const ResultSection = ({
                     
                     // Out options always set bases_reached to 0
                     handleInputChange('bases_reached', '0');
-                    handleInputChange('pa_result', '0');
+                    handleInputChange('pa_result', 0);
                     
                     // For strikeouts (K and KK)
                     if (option.value === 'K' || option.value === 'KK') {
@@ -610,8 +575,11 @@ const ResultSection = ({
                           // Toggle selection - if already selected, clear it
                           if (editedPA.detailed_result === pos.toString()) {
                             handleInputChange('detailed_result', '');
+                            handleInputChange('hit_to', '');
                           } else {
                             handleInputChange('detailed_result', pos.toString());
+                            // Also update hit_to as a string
+                            handleInputChange('hit_to', pos.toString());
                           }
                         }}
                         className={`w-6 h-6 flex items-center justify-center cursor-pointer text-xs ${
@@ -645,8 +613,11 @@ const ResultSection = ({
                           // Toggle selection - if already selected, clear it
                           if (editedPA.detailed_result === pos.toString()) {
                             handleInputChange('detailed_result', '');
+                            handleInputChange('hit_to', '');
                           } else {
                             handleInputChange('detailed_result', pos.toString());
+                            // Also update hit_to as a string
+                            handleInputChange('hit_to', pos.toString());
                           }
                         }}
                         className={`w-6 h-6 flex items-center justify-center cursor-pointer text-xs ${
@@ -688,16 +659,16 @@ const ResultSection = ({
                           try {
                             // Safely get arrays
                             const paErrorOn = safeArray(editedPA.pa_error_on, 'pa_error_on');
-                            const isSelected = safeIncludes(paErrorOn, pos.toString());
+                            const isSelected = safeIncludes(paErrorOn, pos);
                             
                             // Toggle selection
                             let newPaErrorOn = [...paErrorOn];
                             if (isSelected) {
                               // If already selected, remove it
-                              newPaErrorOn = newPaErrorOn.filter(p => p !== pos.toString());
+                              newPaErrorOn = newPaErrorOn.filter(p => p !== pos);
                             } else {
                               // If not selected, add it
-                              newPaErrorOn.push(pos.toString());
+                              newPaErrorOn.push(pos);
                             }
                             // Update pa_error_on field
                             handleInputChange('pa_error_on', newPaErrorOn);
@@ -706,7 +677,7 @@ const ResultSection = ({
                           }
                         }}
                         className={`w-6 h-6 flex items-center justify-center cursor-pointer text-xs ${
-                          isErrorOnPosition(editedPA.pa_error_on, pos.toString())
+                          isErrorOnPosition(editedPA.pa_error_on, pos)
                             ? 'bg-white text-red-500 border border-red-500' 
                             : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                         }`}
@@ -736,16 +707,16 @@ const ResultSection = ({
                           try {
                             // Safely get arrays
                             const paErrorOn = safeArray(editedPA.pa_error_on, 'pa_error_on');
-                            const isSelected = safeIncludes(paErrorOn, pos.toString());
+                            const isSelected = safeIncludes(paErrorOn, pos);
                             
                             // Toggle selection
                             let newPaErrorOn = [...paErrorOn];
                             if (isSelected) {
                               // If already selected, remove it
-                              newPaErrorOn = newPaErrorOn.filter(p => p !== pos.toString());
+                              newPaErrorOn = newPaErrorOn.filter(p => p !== pos);
                             } else {
                               // If not selected, add it
-                              newPaErrorOn.push(pos.toString());
+                              newPaErrorOn.push(pos);
                             }
                             // Update pa_error_on field
                             handleInputChange('pa_error_on', newPaErrorOn);
@@ -754,7 +725,7 @@ const ResultSection = ({
                           }
                         }}
                         className={`w-6 h-6 flex items-center justify-center cursor-pointer text-xs ${
-                          isErrorOnPosition(editedPA.pa_error_on, pos.toString())
+                          isErrorOnPosition(editedPA.pa_error_on, pos)
                             ? 'bg-white text-red-500 border border-red-500' 
                             : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                         }`}
