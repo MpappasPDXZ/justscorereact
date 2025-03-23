@@ -2,7 +2,7 @@ import { ScoreBookEntry } from '@/app/types/scoreTypes';
 import PositionSelectOptions from '@/app/components/PositionSelectOptions';
 import { useState, useEffect } from 'react';
 
-// Define array fields that should always be handled as lists of strings
+// Define array fields that should always be handled as lists of numbers
 const ARRAY_FIELDS = ["hit_around_bases", "stolen_bases", "pa_error_on", "br_error_on"];
 
 interface ResultSectionProps {
@@ -53,24 +53,27 @@ const ResultSection = ({
   const isErrorOnPosition = (errorOn: any, position: string | number): boolean => {
     if (!errorOn) return false;
     
-    const positionNum = typeof position === 'string' ? Number(position) : position;
+    const positionStr = position.toString();
     
     // Handle string type (comma-separated values)
     if (typeof errorOn === 'string') {
-      return errorOn.split(',').map(p => Number(p.trim())).includes(positionNum);
+      return errorOn.split(',').map(p => p.trim()).includes(positionStr);
     }
     
     // Handle array type
     if (Array.isArray(errorOn)) {
-      return errorOn.some(p => Number(p) === positionNum);
+      return errorOn.some(p => p.toString() === positionStr);
     }
     
     return false;
   };
   
-  // Helper function to safely ensure we have an array of numbers
+  // Helper function to safely ensure we have an array of appropriate type
   const safeArray = (value: any, fieldName: string): number[] => {
     if (!value) return [];
+    
+    // Check if this is a field that should be stored as numbers
+    const shouldBeNumbers = ARRAY_FIELDS.includes(fieldName);
     
     if (Array.isArray(value)) {
       return value.map(item => typeof item === 'string' ? Number(item) : Number(item));
@@ -139,7 +142,7 @@ const ResultSection = ({
     }
   }, [editedPA?.br_result, editedPA?.out_at, editedPA?.out]);
   
-  // Add a useEffect to update Final Base based on stolen or hit bases
+  // Effect to update Final Base based on stolen or hit bases
   useEffect(() => {
     // Only run this effect if editedPA is properly loaded
     if (!editedPA) return;
@@ -762,7 +765,7 @@ const ResultSection = ({
                       try {
                         // Safely get arrays
                         const stolenBases = safeArray(editedPA.stolen_bases, 'stolen_bases');
-                        const isSelected = safeIncludes(stolenBases, base.toString());
+                        const isSelected = safeIncludes(stolenBases, base);
                         
                         return (
                           <div 
@@ -771,16 +774,16 @@ const ResultSection = ({
                               try {
                                 // Safely get arrays
                                 const stolenBases = safeArray(editedPA.stolen_bases, 'stolen_bases');
-                                const isSelected = safeIncludes(stolenBases, base.toString());
+                                const isSelected = safeIncludes(stolenBases, base);
                                 
                                 // Toggle selection
                                 let newStolenBases = [...stolenBases];
                                 if (isSelected) {
                                   // If already selected, remove it
-                                  newStolenBases = newStolenBases.filter(b => b !== base.toString());
+                                  newStolenBases = newStolenBases.filter(b => b !== base);
                                 } else {
                                   // If not selected, add it
-                                  newStolenBases.push(base.toString());
+                                  newStolenBases.push(base);
                                 }
                                 handleInputChange('stolen_bases', newStolenBases);
                               } catch (error) {
@@ -812,8 +815,8 @@ const ResultSection = ({
                     {[2, 3, 4].map(base => {
                       try {
                         // Safely get arrays
-                        const hitAround = safeArray(editedPA.hit_around_bases);
-                        const stolenBases = safeArray(editedPA.stolen_bases);
+                        const hitAround = safeArray(editedPA.hit_around_bases, 'hit_around_bases');
+                        const stolenBases = safeArray(editedPA.stolen_bases, 'stolen_bases');
                         const isSelected = safeIncludes(hitAround, base);
                         const isStolen = safeIncludes(stolenBases, base);
                         
@@ -858,16 +861,16 @@ const ResultSection = ({
                             try {
                               // Safely get arrays
                               const brErrorOn = safeArray(editedPA.br_error_on, 'br_error_on');
-                              const isSelected = safeIncludes(brErrorOn, pos.toString());
+                              const isSelected = safeIncludes(brErrorOn, pos);
                               
                               // Toggle selection
                               let newBrErrorOn = [...brErrorOn];
                               if (isSelected) {
                                 // If already selected, remove it
-                                newBrErrorOn = newBrErrorOn.filter(p => p !== pos.toString());
+                                newBrErrorOn = newBrErrorOn.filter(p => p !== pos);
                               } else {
                                 // If not selected, add it
-                                newBrErrorOn = [...newBrErrorOn, pos.toString()];
+                                newBrErrorOn.push(pos);
                               }
                               // Update ONLY br_error_on, not pa_error_on
                               handleInputChange('br_error_on', newBrErrorOn);
@@ -876,7 +879,7 @@ const ResultSection = ({
                             }
                           }}
                           className={`w-6 h-6 flex items-center justify-center cursor-pointer text-xs ${
-                            isErrorOnPosition(editedPA.br_error_on, pos.toString())
+                            isErrorOnPosition(editedPA.br_error_on, pos)
                               ? 'bg-white text-red-500 border border-red-500'
                               : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                           }`}
@@ -906,16 +909,16 @@ const ResultSection = ({
                             try {
                               // Safely get arrays
                               const brErrorOn = safeArray(editedPA.br_error_on, 'br_error_on');
-                              const isSelected = safeIncludes(brErrorOn, pos.toString());
+                              const isSelected = safeIncludes(brErrorOn, pos);
                               
                               // Toggle selection
                               let newBrErrorOn = [...brErrorOn];
                               if (isSelected) {
                                 // If already selected, remove it
-                                newBrErrorOn = newBrErrorOn.filter(p => p !== pos.toString());
+                                newBrErrorOn = newBrErrorOn.filter(p => p !== pos);
                               } else {
                                 // If not selected, add it
-                                newBrErrorOn = [...newBrErrorOn, pos.toString()];
+                                newBrErrorOn.push(pos);
                               }
                               // Update ONLY br_error_on, not pa_error_on
                               handleInputChange('br_error_on', newBrErrorOn);
@@ -924,7 +927,7 @@ const ResultSection = ({
                             }
                           }}
                           className={`w-6 h-6 flex items-center justify-center cursor-pointer text-xs ${
-                            isErrorOnPosition(editedPA.br_error_on, pos.toString())
+                            isErrorOnPosition(editedPA.br_error_on, pos)
                               ? 'bg-white text-red-500 border border-red-500'
                               : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                           }`}
