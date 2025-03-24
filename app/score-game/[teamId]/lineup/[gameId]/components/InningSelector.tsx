@@ -125,9 +125,9 @@ const InningSelector: React.FC<InningSelectorProps> = ({
     
     const savedInnings = Array.from(new Set(
       currentLineup.map(player => player.inning_number)
-    )).sort((a, b) => a - b);
+    )).sort((a: number, b: number) => a - b);
     
-    return savedInnings.length > 0 ? savedInnings[savedInnings.length - 1] : 0;
+    return savedInnings.length > 0 ? (savedInnings[savedInnings.length - 1] as number) : 0;
   };
   
   // Check if the current inning is the last saved inning or inning 1
