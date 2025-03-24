@@ -223,11 +223,11 @@ export default function TeamGames() {
         </div>
       ) : (
         <div className="overflow-x-auto bg-white rounded-lg shadow">
-          <table className="min-w-full divide-y divide-gray-200">
+          <table className="min-w-full divide-y divide-gray-200 table-fixed">
             <thead className="bg-gray-50">
               <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
-                  Game ID
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
+                  Actions
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Date & Time
@@ -241,17 +241,17 @@ export default function TeamGames() {
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Field
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
                   Field Type
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">
-                  Temperature
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
+                  Temp
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Status
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
-                  Actions
+                <th scope="col" className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
+                  Game ID
                 </th>
               </tr>
             </thead>
@@ -261,44 +261,8 @@ export default function TeamGames() {
                   key={game.game_id}
                   className="hover:bg-gray-50 transition-colors duration-150"
                 >
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{game.game_id}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{game.event_date}</div>
-                    <div className="text-sm text-gray-500">{formatTime(game.event_hour, game.event_minute)}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">
-                      {game.my_team_ha === "home" ? 
-                        `${game.away_team_name} (Away)` : 
-                        `${game.away_team_name} (Home)`}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{game.coach}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{game.field_name}</div>
-                    <div className="text-sm text-gray-500">{game.field_location}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{game.field_type}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{game.field_temperature}°F</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                      game.game_status === "open" 
-                        ? "bg-green-100 text-green-800" 
-                        : "bg-red-100 text-red-800"
-                    }`}>
-                      {game.game_status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="flex items-center space-x-3 justify-end">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <div className="flex items-center space-x-3">
                       <button
                         onClick={() => handleScoreGame(game)}
                         className="bg-indigo-600 text-white px-2 py-0.5 rounded text-xs hover:bg-indigo-700 transition-colors"
@@ -329,6 +293,42 @@ export default function TeamGames() {
                         <TrashIcon className="h-5 w-5" />
                       </button>
                     </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">{game.event_date}</div>
+                    <div className="text-sm text-gray-500">{formatTime(game.event_hour, game.event_minute)}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-gray-900">
+                      {game.my_team_ha === "home" ? 
+                        `${game.away_team_name} (Away)` : 
+                        `${game.away_team_name} (Home)`}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">{game.coach}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">{game.field_name}</div>
+                    <div className="text-sm text-gray-500">{game.field_location}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-xs">
+                    <div className="text-sm text-gray-900">{game.field_type}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-xs">
+                    <div className="text-sm text-gray-900">{game.field_temperature}°F</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                      game.game_status === "open" 
+                        ? "bg-green-100 text-green-800" 
+                        : "bg-red-100 text-red-800"
+                    }`}>
+                      {game.game_status}
+                    </span>
+                  </td>
+                  <td className="px-2 py-4 whitespace-nowrap text-xs">
+                    <div className="text-sm text-gray-900">{game.game_id}</div>
                   </td>
                 </tr>
               ))}

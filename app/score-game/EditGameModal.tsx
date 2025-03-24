@@ -212,7 +212,7 @@ export default function EditGameModal({ isOpen, onClose, onSave, gameData, teamI
                 
                 <div>
                   <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="my_team_ha">
-                    My Team Position
+                    Home or Away
                   </label>
                   <select
                     id="my_team_ha"
@@ -222,8 +222,8 @@ export default function EditGameModal({ isOpen, onClose, onSave, gameData, teamI
                     className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                     required
                   >
-                    <option value="home">Home</option>
-                    <option value="away">Away</option>
+                    <option value="home">home</option>
+                    <option value="away">away</option>
                   </select>
                 </div>
               </div>

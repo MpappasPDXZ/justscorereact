@@ -1,21 +1,13 @@
 "use client"
 
+import React from "react";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-
-interface Player {
-  jersey_number: string;
-  name: string;
-  position: string;
-  order_number: number;
-}
-
-interface RosterPlayer {
-  jersey_number: string;
-  player_name: string;
-  position: string;
-}
+import LineupTable, { Player } from "./components/LineupTable";
+import InningSelector from "./components/InningSelector";
+import AddPlayerDropdown, { RosterPlayer } from "./components/AddPlayerDropdown";
+import AddPlayerForm, { PlayerFormInput } from "./components/AddPlayerForm";
 
 interface Game {
   away_team_name: string;
@@ -33,1197 +25,1126 @@ interface Game {
   user_team: string;
 }
 
-// First, let's add a modal component for adding players
-function AddPlayerModal({ 
-  isOpen, 
-  onClose, 
-  availablePlayers, 
-  onAddPlayer, 
-  loading 
-}: { 
-  isOpen: boolean; 
-  onClose: () => void; 
-  availablePlayers: RosterPlayer[]; 
-  onAddPlayer: (player: RosterPlayer) => void; 
-  loading: boolean;
-}) {
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-      <div className="relative top-20 mx-auto p-5 border w-[500px] shadow-lg rounded-md bg-white">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-medium">Add Player to Lineup</h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
-            &times;
-          </button>
-        </div>
-        
-        {loading ? (
-          <div className="flex justify-center my-4">
-            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div>
-          </div>
-        ) : (
-          <>
-            {availablePlayers.length === 0 ? (
-              <p className="text-center text-gray-500 my-4">No available players found.</p>
-            ) : (
-              <div className="max-h-[480px] overflow-y-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jersey #</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Position</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {availablePlayers.map((player, index) => (
-                      <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{player.jersey_number}</td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{player.player_name}</td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{player.position}</td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
-                          <button 
-                            onClick={() => onAddPlayer(player)}
-                            className="bg-indigo-600 text-white px-2 py-1 rounded text-xs hover:bg-indigo-700 transition-colors"
-                          >
-                            Add
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </>
-        )}
-        
-        <div className="mt-4 flex justify-end">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 mr-2"
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // First, let's create a helper function to determine if this is the first SUB in the sorted lineup
 const isFirstSub = (player: Player, index: number, sortedLineup: Player[]) => {
-  // Check if this player is a SUB or has order_number 0
-  if (player.position === 'SUB' || player.order_number === 0) {
+  // Check if this player has order_number 0
+  if (player.order_number === 0) {
     // If it's the first player in the array, it's the first SUB
     if (index === 0) return true;
     
-    // If the previous player is not a SUB and doesn't have order_number 0, this is the first SUB
+    // If the previous player doesn't have order_number 0, this is the first SUB
     const prevPlayer = sortedLineup[index - 1];
-    return prevPlayer.position !== 'SUB' && prevPlayer.order_number !== 0;
+    return prevPlayer.order_number !== 0;
   }
   return false;
 };
 
+// Helper function to create default players
+const getDefaultPlayers = () => {
+  return [
+    { jersey_number: "1", player_name: "Player 1" },
+    { jersey_number: "2", player_name: "Player 2" },
+    { jersey_number: "3", player_name: "Player 3" },
+    { jersey_number: "4", player_name: "Player 4" },
+    { jersey_number: "5", player_name: "Player 5" },
+    { jersey_number: "6", player_name: "Player 6" },
+    { jersey_number: "7", player_name: "Player 7" },
+    { jersey_number: "8", player_name: "Player 8" },
+    { jersey_number: "9", player_name: "Player 9" },
+  ];
+};
+
+// Helper function to process lineup data
+const processLineupData = (data: any, homeOrAway: 'home' | 'away'): Player[] => {
+  let lineupData: Player[] = [];
+  
+  if (data && data.innings_data) {
+    Object.entries(data.innings_data).forEach(([inning, players]) => {
+      const inningNumber = parseInt(inning);
+      
+      // Check if players is an array before processing
+      if (Array.isArray(players)) {
+        (players as any[]).forEach(player => {
+          lineupData.push({
+            jersey_number: player.jersey_number,
+            name: player.player_name,
+            order_number: player.order_number,
+            inning_number: inningNumber,
+            home_or_away: homeOrAway
+          });
+        });
+      } else {
+        console.warn(`${homeOrAway} innings_data[${inning}] is not an array`);
+      }
+    });
+  } else {
+    console.warn(`${homeOrAway} data structure is invalid or missing innings_data`);
+  }
+  
+  return lineupData;
+};
+
 export default function GameLineup() {
   const params = useParams();
-  const teamId = params.teamId as string;
-  const gameId = params.gameId as string;
   const router = useRouter();
-  
-  const [game, setGame] = useState<Game | null>(null);
-  const [activeTab, setActiveTab] = useState<'home' | 'away'>('home');
   const [homeLineup, setHomeLineup] = useState<Player[]>([]);
   const [awayLineup, setAwayLineup] = useState<Player[]>([]);
+  const [myTeamHa, setMyTeamHa] = useState<'home' | 'away'>('home');
+  const [currentInning, setCurrentInning] = useState<number>(1);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [isAddPlayerModalOpen, setIsAddPlayerModalOpen] = useState(false);
-  const [availablePlayers, setAvailablePlayers] = useState<RosterPlayer[]>([]);
-  const [loadingPlayers, setLoadingPlayers] = useState(false);
-  
-  // Move these hooks inside the component
-  const [opponentGridData, setOpponentGridData] = useState<Player[]>([]);
-  const [newOpponentPlayer, setNewOpponentPlayer] = useState<{
-    jersey_number: string;
-    name: string;
-    position: string;
-  }>({
-    jersey_number: '',
-    name: '',
-    position: 'EH'
-  });
-
-  // Add this new state to store the team roster
-  const [teamRoster, setTeamRoster] = useState<RosterPlayer[]>([]);
-  const [loadingRoster, setLoadingRoster] = useState(false);
-
-  // Replace the newTeamPlayer state with a selectedRosterPlayer state
-  const [selectedRosterPlayer, setSelectedRosterPlayer] = useState<string>('');
-  const [selectedPosition, setSelectedPosition] = useState<string>('P');
-
-  // First, let's add a state to track if changes have been made to the lineup
+  const [activeTab, setActiveTab] = useState<'home' | 'away'>('away');
   const [lineupChanged, setLineupChanged] = useState(false);
-
-  // Add this function to fetch the team roster
-  const fetchTeamRoster = async () => {
-    setLoadingRoster(true);
+  const [rosterPlayers, setRosterPlayers] = useState<RosterPlayer[]>([]);
+  const [isAddPlayerModalOpen, setIsAddPlayerModalOpen] = useState(false);
+  const [previousInningLineup, setPreviousInningLineup] = useState<Player[]>([]);
+  const [lineupOperationInProgress, setLineupOperationInProgress] = useState(false);
+  
+  // Default 12 innings with ability to add more
+  const [availableInnings, setAvailableInnings] = useState<number[]>([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+  const [maxInning, setMaxInning] = useState<number>(12);
+  
+  // Update the state to include the active players separately
+  const [activePlayersList, setActivePlayersList] = useState<{
+    jersey_number: string;
+    player_name: string;
+    position: string;
+  }[]>([]);
+  
+  // Fetch my_team_ha value
+  const fetchMyTeamHa = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/teams/${teamId}/roster`);
-      if (!response.ok) throw new Error('Failed to fetch team roster');
-      const data = await response.json();
-      setTeamRoster(data.roster || []);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/games/${params.teamId}/${params.gameId}/my_team_ha`);
+      
+      if (response.ok) {
+        // Get the raw response text
+        const rawResponse = await response.text();
+        console.log("Raw my_team_ha response:", rawResponse);
+        
+        // Standardize and clean response
+        const cleanResponse = rawResponse.trim().toLowerCase();
+        
+        // Parse the response
+        if (cleanResponse === 'away' || cleanResponse.includes('"away"') || cleanResponse.includes("'away'")) {
+          console.log("Setting my_team_ha to 'away'");
+          setMyTeamHa('away');
+        } else if (cleanResponse === 'home' || cleanResponse.includes('"home"') || cleanResponse.includes("'home'")) {
+          console.log("Setting my_team_ha to 'home'");
+          setMyTeamHa('home');
+        } else {
+          // Try to parse JSON if it's a JSON string
+          try {
+            const jsonResponse = JSON.parse(rawResponse);
+            if (jsonResponse === 'away' || (typeof jsonResponse === 'object' && jsonResponse.value === 'away')) {
+              console.log("Parsed JSON: Setting my_team_ha to 'away'");
+              setMyTeamHa('away');
+              return;
+            } else if (jsonResponse === 'home' || (typeof jsonResponse === 'object' && jsonResponse.value === 'home')) {
+              console.log("Parsed JSON: Setting my_team_ha to 'home'");
+              setMyTeamHa('home');
+              return;
+            }
+          } catch (jsonError) {
+            // Not a valid JSON, continue with fallback
+            console.warn("Response is not valid JSON:", jsonError);
+          }
+          
+          // If we can't determine, use home as a fallback
+          console.warn("Could not determine my_team_ha from response, using 'home' as fallback");
+          setMyTeamHa('home');
+        }
+      } else {
+        console.error("Error fetching my_team_ha:", response.status, response.statusText);
+        // Fallback to 'home' if API call fails
+        setMyTeamHa('home');
+      }
     } catch (error) {
-      console.error('Error fetching team roster:', error);
-    } finally {
-      setLoadingRoster(false);
+      console.error("Error in fetchMyTeamHa:", error);
+      // Fallback to 'home' if there's an exception
+      setMyTeamHa('home');
     }
   };
-
-  // Add this function to handle adding a player to the grid
-  const handleAddOpponentToGrid = () => {
-    if (!newOpponentPlayer.jersey_number) {
-      return; // Don't add players without a jersey number
+  
+  // Function to copy lineup from previous inning to current inning
+  const handleCopyPreviousInning = () => {
+    if (currentInning <= 1) return; // Can't copy if we're on inning 1
+    
+    setLineupOperationInProgress(true);
+    const prevInning = currentInning - 1;
+    let madeChanges = false;
+    
+    console.log(`Copying lineup from inning ${prevInning} to inning ${currentInning}`);
+    
+    // Copy home lineup
+    const prevInningHomePlayers = homeLineup.filter(p => p.inning_number === prevInning);
+    if (prevInningHomePlayers.length > 0) {
+      // Only copy if current inning doesn't already have players
+      const currentInningHomePlayers = homeLineup.filter(p => p.inning_number === currentInning);
+      
+      if (currentInningHomePlayers.length === 0) {
+        console.log(`Copying ${prevInningHomePlayers.length} home players from inning ${prevInning} to ${currentInning}`);
+        
+        // Create copies of players from previous inning with the new inning number
+        const newInningHomePlayers = prevInningHomePlayers.map(player => ({
+          ...player,
+          inning_number: currentInning
+        }));
+        
+        // Add these new players to the lineup
+        setHomeLineup([...homeLineup, ...newInningHomePlayers]);
+        madeChanges = true;
+      }
     }
     
-    // Determine which lineup to update based on which team is the opponent
-    const isOpponentHome = game?.my_team_ha?.toLowerCase() === 'away';
-    const lineup = isOpponentHome ? [...homeLineup] : [...awayLineup];
+    // Copy away lineup
+    const prevInningAwayPlayers = awayLineup.filter(p => p.inning_number === prevInning);
+    if (prevInningAwayPlayers.length > 0) {
+      // Only copy if current inning doesn't already have players
+      const currentInningAwayPlayers = awayLineup.filter(p => p.inning_number === currentInning);
+      
+      if (currentInningAwayPlayers.length === 0) {
+        console.log(`Copying ${prevInningAwayPlayers.length} away players from inning ${prevInning} to ${currentInning}`);
+        
+        // Create copies of players from previous inning with the new inning number
+        const newInningAwayPlayers = prevInningAwayPlayers.map(player => ({
+          ...player,
+          inning_number: currentInning
+        }));
+        
+        // Add these new players to the lineup
+        setAwayLineup([...awayLineup, ...newInningAwayPlayers]);
+        madeChanges = true;
+      }
+    }
     
-    // Create the new player, using jersey number as name if name is empty
-    const newPlayer: Player = {
-      jersey_number: newOpponentPlayer.jersey_number,
-      name: newOpponentPlayer.name || `#${newOpponentPlayer.jersey_number}`, // Use jersey number if name is empty
-      position: newOpponentPlayer.position,
-      order_number: (newOpponentPlayer.position === 'SUB' || newOpponentPlayer.position === 'FL') ? 0 : 
-        lineup.filter(p => p.position !== 'SUB' && p.position !== 'FL').length + 1
-    };
-    
-    // Update the appropriate lineup
-    if (isOpponentHome) {
-      setHomeLineup([...lineup, newPlayer]);
+    if (madeChanges) {
+      console.log(`Successfully copied lineup data from inning ${prevInning} to inning ${currentInning}`);
+      setLineupChanged(true);
     } else {
-      setAwayLineup([...lineup, newPlayer]);
+      // If current inning already has players
+      const hasHomePlayers = homeLineup.some(p => p.inning_number === currentInning);
+      const hasAwayPlayers = awayLineup.some(p => p.inning_number === currentInning);
+      
+      if (hasHomePlayers || hasAwayPlayers) {
+        console.log(`Inning ${currentInning} already has players. Not copying from inning ${prevInning}.`);
+      } else {
+        console.log(`No players found in inning ${prevInning} to copy.`);
+      }
     }
     
-    // Reset the form
-    setNewOpponentPlayer({
-      jersey_number: '',
-      name: '',
-      position: 'EH'  // Reset to 'EH' instead of 'P'
+    // Reset the operation flag after copying
+    setTimeout(() => {
+      setLineupOperationInProgress(false);
+    }, 300);
+  };
+  
+  // Add a new inning
+  const handleAddInning = () => {
+    // Calculate the next inning number
+    const nextInning = Math.max(...availableInnings) + 1;
+    console.log(`Adding new inning ${nextInning}`);
+    
+    // First create an empty inning in the lineup (so the UI shows it right away)
+    const emptyInningPlaceholder: Player[] = [];
+    
+    // Set the lineup for this inning with an empty array - this makes the inning selectable
+    if (activeTab === 'home') {
+      setHomeLineup(prev => [...prev, ...emptyInningPlaceholder]);
+    } else {
+      setAwayLineup(prev => [...prev, ...emptyInningPlaceholder]);
+    }
+    
+    // Update available innings to include the new one
+    setAvailableInnings(prev => {
+      if (prev.includes(nextInning)) {
+        return prev;
+      }
+      return [...prev, nextInning].sort((a, b) => a - b);
     });
     
-    // Set lineup as changed
+    // Navigate to the new inning
+    setCurrentInning(nextInning);
+    
+    // Mark as changed so the user knows to save
+    // Even though it's empty, it's a structural change
     setLineupChanged(true);
   };
-
-  // Update the handleAddTeamPlayerQuick function
-  const handleAddTeamPlayerQuick = () => {
-    if (!selectedRosterPlayer) {
-      return; // Don't add if no player is selected
-    }
-    
-    // Find the selected player from the roster
-    const player = teamRoster.find(p => p.player_name === selectedRosterPlayer);
-    if (!player) return;
-    
-    // Determine which lineup to update
-    const lineup = game?.my_team_ha?.toLowerCase() === 'home' ? [...homeLineup] : [...awayLineup];
-    
-    // Create the new player
-    const newPlayer: Player = {
-      jersey_number: player.jersey_number,
-      name: player.player_name,
-      position: selectedPosition,
-      order_number: (selectedPosition === 'SUB' || selectedPosition === 'FL') ? 0 : 
-        lineup.filter(p => p.position !== 'SUB' && p.position !== 'FL').length + 1
-    };
-    
-    // Update the appropriate lineup
-    if (game?.my_team_ha?.toLowerCase() === 'home') {
-      setHomeLineup([...lineup, newPlayer]);
-    } else {
-      setAwayLineup([...lineup, newPlayer]);
-    }
-    
-    // Reset the form
-    setSelectedRosterPlayer('');
-    setSelectedPosition('P');
-    
-    // Set lineup as changed
-    setLineupChanged(true);
-  };
-
-  useEffect(() => {
-    if (teamId && gameId) {
-      fetchGameDetails();
-      fetchLineups();
-      fetchTeamRoster();
-    }
-  }, [teamId, gameId]);
-
-  const fetchGameDetails = async () => {
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/games/${teamId}/${gameId}`);
-      if (!response.ok) throw new Error("Failed to fetch game details");
-      const data = await response.json();
-      
-      if (data && data.game_data) {
-        setGame(data.game_data);
-        // Set the active tab based on my_team_ha
-        setActiveTab(data.game_data.my_team_ha.toLowerCase() === 'home' ? 'home' : 'away');
-      } else {
-        throw new Error("No game details found");
-      }
-    } catch (error) {
-      console.error("Error fetching game details:", error);
-      setError("Failed to load game details. Please try again later.");
-    }
-  };
-
+  
+  // Fetch lineups
   const fetchLineups = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
+      // Log the URLs we're fetching for debugging purposes
+      const homeEndpoint = `${process.env.NEXT_PUBLIC_API_URL}/lineup/${params.teamId}/${params.gameId}/home`;
+      const awayEndpoint = `${process.env.NEXT_PUBLIC_API_URL}/lineup/${params.teamId}/${params.gameId}/away`;
       
-      // Make sure we have game data first
-      let currentGame = game;
-      if (!currentGame) {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/games/${teamId}/${gameId}`);
-        if (!response.ok) throw new Error("Failed to fetch game details");
-        const data = await response.json();
-        
-        if (data && data.game_data) {
-          currentGame = data.game_data;
-          setGame(data.game_data);
-        } else {
-          throw new Error("No game details found");
+      console.log(`Fetching home lineup from: ${homeEndpoint}`);
+      console.log(`Fetching away lineup from: ${awayEndpoint}`);
+      
+      // First check if lineup is available by fetching away lineup (it contains the lineup_available flag)
+      console.log(`Checking lineup availability from: ${awayEndpoint}`);
+      const awayResponse = await fetch(awayEndpoint);
+      
+      // Log response status for debugging
+      console.log(`Away lineup response status: ${awayResponse.status}`);
+      
+      let lineupAvailable = 'no';
+      if (awayResponse.ok) {
+        try {
+          const awayRawText = await awayResponse.text();
+          console.log('=== RAW AWAY LINEUP RESPONSE ===');
+          console.log(awayRawText.substring(0, 500) + (awayRawText.length > 500 ? '...' : ''));
+          console.log('=== END RAW AWAY LINEUP RESPONSE ===');
+          
+          const awayData = JSON.parse(awayRawText);
+          console.log('=== PARSED AWAY LINEUP DATA ===');
+          console.log(JSON.stringify(awayData, null, 2).substring(0, 500) + (JSON.stringify(awayData, null, 2).length > 500 ? '...' : ''));
+          console.log('=== END PARSED AWAY LINEUP DATA ===');
+          
+          // Check for lineup_available flag in the response
+          if (awayData.lineup_available) {
+            lineupAvailable = awayData.lineup_available;
+            console.log(`Lineup availability status from response: ${lineupAvailable}`);
+          }
+          
+          // Process the away lineup data
+          const processedAwayLineup = processLineupData(awayData, 'away');
+          console.log(`Processed ${processedAwayLineup.length} away players`);
+          setAwayLineup(processedAwayLineup);
+        } catch (jsonError) {
+          console.error('Error parsing away lineup JSON:', jsonError);
+          setAwayLineup([]);
         }
+      } else {
+        console.log(`Away lineup fetch failed: ${awayResponse.status} ${awayResponse.statusText}`);
+        if (awayResponse.status === 404) {
+          console.log('Away lineup might not exist yet. This is normal for a new game.');
+        } else {
+          console.log('Unexpected error with away lineup fetch');
+        }
+        setAwayLineup([]);
       }
       
-      // Now we can safely use currentGame
-      const myTeamResponse = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/lineup/${teamId}/${gameId}/my`);
-      const opponentResponse = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/lineup/${teamId}/${gameId}/opponent`);
-      
-      console.log("currentGame?.my_team_ha -->", currentGame?.my_team_ha);
-      const isMyTeamHome = currentGame?.my_team_ha?.toLowerCase() === 'home';
-      
-      if (myTeamResponse.ok) {
-        const myTeamData = await myTeamResponse.json();
-        if (isMyTeamHome) {
-          setHomeLineup(myTeamData.lineup || []);
-        } else {
-          setAwayLineup(myTeamData.lineup || []);
-        }
+      // If lineup is not available, initialize with empty arrays and stop loading
+      if (lineupAvailable.toLowerCase() === 'no') {
+        console.log('No lineup data available yet according to response. Starting with empty lineups.');
+        setHomeLineup([]);
+        setLoading(false);
+        return;
       }
       
-      if (opponentResponse.ok) {
-        const opponentData = await opponentResponse.json();
-        if (isMyTeamHome) {
-          setAwayLineup(opponentData.lineup || []);
-        } else {
-          setHomeLineup(opponentData.lineup || []);
+      // If we get here, lineup is available, so fetch home lineup as well
+      const homeResponse = await fetch(homeEndpoint);
+      console.log(`Home lineup response status: ${homeResponse.status}`);
+      
+      // Process home lineup
+      if (homeResponse.ok) {
+        try {
+          const homeRawText = await homeResponse.text();
+          console.log('=== RAW HOME LINEUP RESPONSE ===');
+          console.log(homeRawText.substring(0, 500) + (homeRawText.length > 500 ? '...' : ''));
+          console.log('=== END RAW HOME LINEUP RESPONSE ===');
+          
+          const homeData = JSON.parse(homeRawText);
+          console.log('=== PARSED HOME LINEUP DATA ===');
+          console.log(JSON.stringify(homeData, null, 2).substring(0, 500) + (JSON.stringify(homeData, null, 2).length > 500 ? '...' : ''));
+          console.log('=== END PARSED HOME LINEUP DATA ===');
+          
+          // Process the home lineup data
+          const processedHomeLineup = processLineupData(homeData, 'home');
+          console.log(`Processed ${processedHomeLineup.length} home players`);
+          setHomeLineup(processedHomeLineup);
+        } catch (jsonError) {
+          console.error('Error parsing home lineup JSON:', jsonError);
+          setHomeLineup([]);
         }
+      } else {
+        console.error(`Home lineup fetch failed: ${homeResponse.status} ${homeResponse.statusText}`);
+        if (homeResponse.status === 404) {
+          console.log('Home lineup might not exist yet. This is normal for a new game.');
+        } else {
+          console.log('Unexpected error with home lineup fetch');
+        }
+        setHomeLineup([]);
       }
     } catch (error) {
-      console.error("Error fetching lineups:", error);
-      setError("Failed to load lineups. Please try again later.");
+      console.error('Error fetching lineups:', error);
+      setHomeLineup([]);
+      setAwayLineup([]);
     } finally {
       setLoading(false);
     }
   };
-
-  const movePlayerUp = (index: number) => {
-    if (index === 0) return;
+  
+  // Function to update previous inning lineup
+  const updatePreviousInningLineup = (prevInningNumber: number, homeData: Player[] = homeLineup, awayData: Player[] = awayLineup) => {
+    const prevHomeLineup = homeData.filter(p => p.inning_number === prevInningNumber);
+    const prevAwayLineup = awayData.filter(p => p.inning_number === prevInningNumber);
     
-    const lineup = activeTab === 'home' ? [...homeLineup] : [...awayLineup];
-    const temp = lineup[index];
-    lineup[index] = lineup[index - 1];
-    lineup[index - 1] = temp;
-    
-    // Update order numbers for non-SUB players
-    if (temp.position !== 'SUB' && temp.position !== 'FL' && lineup[index].position !== 'SUB' && lineup[index].position !== 'FL') {
-      const tempOrder = temp.order_number;
-      temp.order_number = lineup[index].order_number;
-      lineup[index].order_number = tempOrder;
-    }
-    
-    if (activeTab === 'home') {
-      setHomeLineup(lineup);
-    } else {
-      setAwayLineup(lineup);
-    }
-    
-    // Set lineup as changed
-    setLineupChanged(true);
+    setPreviousInningLineup([...prevHomeLineup, ...prevAwayLineup]);
   };
-
-  const movePlayerDown = (index: number) => {
-    const lineup = activeTab === 'home' ? [...homeLineup] : [...awayLineup];
-    if (index === lineup.length - 1) return; // Already at the bottom
-    
-    const temp = lineup[index];
-    lineup[index] = lineup[index + 1];
-    lineup[index + 1] = temp;
-    
-    // Update order numbers
-    lineup.forEach((player, idx) => {
-      player.order_number = idx + 1;
-    });
-    
-    if (activeTab === 'home') {
-      setHomeLineup(lineup);
-    } else {
-      setAwayLineup(lineup);
-    }
-    
-    // Set lineup as changed
-    setLineupChanged(true);
-  };
-
-  const deletePlayer = (index: number) => {
-    const lineup = activeTab === 'home' ? [...homeLineup] : [...awayLineup];
-    
-    // Remove the player at the specified index
-    lineup.splice(index, 1);
-    
-    // Update order numbers for remaining players
-    // Only update order numbers for non-SUB and non-FL players
-    let orderCounter = 1;
-    lineup.forEach((player) => {
-      if (player.position !== 'SUB' && player.position !== 'FL') {
-        player.order_number = orderCounter++;
+  
+  // Fetch roster players for the current team
+  const fetchRosterPlayers = async () => {
+    try {
+      // Use the active_players endpoint for my team's data
+      const teamActivePlayersEndpoint = `${process.env.NEXT_PUBLIC_API_URL}/teams/${params.teamId}/active_players`;
+      let endpoint;
+      
+      if (myTeamHa === activeTab) {
+        // If viewing my team's lineup, use my team's active players
+        endpoint = teamActivePlayersEndpoint;
       } else {
-        player.order_number = 0;
-      }
-    });
-    
-    // Update the state
-    if (activeTab === 'home') {
-      setHomeLineup(lineup);
-    } else {
-      setAwayLineup(lineup);
-    }
-    
-    // Set lineup as changed
-    setLineupChanged(true);
-  };
-
-  const saveLineup = async () => {
-    setSaving(true);
-    try {
-      const lineup = activeTab === 'home' ? homeLineup : awayLineup;
-      
-      // Determine if we're saving "my" team or "opponent" based on active tab and my_team_ha
-      const isMyTeamTab = (game?.my_team_ha?.toLowerCase() === 'home' && activeTab === 'home') || 
-                          (game?.my_team_ha?.toLowerCase() === 'away' && activeTab === 'away');
-      
-      const endpoint = isMyTeamTab ? 'my' : 'opponent';
-      
-      // Format the data according to what the API expects
-      // The API expects a Lineup object with a players field
-      const requestData = {
-        players: lineup.map(player => ({
-          jersey_number: player.jersey_number,
-          name: player.name,
-          position: player.position,
-          order_number: player.order_number
-        }))
-      };
-      
-      // Log the request data to see what we're sending
-      console.log(`Sending to ${endpoint} endpoint:`, JSON.stringify(requestData, null, 2));
-      
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/lineup/${teamId}/${gameId}/${endpoint}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestData),
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error("Server error response:", errorData);
-        throw new Error(`Failed to save lineup: ${response.status} ${response.statusText}`);
+        
+        // please generate a dataset instead of doing this call.  this is what the json looks like for active_players endpoint. {"team_id":"1","team_name":"NE Thunder 11U","active_players_count":11,"active_players":[{"jersey_number":"10","player_name":"Avry Vandeberg","position":"P"},{"jersey_number":"11","player_name":"Ellie Pappas","position":"C"},
+        //generatea a blank dataset for the opponent team.
+        const blankDataset = {
+          team_id: params.teamId,
+          team_name: 'Opponent Team',
+          active_players_count: 0,
+          active_players: []
+        };
+        // Remove these lines that are causing the 404 error
+        // endpoint = `${process.env.NEXT_PUBLIC_API_URL}/games/${params.teamId}/${params.gameId}/${activeTab}_roster`;
+        // endpoint = `${process.env.NEXT_PUBLIC_API_URL}/games/${params.teamId}/${params.gameId}/${activeTab}_roster`;
+        
+        // Use the blank dataset directly instead of fetching
+        console.log('Using blank dataset for opponent team');
+        setRosterPlayers([]);
+        return;
       }
       
-      alert(`${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} lineup saved successfully!`);
+      console.log(`Fetching roster from: ${endpoint}`);
+      const response = await fetch(endpoint);
       
-      // Reset the changed flag after successful save
-      setLineupChanged(false);
+      console.log(`Roster response status: ${response.status}`);
+      
+      if (response.ok) {
+        try {
+          const rawText = await response.text();
+          console.log('=== RAW ROSTER RESPONSE ===');
+          console.log(rawText);
+          console.log('=== END RAW ROSTER RESPONSE ===');
+          
+          const data = JSON.parse(rawText);
+          console.log('=== PARSED ROSTER DATA ===');
+          console.log(JSON.stringify(data, null, 2));
+          console.log('=== END PARSED ROSTER DATA ===');
+          
+          // Handle the new active_players endpoint format
+          if (data.active_players && Array.isArray(data.active_players)) {
+            // Transform the active_players format to our RosterPlayer format
+            const transformedPlayers = data.active_players.map((player: { 
+              jersey_number: number | string; 
+              player_name: string; 
+              position: string 
+            }) => ({
+              jersey_number: player.jersey_number.toString(),
+              player_name: player.player_name,
+              position: player.position // we'll keep this additional data
+            }));
+            
+            // Store active players separately for my team
+            if (myTeamHa === activeTab) {
+              setActivePlayersList(transformedPlayers);
+              console.log(`Stored ${transformedPlayers.length} active players for my team`);
+            }
+            
+            setRosterPlayers(transformedPlayers);
+            console.log(`Successfully loaded ${transformedPlayers.length} players from active_players endpoint`);
+          } 
+          // Fall back to handling the traditional roster format
+          else if (Array.isArray(data)) {
+            setRosterPlayers(data);
+            console.log(`Successfully loaded ${data.length} players from traditional roster endpoint`);
+          } else {
+            console.warn('Roster data is not in expected format, using default players');
+            setRosterPlayers(getDefaultPlayers());
+          }
+        } catch (jsonError) {
+          console.error('Error parsing roster JSON:', jsonError);
+          setRosterPlayers(getDefaultPlayers());
+        }
+      } else {
+        console.warn(`No specific roster found for ${activeTab} team, using fallback options`);
+        
+        // Try getting active players for my team
+        const fallbackResponse = await fetch(teamActivePlayersEndpoint);
+        console.log(`Fallback active_players response status: ${fallbackResponse.status}`);
+        
+        if (fallbackResponse.ok) {
+          try {
+            const fallbackRawText = await fallbackResponse.text();
+            console.log('=== RAW FALLBACK ACTIVE_PLAYERS RESPONSE ===');
+            console.log(fallbackRawText);
+            console.log('=== END RAW FALLBACK ACTIVE_PLAYERS RESPONSE ===');
+            
+            const fallbackData = JSON.parse(fallbackRawText);
+            console.log('=== PARSED FALLBACK ACTIVE_PLAYERS DATA ===');
+            console.log(JSON.stringify(fallbackData, null, 2));
+            console.log('=== END PARSED FALLBACK ACTIVE_PLAYERS DATA ===');
+            
+            console.log("Using team active_players as fallback");
+            
+            // Handle the active_players endpoint format
+            if (fallbackData.active_players && Array.isArray(fallbackData.active_players)) {
+              // Transform the active_players format to our RosterPlayer format
+              const transformedPlayers = fallbackData.active_players.map((player: { 
+                jersey_number: number | string; 
+                player_name: string; 
+                position: string 
+              }) => ({
+                jersey_number: player.jersey_number.toString(),
+                player_name: player.player_name,
+                position: player.position // we'll keep this additional data
+              }));
+              
+              // Store active players separately for my team
+              setActivePlayersList(transformedPlayers);
+              console.log(`Stored ${transformedPlayers.length} active players from fallback`);
+              
+              if (myTeamHa !== activeTab) {
+                setRosterPlayers(transformedPlayers);
+                console.log(`Loaded ${transformedPlayers.length} players from fallback active_players endpoint`);
+              }
+            }
+            // Fall back to handling the traditional format if needed
+            else if (Array.isArray(fallbackData)) {
+              if (myTeamHa !== activeTab) {
+                setRosterPlayers(fallbackData);
+                console.log(`Loaded ${fallbackData.length} players from fallback traditional roster`);
+              }
+            } else {
+              console.warn('Fallback data is not in expected format, using default players');
+              if (myTeamHa !== activeTab) {
+                setRosterPlayers(getDefaultPlayers());
+              }
+            }
+          } catch (jsonError) {
+            console.error('Error parsing fallback active_players JSON:', jsonError);
+            if (myTeamHa !== activeTab) {
+              setRosterPlayers(getDefaultPlayers());
+            }
+          }
+        } else {
+          console.log("Creating default players as fallback");
+          if (myTeamHa !== activeTab) {
+            setRosterPlayers(getDefaultPlayers());
+          }
+        }
+      }
     } catch (error) {
-      console.error(`Error saving ${activeTab} lineup:`, error);
-      setError(`Failed to save ${activeTab} lineup. Please try again.`);
-    } finally {
-      setSaving(false);
+      console.error('Error fetching roster players', error);
+      // Create default players as a fallback
+      console.log("Creating default players after error");
+      setRosterPlayers(getDefaultPlayers());
     }
   };
-
-  const fetchAvailablePlayers = async () => {
-    try {
-      setLoadingPlayers(true);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/teams/${teamId}/active_players`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch players: ${response.status} ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-      console.log("Available players:", data);
-      
-      // Filter out players already in the lineup
-      const currentLineup = game?.my_team_ha?.toLowerCase() === 'home' ? homeLineup : awayLineup;
-      const filteredPlayers = data.active_players.filter((player: RosterPlayer) => 
-        !currentLineup.some(lineupPlayer => 
-          lineupPlayer.jersey_number === player.jersey_number && 
-          lineupPlayer.name === player.player_name
-        )
-      );
-      
-      setAvailablePlayers(filteredPlayers);
-    } catch (error) {
-      console.error("Error fetching available players:", error);
-      setError("Failed to load available players. Please try again.");
-    } finally {
-      setLoadingPlayers(false);
-    }
-  };
-
-  const handleAddPlayerClick = () => {
-    fetchAvailablePlayers();
-    setIsAddPlayerModalOpen(true);
-  };
-
-  const handleAddPlayerToLineup = (player: RosterPlayer) => {
-    const lineup = game?.my_team_ha?.toLowerCase() === 'home' ? [...homeLineup] : [...awayLineup];
+  
+  // Function to get the next order number for the active tab and current inning
+  const getNextOrderNumber = () => {
+    const currentTeamLineup = activeTab === 'home' ? homeLineup : awayLineup;
+    const inningPlayers = currentTeamLineup.filter(p => p.inning_number === currentInning);
     
-    // Add the player to the lineup with the appropriate order number
+    return inningPlayers.length > 0 
+      ? Math.max(...inningPlayers.map(p => p.order_number)) + 1
+      : 1;
+  };
+  
+  // Function to add a player to the lineup
+  const handleAddPlayer = (player: RosterPlayer | PlayerFormInput, inning: number) => {
+    const teamType = activeTab;
+    const existingLineup = teamType === 'home' ? homeLineup : awayLineup;
+    
+    // Determine the next order number for this inning
+    const inningPlayers = existingLineup.filter(p => p.inning_number === inning);
+    const nextOrderNumber = inningPlayers.length > 0 
+      ? Math.max(...inningPlayers.map(p => p.order_number)) + 1
+      : 1;
+    
     const newPlayer: Player = {
       jersey_number: player.jersey_number,
       name: player.player_name,
-      position: player.position,
-      order_number: (player.position === 'SUB' || player.position === 'FL') ? 0 : 
-        lineup.filter(p => p.position !== 'SUB' && p.position !== 'FL').length + 1
+      order_number: nextOrderNumber,
+      inning_number: inning,
+      home_or_away: teamType
     };
     
-    if (game?.my_team_ha?.toLowerCase() === 'home') {
-      setHomeLineup([...lineup, newPlayer]);
+    if (teamType === 'home') {
+      setHomeLineup([...homeLineup, newPlayer]);
     } else {
-      setAwayLineup([...lineup, newPlayer]);
+      setAwayLineup([...awayLineup, newPlayer]);
     }
     
-    setIsAddPlayerModalOpen(false);
-    
-    // Set lineup as changed
     setLineupChanged(true);
+    setIsAddPlayerModalOpen(false);
   };
-
-  // Add this function to check for duplicate jersey numbers
-  const findDuplicateJerseys = (lineup: Player[]): Set<string> => {
-    const jerseyCount = new Map<string, number>();
-    const duplicates = new Set<string>();
-    
-    lineup.forEach(player => {
-      const count = jerseyCount.get(player.jersey_number) || 0;
-      jerseyCount.set(player.jersey_number, count + 1);
+  
+  // Refresh lineup data for a specific team
+  const refreshLineupData = async (teamChoice: 'home' | 'away', inningNumber: number) => {
+    try {
+      setLoading(true);
       
-      if (count > 0) {
-        duplicates.add(player.jersey_number);
+      // Only proceed with refresh if lineup data should be available
+      // Ensure we're using the literal string 'home' or 'away'
+      const endpoint = `${process.env.NEXT_PUBLIC_API_URL}/lineup/${params.teamId}/${params.gameId}/${teamChoice === 'home' ? 'home' : 'away'}`;
+      console.log(`Refreshing ${teamChoice} lineup from: ${endpoint}`);
+      
+      const response = await fetch(endpoint, {
+        // Use cache: 'no-store' to ensure we're getting fresh data
+        cache: 'no-store',
+      });
+      
+      console.log(`${teamChoice} lineup refresh response status: ${response.status}`);
+      
+      if (response.ok) {
+        try {
+          const rawText = await response.text();
+          console.log(`=== RAW ${teamChoice.toUpperCase()} LINEUP REFRESH RESPONSE ===`);
+          console.log(rawText.substring(0, 500) + (rawText.length > 500 ? '...' : ''));
+          console.log(`=== END RAW ${teamChoice.toUpperCase()} LINEUP REFRESH RESPONSE ===`);
+          
+          const data = JSON.parse(rawText);
+          console.log(`=== PARSED ${teamChoice.toUpperCase()} REFRESH DATA ===`);
+          console.log(JSON.stringify(data, null, 2).substring(0, 500) + (JSON.stringify(data, null, 2).length > 500 ? '...' : ''));
+          console.log(`=== END PARSED ${teamChoice.toUpperCase()} REFRESH DATA ===`);
+          
+          // Process the data
+          const processedLineup = processLineupData(data, teamChoice);
+          console.log(`Processed ${processedLineup.length} ${teamChoice} players`);
+          
+          // Update the lineup state
+          if (teamChoice === 'home') {
+            setHomeLineup(processedLineup);
+          } else {
+            setAwayLineup(processedLineup);
+          }
+        } catch (jsonError) {
+          console.error(`Error parsing ${teamChoice} lineup JSON:`, jsonError);
+        }
+      } else {
+        const errorText = await response.text().catch(() => 'No response body');
+        
+        if (response.status === 404) {
+          // Handle 404 case - this is expected if lineup hasn't been saved yet
+          console.log(`${teamChoice} lineup not found (404). This is normal for a new lineup.`);
+          console.log(`Response body:`, errorText.substring(0, 200) + (errorText.length > 200 ? '...' : ''));
+          
+          // Set empty lineup for the team
+          if (teamChoice === 'home') {
+            setHomeLineup([]);
+          } else {
+            setAwayLineup([]);
+          }
+        } else {
+          // Other error cases - log but don't show to user
+          console.error(`${teamChoice} lineup refresh failed:`, response.status, response.statusText);
+          console.error(`Response body:`, errorText.substring(0, 500) + (errorText.length > 500 ? '...' : ''));
+        }
       }
+    } catch (error) {
+      console.error(`Error refreshing ${teamChoice} lineup:`, error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Save lineups
+  const saveLineups = async () => {
+    try {
+      // Parse teamId and gameId from params
+      const teamId = parseInt(params.teamId as string);
+      const gameId = parseInt(params.gameId as string);
+      
+      // Only format and save data for the active tab and current inning
+      let lineupData;
+      let endpoint;
+      
+      // Filter for only the current inning's players to avoid duplication
+      const currentInningPlayers = getCurrentInningPlayers();
+      console.log(`Saving ${currentInningPlayers.length} players for ${activeTab} team, inning ${currentInning}`);
+      
+      if (activeTab === 'home') {
+        // Format home lineup data according to the specified model
+        lineupData = currentInningPlayers.map(player => ({
+          team_id: teamId,
+          game_id: gameId,
+          home_or_away: "home",
+          inning_number: player.inning_number,
+          order_number: player.order_number,
+          jersey_number: player.jersey_number,
+          player_name: player.name
+        }));
+        
+        // Updated endpoint with inning_number parameter
+        endpoint = `${process.env.NEXT_PUBLIC_API_URL}/lineup/${teamId}/${gameId}/home/${currentInning}`;
+        console.log('=== HOME LINEUP JSON TO BE SENT ===');
+        console.log(JSON.stringify(lineupData, null, 2));
+        console.log('=== END HOME LINEUP ===');
+      } else {
+        // Format away lineup data according to the specified model
+        lineupData = currentInningPlayers.map(player => ({
+          team_id: teamId,
+          game_id: gameId,
+          home_or_away: "away",
+          inning_number: player.inning_number,
+          order_number: player.order_number,
+          jersey_number: player.jersey_number,
+          player_name: player.name
+        }));
+        
+        // Updated endpoint with inning_number parameter
+        endpoint = `${process.env.NEXT_PUBLIC_API_URL}/lineup/${teamId}/${gameId}/away/${currentInning}`;
+        console.log('=== AWAY LINEUP JSON TO BE SENT ===');
+        console.log(JSON.stringify(lineupData, null, 2));
+        console.log('=== END AWAY LINEUP ===');
+      }
+      
+      // Log the endpoint
+      console.log(`Sending ${activeTab} lineup for inning ${currentInning} to: ${endpoint}`);
+      
+      // Save lineup for active tab only
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(lineupData),
+      });
+      
+      console.log(`${activeTab} lineup save response status: ${response.status}`);
+      
+      // Log the response text if available
+      try {
+        const responseText = await response.text();
+        console.log(`=== ${activeTab.toUpperCase()} LINEUP SAVE RESPONSE ===`);
+        console.log(responseText);
+        console.log(`=== END ${activeTab.toUpperCase()} LINEUP SAVE RESPONSE ===`);
+      } catch (error) {
+        console.log(`No ${activeTab} response text available`);
+      }
+      
+      if (response.ok) {
+        console.log(`${activeTab} lineup saved successfully`);
+        
+        // Remove the separate lineup availability API call/update
+        setLineupChanged(false);
+        alert(`${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} lineup for inning ${currentInning} saved successfully`);
+      } else {
+        console.error(`Failed to save ${activeTab} lineup`);
+        alert(`Failed to save ${activeTab} lineup. Please try again.`);
+      }
+    } catch (error) {
+      console.error('Error saving lineup:', error);
+      alert('An error occurred while saving the lineup.');
+    }
+  };
+  
+  // Update lineup display immediately after lineup changes
+  useEffect(() => {
+    // This will trigger UI update when lineups change
+    console.log("Lineup data changed, updating UI...");
+    // No action needed, just the dependency array is enough for re-render
+  }, [homeLineup, awayLineup]);
+
+  // Update data when active tab or current inning changes
+  useEffect(() => {
+    // Skip API refresh when a lineup operation is in progress
+    if (lineupOperationInProgress) {
+      console.log("Skipping API refresh during lineup operation");
+      return;
+    }
+    
+    // Skip API refresh when lineup has changed but not saved
+    if (lineupChanged) {
+      console.log("Skipping API refresh because lineup has unsaved changes");
+      return;
+    }
+    
+    console.log("Refreshing lineup data from API for", activeTab, "inning", currentInning);
+    refreshLineupData(activeTab, currentInning);
+    
+    // Also update previous inning data if needed
+    if (currentInning > 1) {
+      updatePreviousInningLineup(currentInning - 1);
+    }
+  }, [activeTab, currentInning, lineupOperationInProgress, lineupChanged]);
+  
+  // Fetch data on component mount
+  useEffect(() => {
+    const loadInitialData = async () => {
+      // First get the my_team_ha value
+      await fetchMyTeamHa();
+      // Then fetch lineups
+      await fetchLineups();
+      // Fetch roster players last (depends on activeTab which is away by default)
+      await fetchRosterPlayers();
+    };
+    
+    loadInitialData();
+  }, []);
+  
+  // Default to "away" tab since away team bats first
+  // Update activeTab based on myTeamHa if it changes
+  useEffect(() => {
+    // Log the values for debugging
+    console.log("My team is:", myTeamHa, "Active tab is:", activeTab);
+    
+    // We don't automatically change the active tab when myTeamHa changes
+    // This just ensures we have valid state for UI displays
+    if (myTeamHa !== 'home' && myTeamHa !== 'away') {
+      console.warn("Invalid myTeamHa value, defaulting to 'home'");
+      setMyTeamHa('home');
+    }
+  }, [myTeamHa, activeTab]);
+  
+  // Update roster players when tab changes
+  useEffect(() => {
+    console.log(`Tab changed to ${activeTab}, fetching roster and active players data...`);
+    fetchRosterPlayers();
+  }, [activeTab]);
+  
+  // Now we need to implement proper move player functionality in the GameLineup component
+  const handleMovePlayer = (player: Player, direction: 'up' | 'down') => {
+    const currentTeamLineup = player.home_or_away === 'home' ? homeLineup : awayLineup;
+    const setLineup = player.home_or_away === 'home' ? setHomeLineup : setAwayLineup;
+    
+    // Filter only players from the same inning
+    const sameInningPlayers = currentTeamLineup
+      .filter(p => p.inning_number === player.inning_number)
+      .sort((a, b) => a.order_number - b.order_number);
+    
+    // Find the index of the player in the sorted list
+    const playerIndex = sameInningPlayers.findIndex(
+      p => p.jersey_number === player.jersey_number && p.order_number === player.order_number
+    );
+    
+    // Cannot move if at the boundaries
+    if (
+      (direction === 'up' && playerIndex === 0) || 
+      (direction === 'down' && playerIndex === sameInningPlayers.length - 1)
+    ) {
+      return;
+    }
+    
+    // Get the player to swap with
+    const swapIndex = direction === 'up' ? playerIndex - 1 : playerIndex + 1;
+    const swapPlayer = sameInningPlayers[swapIndex];
+    
+    // Swap order numbers
+    const updatedLineup = currentTeamLineup.map(p => {
+      if (p.jersey_number === player.jersey_number && 
+          p.inning_number === player.inning_number &&
+          p.order_number === player.order_number) {
+        return { ...p, order_number: swapPlayer.order_number };
+      } else if (p.jersey_number === swapPlayer.jersey_number && 
+                 p.inning_number === swapPlayer.inning_number &&
+                 p.order_number === swapPlayer.order_number) {
+        return { ...p, order_number: player.order_number };
+      }
+      return p;
     });
     
-    return duplicates;
-  };
-
-  // Add this function to edit a player's position
-  const editPosition = (index: number, newPosition: string) => {
-    const lineup = activeTab === 'home' ? [...homeLineup] : [...awayLineup];
-    const oldPosition = lineup[index].position;
-    lineup[index].position = newPosition;
-    
-    // If changing to SUB or FL, set order_number to 0
-    if (newPosition === 'SUB' || newPosition === 'FL') {
-      lineup[index].order_number = 0;
-    } 
-    // If changing from SUB or FL to another position, assign a new order number
-    else if ((oldPosition === 'SUB' || oldPosition === 'FL') && newPosition !== 'SUB' && newPosition !== 'FL') {
-      // Find the highest order number
-      const maxOrder = Math.max(...lineup.filter(p => p.position !== 'SUB' && p.position !== 'FL').map(p => p.order_number), 0);
-      lineup[index].order_number = maxOrder + 1;
-    }
-    
-    if (activeTab === 'home') {
-      setHomeLineup(lineup);
-    } else {
-      setAwayLineup(lineup);
-    }
-    
-    // Set lineup as changed
+    // Update the lineup
+    setLineup(updatedLineup);
     setLineupChanged(true);
   };
-
-  // Fix the findUnusedPositions function to correctly identify missing positions
-  const findUnusedPositions = (lineup: Player[]): string[] => {
-    // Only check for missing positions if this is your team
-    const isMyTeam = (activeTab === 'home' && game?.my_team_ha?.toLowerCase() === 'home') ||
-                    (activeTab === 'away' && game?.my_team_ha?.toLowerCase() === 'away');
-    
-    if (!isMyTeam) {
-      return []; // Return empty array for opponent team
+  
+  // Delete lineup for the current inning and active tab
+  const handleDeleteLineup = () => {
+    if (activeTab === 'home') {
+      // Filter out players from the current inning
+      const updatedLineup = homeLineup.filter(
+        player => player.inning_number !== currentInning
+      );
+      setHomeLineup(updatedLineup);
+    } else {
+      // Filter out players from the current inning
+      const updatedLineup = awayLineup.filter(
+        player => player.inning_number !== currentInning
+      );
+      setAwayLineup(updatedLineup);
     }
     
-    // Define the required positions
-    const requiredPositions = ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'];
+    // Mark as changed so the user knows to save
+    setLineupChanged(true);
+  };
+  
+  // Fetch previous inning lineup data from server for creating a new inning
+  const fetchPreviousInningLineup = async (inningNumber: number) => {
+    setLineupOperationInProgress(true);
+    try {
+      console.log(`Fetching previous inning lineup data for creating inning ${inningNumber}`);
+      
+      // Fetch data for the current active tab team
+      const teamChoice = activeTab; // 'home' or 'away'
+      const endpoint = `${process.env.NEXT_PUBLIC_API_URL}/lineup/${params.teamId}/${params.gameId}/${teamChoice}/${inningNumber - 1}/new_inning`;
+      
+      console.log(`Fetching lineup template from: ${endpoint}`);
+      const response = await fetch(endpoint);
+      
+      if (response.ok) {
+        // Log raw response data for debugging
+        const rawText = await response.text();
+        console.log(`=== RAW NEW INNING RESPONSE ===`);
+        console.log(rawText);
+        console.log(`=== END RAW NEW INNING RESPONSE ===`);
+        
+        // Parse the raw text to JSON
+        const data = JSON.parse(rawText);
+        console.log(`Received lineup template data structure:`, Object.keys(data));
+        
+        // The API response format has {message, team_id, game_id, team_choice, source_inning, lineup: Array}
+        if (data.lineup && Array.isArray(data.lineup) && data.lineup.length > 0) {
+          // Transform the data to match our Player structure
+          const sourcePlayers = data.lineup.map((player: { jersey_number: string | number; player_name: string; order_number: number; }) => {
+            // Ensure jersey_number is always a string
+            const jerseyNum = typeof player.jersey_number === 'number' 
+              ? player.jersey_number.toString() 
+              : player.jersey_number;
+            
+            return {
+              jersey_number: jerseyNum,
+              name: player.player_name,
+              order_number: player.order_number,
+              inning_number: inningNumber, // Set to the new inning number
+              home_or_away: teamChoice
+            };
+          });
+          
+          console.log(`Transformed ${sourcePlayers.length} players for inning ${inningNumber}:`, sourcePlayers);
+          
+          // ATOMIC UPDATE: First completely remove any existing players for this inning
+          let currentLineup;
+          if (teamChoice === 'home') {
+            currentLineup = [...homeLineup];
+            // Remove all players from this inning
+            currentLineup = currentLineup.filter(p => p.inning_number !== inningNumber);
+            // Add all the new players at once
+            currentLineup = [...currentLineup, ...sourcePlayers];
+            console.log(`Setting homeLineup with ${currentLineup.length} players (${sourcePlayers.length} for inning ${inningNumber})`);
+            setHomeLineup(currentLineup);
+          } else {
+            currentLineup = [...awayLineup];
+            // Remove all players from this inning
+            currentLineup = currentLineup.filter(p => p.inning_number !== inningNumber);
+            // Add all the new players at once
+            currentLineup = [...currentLineup, ...sourcePlayers];
+            console.log(`Setting awayLineup with ${currentLineup.length} players (${sourcePlayers.length} for inning ${inningNumber})`);
+            setAwayLineup(currentLineup);
+          }
+          
+          // Mark the lineup as changed
+          setLineupChanged(true);
+          
+          // Set current inning to the populated inning
+          setCurrentInning(inningNumber);
+          
+          console.log(`Successfully populated inning ${inningNumber} with ${sourcePlayers.length} players`);
+          return true;
+        } else {
+          console.log(`No lineup data returned from the server for inning ${inningNumber - 1}`);
+          return false;
+        }
+      } else {
+        console.error(`Error fetching lineup template: ${response.status} ${response.statusText}`);
+        return false;
+      }
+    } catch (error) {
+      console.error('Error fetching previous inning lineup:', error);
+      return false;
+    } finally {
+      // Ensure lineupOperationInProgress is reset
+      setLineupOperationInProgress(false);
+      console.log('Lineup operation complete');
+    }
+  };
+  
+  // Helper function to get players for the current inning and tab
+  const getCurrentInningPlayers = (): Player[] => {
+    const currentLineup = activeTab === 'home' ? homeLineup : awayLineup;
+    console.log(`Filtering players for ${activeTab} team, inning ${currentInning}`);
+    console.log(`Total players in lineup: ${currentLineup.length}`);
     
-    // Get all positions currently used in the lineup
-    const usedPositions = lineup.map(player => player.position);
+    // Filter players for the current inning
+    const inningPlayers = currentLineup.filter(player => player.inning_number === currentInning);
+    console.log(`Found ${inningPlayers.length} players for inning ${currentInning}`);
     
-    // Find positions that are not used
-    return requiredPositions.filter(pos => !usedPositions.includes(pos));
+    return inningPlayers;
   };
-
-  // First, let's update the canShowScoreButton function to check if both teams have at least 7 players
-  const canShowScoreButton = () => {
-    const homePlayerCount = homeLineup.filter(p => p.position !== 'SUB').length;
-    const awayPlayerCount = awayLineup.filter(p => p.position !== 'SUB').length;
-    return homePlayerCount >= 7 && awayPlayerCount >= 7;
+  
+  const currentPlayers = getCurrentInningPlayers();
+  
+  // Use useEffect to log when the current players change
+  useEffect(() => {
+    console.log(`Current players updated: ${currentPlayers.length} players for inning ${currentInning}`);
+  }, [currentPlayers, currentInning]);
+  
+  // Get previous inning players
+  const getPreviousInningPlayers = (): Player[] => {
+    if (currentInning <= 1) return [];
+    
+    const prevInning = currentInning - 1;
+    const prevLineup = activeTab === 'home' ? homeLineup : awayLineup;
+    
+    // Filter players for the previous inning
+    return prevLineup.filter(player => player.inning_number === prevInning);
   };
-
-  // First, let's fix the isOpponentTab function to correctly identify when we're on the opponent's tab
-  const isOpponentTab = () => {
-    return (game?.my_team_ha?.toLowerCase() === 'home' && activeTab === 'away') || 
-           (game?.my_team_ha?.toLowerCase() === 'away' && activeTab === 'home');
-  };
-
-  // And similarly for the isMyTeamTab function
-  const isMyTeamTab = () => {
-    return (game?.my_team_ha?.toLowerCase() === 'home' && activeTab === 'home') || 
-           (game?.my_team_ha?.toLowerCase() === 'away' && activeTab === 'away');
-  };
-
-  if (loading && !game) return (
-    <div className="flex justify-center items-center h-64">
-      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
-    </div>
-  );
-
-  if (error) return (
-    <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
-      <strong className="font-bold">Error!</strong>
-      <span className="block sm:inline"> {error}</span>
-    </div>
-  );
-
-  // Calculate duplicates first
-  const homeDuplicates = findDuplicateJerseys(homeLineup);
-  const awayDuplicates = findDuplicateJerseys(awayLineup);
-
+  
+  const previousPlayers = getPreviousInningPlayers();
+  
   return (
-    <div className="container mx-auto px-3 py-0">
-      <div className="flex justify-between items-center mb-3">
-        <div>
-          <h1 className="text-2xl font-bold">Game Lineup</h1>
-          {game && (
-            <div className="text-xs text-gray-500 mt-1">
-              {game.event_date} {game.event_hour}:{game.event_minute < 10 ? '0' + game.event_minute : game.event_minute}
-            </div>
-          )}
-        </div>
+    <div className="container mx-auto px-1 py-1">
+      <div className="mb-0">
+        <h1 className="text-2xl font-bold mb-1">Offensive Lineup Manager</h1>
         
-        <div className="flex space-x-3">
-          <button
-            onClick={() => router.push(`/score-game/${teamId}`)}
-            className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded transition-colors"
-          >
-            Back to Games
-          </button>
-          
-          <button
-            onClick={saveLineup}
-            disabled={saving || !lineupChanged}
-            className={`px-4 py-2 rounded transition-colors ${
-              lineupChanged 
-                ? 'bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-indigo-400' 
-                : 'border border-indigo-600 text-indigo-600 hover:bg-indigo-50 disabled:border-indigo-300 disabled:text-indigo-300'
-            }`}
-          >
-            {saving ? 'Saving...' : 'Save Lineup'}
-          </button>
-          
-          <button
-            onClick={() => router.push(`/score-game/${teamId}/score/${gameId}`)}
-            disabled={!canShowScoreButton()}
-            className={`px-4 py-2 rounded transition-colors ${
-              canShowScoreButton() 
-                ? 'bg-indigo-600 text-white hover:bg-indigo-700' 
-                : 'border border-indigo-600 text-indigo-600 hover:bg-indigo-50 disabled:border-indigo-300 disabled:text-indigo-300'
-            }`}
-          >
-            Score Game
-          </button>
+        {/* InningSelector moved above tabs */}
+        <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 mb-4">
+          <h2 className="text-sm font-semibold text-gray-700 mb-2">Inning Actions</h2>
+          <InningSelector 
+            currentInning={currentInning}
+            setCurrentInning={setCurrentInning}
+            availableInnings={availableInnings}
+            handleCopyPreviousInning={handleCopyPreviousInning}
+            handleAddInning={handleAddInning}
+            saveLineups={saveLineups}
+            lineupChanged={lineupChanged}
+            activeTab={activeTab}
+            homeLineup={homeLineup}
+            awayLineup={awayLineup}
+            handleDeleteLineup={handleDeleteLineup}
+            fetchPreviousInningLineup={fetchPreviousInningLineup}
+          />
         </div>
       </div>
       
-      <div className="bg-white rounded-lg shadow overflow-hidden mt-3">
-        <div className="border-b border-gray-200">
-          <nav className="-mb-px flex">
-            <button
-              onClick={() => setActiveTab('home')}
-              className={`py-4 px-6 text-center border-b-2 font-medium text-sm ${
-                activeTab === 'home'
-                  ? 'border-indigo-500 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              {game?.my_team_ha.toLowerCase() === 'home' ? 'Your Team (Home)' : game?.away_team_name + ' (Home)'}
-            </button>
-            <button
-              onClick={() => setActiveTab('away')}
-              className={`py-4 px-6 text-center border-b-2 font-medium text-sm ${
-                activeTab === 'away'
-                  ? 'border-indigo-500 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              {game?.my_team_ha.toLowerCase() === 'away' ? 'Your Team (Away)' : game?.away_team_name + ' (Away)'}
-            </button>
-          </nav>
-        </div>
-        
-        <div className="p-6">
-          {activeTab === 'home' ? (
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <h2 className="text-lg font-semibold">Home Team Lineup</h2>
-                
-                {/* Show your team's player selector when home is your team and home tab is active */}
-                {game?.my_team_ha?.toLowerCase() === 'home' && activeTab === 'home' && (
-                  <div className="mb-2 bg-white p-2 rounded-lg shadow">
-                    <div className="flex items-end space-x-2">
-                      <div className="flex-1">
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Player</label>
-                        {loadingRoster ? (
-                          <div className="w-full p-1 text-sm text-gray-500">Loading roster...</div>
-                        ) : (
-                          <select
-                            value={selectedRosterPlayer}
-                            onChange={(e) => setSelectedRosterPlayer(e.target.value)}
-                            className="w-full p-1 border border-gray-300 rounded text-sm"
-                          >
-                            <option value="">Select a player</option>
-                            {teamRoster
-                              .filter(player => 
-                                // Filter out players that are already in the lineup
-                                !homeLineup.some(p => p.jersey_number === player.jersey_number && p.name === player.player_name) &&
-                                !awayLineup.some(p => p.jersey_number === player.jersey_number && p.name === player.player_name)
-                              )
-                              .map(player => (
-                                <option key={player.jersey_number} value={player.player_name}>
-                                  #{player.jersey_number} - {player.player_name}
-                                </option>
-                              ))
-                            }
-                          </select>
-                        )}
-                      </div>
-                      <div className="w-20">
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Pos</label>
-                        <select
-                          value={selectedPosition}
-                          onChange={(e) => setSelectedPosition(e.target.value)}
-                          className="w-full p-1 border border-gray-300 rounded text-sm"
-                        >
-                          {['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'EH', 'DP', 'FL', 'SUB'].map(pos => (
-                            <option key={pos} value={pos}>{pos}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <button
-                        onClick={handleAddTeamPlayerQuick}
-                        disabled={!selectedRosterPlayer}
-                        className="bg-indigo-600 text-white py-1 px-3 rounded text-sm hover:bg-indigo-700 transition-colors disabled:bg-indigo-300"
-                      >
-                        Add
-                      </button>
-                      <button
-                        onClick={handleAddPlayerClick}
-                        className="bg-gray-200 text-gray-700 py-1 px-3 rounded text-sm hover:bg-gray-300 transition-colors"
-                      >
-                        Roster
-                      </button>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Show opponent player form when home is the opponent and home tab is active */}
-                {game?.my_team_ha?.toLowerCase() === 'away' && activeTab === 'home' && (
-                  <div className="mb-2 bg-white p-2 rounded-lg shadow">
-                    <div className="flex items-end space-x-2">
-                      <div className="w-16">
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Jersey #</label>
-                        <input
-                          type="text"
-                          value={newOpponentPlayer.jersey_number}
-                          onChange={(e) => setNewOpponentPlayer({
-                            ...newOpponentPlayer, 
-                            jersey_number: e.target.value
-                          })}
-                          className="w-full p-1 border border-gray-300 rounded text-sm"
-                          placeholder="##"
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Name (Optional)</label>
-                        <input
-                          type="text"
-                          value={newOpponentPlayer.name}
-                          onChange={(e) => setNewOpponentPlayer({...newOpponentPlayer, name: e.target.value})}
-                          className="w-full p-1 border border-gray-300 rounded text-sm"
-                          placeholder="Leave blank to use jersey #"
-                        />
-                      </div>
-                      <div className="w-20">
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Pos</label>
-                        <select
-                          value={newOpponentPlayer.position}
-                          onChange={(e) => setNewOpponentPlayer({...newOpponentPlayer, position: e.target.value})}
-                          className="w-full p-1 border border-gray-300 rounded text-sm"
-                        >
-                          {['EH', 'P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DP', 'FL', 'SUB'].map(pos => (
-                            <option key={pos} value={pos}>{pos}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <button
-                        onClick={handleAddOpponentToGrid}
-                        disabled={!newOpponentPlayer.jersey_number}
-                        className="bg-indigo-600 text-white py-1 px-3 rounded text-sm hover:bg-indigo-700 transition-colors disabled:bg-indigo-300"
-                      >
-                        Add
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jersey #</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Position</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {homeLineup
-                    .sort((a, b) => {
-                      // If both are non-batting players (SUB or FL), sort alphabetically by name
-                      if ((a.order_number === 0 || a.position === 'FL') && (b.order_number === 0 || b.position === 'FL')) {
-                        // If they're different types (SUB vs FL), group them
-                        if (a.position === 'FL' && b.position === 'SUB') return -1;
-                        if (a.position === 'SUB' && b.position === 'FL') return 1;
-                        // Otherwise sort by name
-                        return a.name.localeCompare(b.name);
-                      }
-                      // If only a is a non-batting player, it goes to the bottom
-                      if (a.order_number === 0 || a.position === 'FL') return 1;
-                      // If only b is a non-batting player, it goes to the bottom
-                      if (b.order_number === 0 || b.position === 'FL') return -1;
-                      // Otherwise sort by order_number
-                      return a.order_number - b.order_number;
-                    })
-                    .reduce((acc, player, index, sortedArray) => {
-                      // Check if we need to insert a separator before this player
-                      if (index > 0) {
-                        const prevPlayer = sortedArray[index-1];
-                        const prevIsBatting = prevPlayer.order_number !== 0 && prevPlayer.position !== 'FL';
-                        const currentIsBatting = player.order_number !== 0 && player.position !== 'FL';
-                        
-                        // If transitioning from batting to non-batting
-                        if (prevIsBatting && !currentIsBatting) {
-                          // Add a separator row for the first non-batting player
-                          if (player.position === 'FL') {
-                            acc.push(
-                              <tr key={`flex-separator-${index}`} className="bg-blue-100">
-                                <td colSpan={5} className="px-6 py-2 text-center text-xs font-medium text-blue-800 uppercase">
-                                  Flex Players (Non-Batting)
-                                </td>
-                              </tr>
-                            );
+      {/* Team tabs with inline add player form for both teams */}
+      <div className="border-b border-gray-200 bg-white shadow-sm rounded-t-lg">
+        <nav className="flex items-center px-4">
+          <button
+            onClick={() => setActiveTab('away')}
+            className={`mr-2 py-3 px-8 font-medium text-sm transition-colors rounded-t-lg ${
+              activeTab === 'away'
+                ? 'bg-white border-t border-l border-r border-gray-200 text-indigo-600 font-semibold -mb-px'
+                : 'bg-gray-50 text-gray-600 hover:text-gray-800 hover:bg-gray-100'
+            }`}
+          >
+            {myTeamHa === 'away' ? 'My Team (Away)' : 'Away Team'}
+          </button>
+          <button
+            onClick={() => setActiveTab('home')}
+            className={`mr-2 py-3 px-8 font-medium text-sm transition-colors rounded-t-lg ${
+              activeTab === 'home'
+                ? 'bg-white border-t border-l border-r border-gray-200 text-indigo-600 font-semibold -mb-px'
+                : 'bg-gray-50 text-gray-600 hover:text-gray-800 hover:bg-gray-100'
+            }`}
+          >
+            {myTeamHa === 'home' ? 'My Team (Home)' : 'Home Team'}
+          </button>
+          
+          {/* Add player form for all teams */}
+          <AddPlayerForm
+            currentInning={currentInning}
+            nextOrderNumber={getNextOrderNumber()}
+            onAddPlayer={handleAddPlayer}
+            activeTab={activeTab}
+            myTeamHa={myTeamHa}
+            activePlayers={activePlayersList}
+            lineupChanged={lineupChanged}
+          />
+        </nav>
+      </div>
+      
+      {/* Current team lineup - all innings horizontally */}
+      <div className="bg-white shadow-sm rounded-b-lg overflow-hidden mb-6 border border-gray-200 border-t-0">
+        <div className="p-4">
+          {/* Get unique innings from the current team's lineup */}
+          {(() => {
+            const currentTeamLineup = activeTab === 'home' ? homeLineup : awayLineup;
+            
+            // Get all innings that have lineup data
+            const existingInnings = Array.from(new Set(currentTeamLineup.map(p => p.inning_number))).sort((a, b) => a - b);
+            
+            // Ensure we have the current inning and the next inning in our display
+            let inningsToDisplay = [...existingInnings];
+            
+            // Add current inning if not already in the list
+            if (!inningsToDisplay.includes(currentInning)) {
+              inningsToDisplay.push(currentInning);
+            }
+            
+            // Add next inning if not already in the list
+            const nextInning = currentInning + 1;
+            if (!inningsToDisplay.includes(nextInning) && availableInnings.includes(nextInning)) {
+              inningsToDisplay.push(nextInning);
+            }
+            
+            // Sort the innings to ensure they're in order
+            inningsToDisplay = inningsToDisplay.sort((a, b) => a - b);
+            
+            if (inningsToDisplay.length === 0) {
+              return (
+                <p className="text-gray-500 py-4">No innings found for this team. Add players to create lineup.</p>
+              );
+            }
+            
+            return (
+              <div className="overflow-x-auto pb-4">
+                <div className="flex space-x-6">
+                  {inningsToDisplay.map(inning => (
+                    <div 
+                      key={inning} 
+                      className={`flex-none ${inning === currentInning ? 'border-2 border-indigo-300 rounded-lg' : ''}`}
+                    >
+                      <LineupTable
+                        players={currentTeamLineup.filter(player => player.inning_number === inning)}
+                        isLoading={loading}
+                        showActions={inning === currentInning}
+                        onRemovePlayer={inning === currentInning ? (player: Player) => {
+                          if (activeTab === 'home') {
+                            setHomeLineup(homeLineup.filter(p => 
+                              !(p.inning_number === player.inning_number && 
+                                p.jersey_number === player.jersey_number &&
+                                p.order_number === player.order_number)
+                            ));
                           } else {
-                            acc.push(
-                              <tr key={`sub-separator-${index}`} className="bg-gray-200">
-                                <td colSpan={5} className="px-6 py-2 text-center text-xs font-medium text-gray-700 uppercase">
-                                  Substitutes
-                                </td>
-                              </tr>
-                            );
+                            setAwayLineup(awayLineup.filter(p => 
+                              !(p.inning_number === player.inning_number && 
+                                p.jersey_number === player.jersey_number &&
+                                p.order_number === player.order_number)
+                            ));
                           }
-                        }
-                        // If transitioning from FL to SUB
-                        else if (prevPlayer.position === 'FL' && player.position === 'SUB') {
-                          acc.push(
-                            <tr key={`sub-separator-${index}`} className="bg-gray-200">
-                              <td colSpan={5} className="px-6 py-2 text-center text-xs font-medium text-gray-700 uppercase">
-                                Substitutes
-                              </td>
-                            </tr>
-                          );
-                        }
-                      }
-                      
-                      // Add the player row
-                      acc.push(
-                        <tr 
-                          key={index} 
-                          className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} ${isFirstSub(player, index, sortedArray) ? 'border-t-2 border-gray-300' : ''}`}
-                        >
-                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                            {player.position === 'SUB' || player.position === 'FL' ? '-' : player.order_number}
-                          </td>
-                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                            {player.jersey_number}
-                          </td>
-                          <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                            {player.name}
-                          </td>
-                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                            <select
-                              value={player.position}
-                              onChange={(e) => editPosition(index, e.target.value)}
-                              className="border-gray-300 rounded-md text-sm focus:ring-indigo-500 focus:border-indigo-500"
-                            >
-                              {['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'EH', 'DP', 'FL', 'SUB'].map(pos => (
-                                <option key={pos} value={pos}>{pos}</option>
-                              ))}
-                            </select>
-                          </td>
-                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                            <div className="flex space-x-2">
-                              <button
-                                onClick={() => movePlayerUp(index)}
-                                disabled={player.position === 'SUB' || player.position === 'FL' || index === 0 || isFirstSub(player, index, sortedArray)}
-                                className="text-gray-500 hover:text-gray-700 disabled:text-gray-300 disabled:cursor-not-allowed"
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                                </svg>
-                              </button>
-                              <button
-                                onClick={() => movePlayerDown(index)}
-                                disabled={
-                                  player.position === 'SUB' || 
-                                  player.position === 'FL' || 
-                                  index === sortedArray.filter(p => p.position !== 'SUB' && p.position !== 'FL').length - 1 ||
-                                  (index < sortedArray.length - 1 && (sortedArray[index + 1].position === 'SUB' || sortedArray[index + 1].position === 'FL'))
-                                }
-                                className="text-gray-500 hover:text-gray-700 disabled:text-gray-300 disabled:cursor-not-allowed"
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                </svg>
-                              </button>
-                              <button
-                                onClick={() => deletePlayer(index)}
-                                className="text-red-500 hover:text-red-700"
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                      
-                      return acc;
-                    }, [] as React.ReactNode[])}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <h2 className="text-lg font-semibold">Away Team Lineup</h2>
-                
-                {/* Show your team's player selector when away is your team and away tab is active */}
-                {game?.my_team_ha?.toLowerCase() === 'away' && activeTab === 'away' && (
-                  <div className="mb-2 bg-white p-2 rounded-lg shadow">
-                    <div className="flex items-end space-x-2">
-                      <div className="flex-1">
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Player</label>
-                        {loadingRoster ? (
-                          <div className="w-full p-1 text-sm text-gray-500">Loading roster...</div>
-                        ) : (
-                          <select
-                            value={selectedRosterPlayer}
-                            onChange={(e) => setSelectedRosterPlayer(e.target.value)}
-                            className="w-full p-1 border border-gray-300 rounded text-sm"
-                          >
-                            <option value="">Select a player</option>
-                            {teamRoster
-                              .filter(player => 
-                                // Filter out players that are already in the lineup
-                                !homeLineup.some(p => p.jersey_number === player.jersey_number && p.name === player.player_name) &&
-                                !awayLineup.some(p => p.jersey_number === player.jersey_number && p.name === player.player_name)
-                              )
-                              .map(player => (
-                                <option key={player.jersey_number} value={player.player_name}>
-                                  #{player.jersey_number} - {player.player_name}
-                                </option>
-                              ))
-                            }
-                          </select>
-                        )}
-                      </div>
-                      <div className="w-20">
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Pos</label>
-                        <select
-                          value={selectedPosition}
-                          onChange={(e) => setSelectedPosition(e.target.value)}
-                          className="w-full p-1 border border-gray-300 rounded text-sm"
-                        >
-                          {['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'EH', 'DP', 'FL', 'SUB'].map(pos => (
-                            <option key={pos} value={pos}>{pos}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <button
-                        onClick={handleAddTeamPlayerQuick}
-                        disabled={!selectedRosterPlayer}
-                        className="bg-indigo-600 text-white py-1 px-3 rounded text-sm hover:bg-indigo-700 transition-colors disabled:bg-indigo-300"
-                      >
-                        Add
-                      </button>
-                      <button
-                        onClick={handleAddPlayerClick}
-                        className="bg-gray-200 text-gray-700 py-1 px-3 rounded text-sm hover:bg-gray-300 transition-colors"
-                      >
-                        Roster
-                      </button>
+                          setLineupChanged(true);
+                        } : undefined}
+                        onMovePlayer={inning === currentInning ? handleMovePlayer : undefined}
+                        isReadOnly={inning !== currentInning}
+                        emptyMessage={`No players for inning ${inning}`}
+                        inningNumber={inning}
+                        currentInning={currentInning}
+                        onInningClick={setCurrentInning}
+                      />
                     </div>
-                  </div>
-                )}
-                
-                {/* Show opponent player form when away is the opponent and away tab is active */}
-                {game?.my_team_ha?.toLowerCase() === 'home' && activeTab === 'away' && (
-                  <div className="mb-2 bg-white p-2 rounded-lg shadow">
-                    <div className="flex items-end space-x-2">
-                      <div className="w-16">
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Jersey #</label>
-                        <input
-                          type="text"
-                          value={newOpponentPlayer.jersey_number}
-                          onChange={(e) => setNewOpponentPlayer({
-                            ...newOpponentPlayer, 
-                            jersey_number: e.target.value
-                          })}
-                          className="w-full p-1 border border-gray-300 rounded text-sm"
-                          placeholder="##"
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Name (Optional)</label>
-                        <input
-                          type="text"
-                          value={newOpponentPlayer.name}
-                          onChange={(e) => setNewOpponentPlayer({...newOpponentPlayer, name: e.target.value})}
-                          className="w-full p-1 border border-gray-300 rounded text-sm"
-                          placeholder="Leave blank to use jersey #"
-                        />
-                      </div>
-                      <div className="w-20">
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Pos</label>
-                        <select
-                          value={newOpponentPlayer.position}
-                          onChange={(e) => setNewOpponentPlayer({...newOpponentPlayer, position: e.target.value})}
-                          className="w-full p-1 border border-gray-300 rounded text-sm"
-                        >
-                          {['EH', 'P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DP', 'FL', 'SUB'].map(pos => (
-                            <option key={pos} value={pos}>{pos}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <button
-                        onClick={handleAddOpponentToGrid}
-                        disabled={!newOpponentPlayer.jersey_number}
-                        className="bg-indigo-600 text-white py-1 px-3 rounded text-sm hover:bg-indigo-700 transition-colors disabled:bg-indigo-300"
-                      >
-                        Add
-                      </button>
-                    </div>
-                  </div>
-                )}
+                  ))}
+                </div>
               </div>
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jersey #</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Position</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {awayLineup
-                    .sort((a, b) => {
-                      // If both are non-batting players (SUB or FL), sort alphabetically by name
-                      if ((a.order_number === 0 || a.position === 'FL') && (b.order_number === 0 || b.position === 'FL')) {
-                        // If they're different types (SUB vs FL), group them
-                        if (a.position === 'FL' && b.position === 'SUB') return -1;
-                        if (a.position === 'SUB' && b.position === 'FL') return 1;
-                        // Otherwise sort by name
-                        return a.name.localeCompare(b.name);
-                      }
-                      // If only a is a non-batting player, it goes to the bottom
-                      if (a.order_number === 0 || a.position === 'FL') return 1;
-                      // If only b is a non-batting player, it goes to the bottom
-                      if (b.order_number === 0 || b.position === 'FL') return -1;
-                      // Otherwise sort by order_number
-                      return a.order_number - b.order_number;
-                    })
-                    .reduce((acc, player, index, sortedArray) => {
-                      // Check if we need to insert a separator before this player
-                      if (index > 0) {
-                        const prevPlayer = sortedArray[index-1];
-                        const prevIsBatting = prevPlayer.order_number !== 0 && prevPlayer.position !== 'FL';
-                        const currentIsBatting = player.order_number !== 0 && player.position !== 'FL';
-                        
-                        // If transitioning from batting to non-batting
-                        if (prevIsBatting && !currentIsBatting) {
-                          // Add a separator row for the first non-batting player
-                          if (player.position === 'FL') {
-                            acc.push(
-                              <tr key={`flex-separator-${index}`} className="bg-blue-100">
-                                <td colSpan={5} className="px-6 py-2 text-center text-xs font-medium text-blue-800 uppercase">
-                                  Flex Players (Non-Batting)
-                                </td>
-                              </tr>
-                            );
-                          } else {
-                            acc.push(
-                              <tr key={`sub-separator-${index}`} className="bg-gray-200">
-                                <td colSpan={5} className="px-6 py-2 text-center text-xs font-medium text-gray-700 uppercase">
-                                  Substitutes
-                                </td>
-                              </tr>
-                            );
-                          }
-                        }
-                        // If transitioning from FL to SUB
-                        else if (prevPlayer.position === 'FL' && player.position === 'SUB') {
-                          acc.push(
-                            <tr key={`sub-separator-${index}`} className="bg-gray-200">
-                              <td colSpan={5} className="px-6 py-2 text-center text-xs font-medium text-gray-700 uppercase">
-                                Substitutes
-                              </td>
-                            </tr>
-                          );
-                        }
-                      }
-                      
-                      // Add the player row
-                      acc.push(
-                        <tr 
-                          key={index} 
-                          className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} ${isFirstSub(player, index, sortedArray) ? 'border-t-2 border-gray-300' : ''}`}
-                        >
-                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                            {player.position === 'SUB' || player.position === 'FL' ? '-' : player.order_number}
-                          </td>
-                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                            {player.jersey_number}
-                          </td>
-                          <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                            {player.name}
-                          </td>
-                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                            <select
-                              value={player.position}
-                              onChange={(e) => editPosition(index, e.target.value)}
-                              className="border-gray-300 rounded-md text-sm focus:ring-indigo-500 focus:border-indigo-500"
-                            >
-                              {['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'EH', 'DP', 'FL', 'SUB'].map(pos => (
-                                <option key={pos} value={pos}>{pos}</option>
-                              ))}
-                            </select>
-                          </td>
-                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                            <div className="flex space-x-2">
-                              <button
-                                onClick={() => movePlayerUp(index)}
-                                disabled={player.position === 'SUB' || player.position === 'FL' || index === 0 || isFirstSub(player, index, sortedArray)}
-                                className="text-gray-500 hover:text-gray-700 disabled:text-gray-300 disabled:cursor-not-allowed"
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                                </svg>
-                              </button>
-                              <button
-                                onClick={() => movePlayerDown(index)}
-                                disabled={
-                                  player.position === 'SUB' || 
-                                  player.position === 'FL' || 
-                                  index === sortedArray.filter(p => p.position !== 'SUB' && p.position !== 'FL').length - 1 ||
-                                  (index < sortedArray.length - 1 && (sortedArray[index + 1].position === 'SUB' || sortedArray[index + 1].position === 'FL'))
-                                }
-                                className="text-gray-500 hover:text-gray-700 disabled:text-gray-300 disabled:cursor-not-allowed"
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                </svg>
-                              </button>
-                              <button
-                                onClick={() => deletePlayer(index)}
-                                className="text-red-500 hover:text-red-700"
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                      
-                      return acc;
-                    }, [] as React.ReactNode[])}
-                </tbody>
-              </table>
-            </div>
-          )}
+            );
+          })()}
         </div>
       </div>
       
-      {/* Add Player Modal */}
-      <AddPlayerModal
-        isOpen={isAddPlayerModalOpen}
-        onClose={() => setIsAddPlayerModalOpen(false)}
-        availablePlayers={availablePlayers}
-        onAddPlayer={handleAddPlayerToLineup}
-        loading={loadingPlayers}
-      />
-
-      {/* Make sure the missing positions warning is displayed in the correct location */}
-      {findUnusedPositions(activeTab === 'home' ? homeLineup : awayLineup).length > 0 && (
-        <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-          <h3 className="text-sm font-medium text-yellow-800 mb-1">Missing Positions:</h3>
-          <div className="flex flex-wrap gap-2">
-            {findUnusedPositions(activeTab === 'home' ? homeLineup : awayLineup).map(position => (
-              <span key={position} className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs">
-                {position}
-              </span>
-            ))}
+      {/* Legend for color coding */}
+      {currentInning > 1 && (
+        <div className="text-xs text-gray-600 mt-4 bg-white p-2 rounded-md border border-gray-200 flex flex-wrap gap-3">
+          <div className="flex items-center">
+            <div className="w-3 h-3 bg-green-50 border border-green-200 mr-1"></div>
+            <span className="text-green-700 font-medium">New player</span> - added in current inning
+          </div>
+          <div className="flex items-center">
+            <div className="w-3 h-3 bg-yellow-50 border border-yellow-200 mr-1"></div>
+            <span className="text-amber-700 font-medium">Moved</span> - position changed from previous inning
+          </div>
+          <div className="flex items-center">
+            <div className="w-3 h-3 bg-red-50 border border-red-200 mr-1"></div>
+            <span className="text-red-600 font-medium">Removed</span> - not in current inning lineup
           </div>
         </div>
       )}
