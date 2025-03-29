@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo, useCallback } from 'react';
 
 // Player interface
 export interface Player {
@@ -22,7 +22,7 @@ interface LineupTableProps {
   onInningClick?: (inning: number) => void;
 }
 
-const LineupTable: React.FC<LineupTableProps> = ({
+const LineupTable: React.FC<LineupTableProps> = memo(({
   players,
   isLoading,
   showActions = false,
@@ -34,6 +34,13 @@ const LineupTable: React.FC<LineupTableProps> = ({
   currentInning = null,
   onInningClick
 }) => {
+  // Handle inning header click - define this before any conditional returns
+  const handleInningHeaderClick = useCallback(() => {
+    if (inningNumber !== null && onInningClick) {
+      onInningClick(inningNumber);
+    }
+  }, [inningNumber, onInningClick]);
+  
   if (isLoading) {
     return (
       <div className="flex justify-start py-6 max-w-3xl">
@@ -55,13 +62,6 @@ const LineupTable: React.FC<LineupTableProps> = ({
   
   // Check if this is the current inning
   const isCurrentInning = inningNumber !== null && currentInning !== null && inningNumber === currentInning;
-  
-  // Handle inning header click
-  const handleInningHeaderClick = () => {
-    if (inningNumber !== null && onInningClick) {
-      onInningClick(inningNumber);
-    }
-  };
   
   return (
     <div className="max-w-3xl overflow-x-auto">
@@ -157,6 +157,8 @@ const LineupTable: React.FC<LineupTableProps> = ({
       </table>
     </div>
   );
-};
+});
+
+LineupTable.displayName = 'LineupTable';
 
 export default LineupTable; 

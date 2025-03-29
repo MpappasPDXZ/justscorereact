@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, memo } from 'react';
 
 export interface PlayerFormInput {
   jersey_number: string;
@@ -19,7 +19,7 @@ interface AddPlayerFormProps {
   lineupChanged?: boolean;
 }
 
-const AddPlayerForm: React.FC<AddPlayerFormProps> = ({
+const AddPlayerForm: React.FC<AddPlayerFormProps> = memo(({
   currentInning,
   nextOrderNumber,
   onAddPlayer,
@@ -41,7 +41,19 @@ const AddPlayerForm: React.FC<AddPlayerFormProps> = ({
   
   const isMyTeam = activeTab === myTeamHa;
   
-  const handleSubmit = (e: React.FormEvent) => {
+  const handlePlayerChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    setSelectedPlayerId(e.target.value);
+  }, []);
+  
+  const handleJerseyChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setJerseyNumber(e.target.value);
+  }, []);
+  
+  const handleNameChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setPlayerName(e.target.value);
+  }, []);
+  
+  const handleSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
     
     if (isMyTeam) {
@@ -86,7 +98,7 @@ const AddPlayerForm: React.FC<AddPlayerFormProps> = ({
       setJerseyNumber('');
       setPlayerName('');
     }
-  };
+  }, [isMyTeam, selectedPlayerId, jerseyNumber, playerName, activePlayers, onAddPlayer, currentInning]);
   
   return (
     <div className="flex ml-auto">
@@ -108,7 +120,7 @@ const AddPlayerForm: React.FC<AddPlayerFormProps> = ({
               <label className="block text-xs text-gray-500 mb-1">Player</label>
               <select
                 value={selectedPlayerId}
-                onChange={(e) => setSelectedPlayerId(e.target.value)}
+                onChange={handlePlayerChange}
                 className="w-full py-2 px-2 border border-gray-300 rounded-md shadow-sm text-xs focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                 required
                 title="Select Player"
@@ -129,7 +141,7 @@ const AddPlayerForm: React.FC<AddPlayerFormProps> = ({
                 <input
                   type="text"
                   value={jerseyNumber}
-                  onChange={(e) => setJerseyNumber(e.target.value)}
+                  onChange={handleJerseyChange}
                   placeholder="#"
                   className="w-full py-2 px-2 text-center border border-gray-300 rounded-md shadow-sm text-xs focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                   required
@@ -142,7 +154,7 @@ const AddPlayerForm: React.FC<AddPlayerFormProps> = ({
                 <input
                   type="text"
                   value={playerName}
-                  onChange={(e) => setPlayerName(e.target.value)}
+                  onChange={handleNameChange}
                   placeholder="Player Name"
                   className="w-full py-2 px-2 border border-gray-300 rounded-md shadow-sm text-xs focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                   required
@@ -189,6 +201,8 @@ const AddPlayerForm: React.FC<AddPlayerFormProps> = ({
       </form>
     </div>
   );
-};
+});
+
+AddPlayerForm.displayName = 'AddPlayerForm';
 
 export default AddPlayerForm; 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, memo } from 'react';
 import { Player } from './LineupTable';
 
 interface InningSelectorProps {
@@ -17,7 +17,7 @@ interface InningSelectorProps {
   hideActionButtons?: boolean;
 }
 
-const InningSelector: React.FC<InningSelectorProps> = ({
+const InningSelector: React.FC<InningSelectorProps> = memo(({
   currentInning,
   setCurrentInning,
   availableInnings,
@@ -53,10 +53,10 @@ const InningSelector: React.FC<InningSelectorProps> = ({
     } else if (currentInning > endInning) {
       setStartInning(Math.max(1, currentInning - visibleInningCount + 1));
     }
-  }, [currentInning]);
+  }, [currentInning, startInning, endInning, visibleInningCount]);
   
   // Start new inning - using server-side data
-  const handleStartNewInning = async () => {
+  const handleStartNewInning = useCallback(async () => {
     // If we already have lineup data for the current inning
     if (hasLineupForInning(currentInning)) {
       // Calculate the next inning number
@@ -74,7 +74,7 @@ const InningSelector: React.FC<InningSelectorProps> = ({
         // We'll use the fetchPreviousInningLineup after a delay 
         setTimeout(async () => {
           if (fetchPreviousInningLineup) {
-            const success = await fetchPreviousInningLineup(nextInning);
+            await fetchPreviousInningLineup(nextInning);
           }
         }, 300);
       } else {
@@ -89,7 +89,7 @@ const InningSelector: React.FC<InningSelectorProps> = ({
           // Delay fetching data so UI can update first
           setTimeout(async () => {
             if (fetchPreviousInningLineup) {
-              const success = await fetchPreviousInningLineup(nextInning);
+              await fetchPreviousInningLineup(nextInning);
             }
           }, 300);
         } else {
@@ -98,16 +98,16 @@ const InningSelector: React.FC<InningSelectorProps> = ({
         }
       }
     }
-  };
+  }, [currentInning, availableInnings, handleAddInning, fetchPreviousInningLineup, setCurrentInning]);
   
   // Check if an inning has lineup data for the active tab
-  const hasLineupForInning = (inning: number): boolean => {
+  const hasLineupForInning = useCallback((inning: number): boolean => {
     const currentLineup = activeTab === 'home' ? homeLineup : awayLineup;
     return currentLineup.some(player => player.inning_number === inning);
-  };
+  }, [activeTab, homeLineup, awayLineup]);
   
   // Get the last inning with saved lineup data
-  const getLastSavedInning = (): number => {
+  const getLastSavedInning = useCallback((): number => {
     const currentLineup = activeTab === 'home' ? homeLineup : awayLineup;
     if (currentLineup.length === 0) return 0;
     
@@ -116,18 +116,18 @@ const InningSelector: React.FC<InningSelectorProps> = ({
     )).sort((a: number, b: number) => a - b);
     
     return savedInnings.length > 0 ? (savedInnings[savedInnings.length - 1] as number) : 0;
-  };
+  }, [activeTab, homeLineup, awayLineup]);
   
   // Check if the current inning is the last saved inning or inning 1
-  const isLastSavedOrFirstInning = (): boolean => {
+  const isLastSavedOrFirstInning = useCallback((): boolean => {
     const lastSavedInning = getLastSavedInning();
     return currentInning === 1 || currentInning === lastSavedInning;
-  };
+  }, [currentInning, getLastSavedInning]);
   
   // Confirm delete lineup
-  const confirmDeleteLineup = () => {
+  const confirmDeleteLineup = useCallback(() => {
     handleDeleteLineup();
-  };
+  }, [handleDeleteLineup]);
   
   return (
     <div className="flex flex-col">
@@ -236,6 +236,8 @@ const InningSelector: React.FC<InningSelectorProps> = ({
       )}
     </div>
   );
-};
+});
+
+InningSelector.displayName = 'InningSelector';
 
 export default InningSelector; 

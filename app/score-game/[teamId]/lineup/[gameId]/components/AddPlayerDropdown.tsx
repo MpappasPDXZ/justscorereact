@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
 
 export interface RosterPlayer {
   jersey_number: string;
@@ -15,7 +15,7 @@ interface AddPlayerDropdownProps {
   myTeamHa: 'home' | 'away';
 }
 
-const AddPlayerDropdown: React.FC<AddPlayerDropdownProps> = ({ 
+const AddPlayerDropdown: React.FC<AddPlayerDropdownProps> = memo(({ 
   availablePlayers, 
   onAddPlayer, 
   loading,
@@ -42,11 +42,20 @@ const AddPlayerDropdown: React.FC<AddPlayerDropdownProps> = ({
   }, []);
   
   const isMyTeam = activeTab === myTeamHa;
+  
+  const toggleDropdown = useCallback(() => {
+    setIsOpen(prev => !prev);
+  }, []);
+  
+  const handleAddPlayer = useCallback((player: RosterPlayer) => {
+    onAddPlayer(player, currentInning);
+    setIsOpen(false);
+  }, [onAddPlayer, currentInning]);
 
   return (
     <div className="relative inline-block" ref={dropdownRef}>
       <button 
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={toggleDropdown}
         className="py-3 px-4 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 font-medium text-base flex items-center"
       >
         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -79,10 +88,7 @@ const AddPlayerDropdown: React.FC<AddPlayerDropdownProps> = ({
                   {availablePlayers.map((player, index) => (
                     <button 
                       key={`${player.jersey_number}-${index}`} 
-                      onClick={() => {
-                        onAddPlayer(player, currentInning);
-                        setIsOpen(false);
-                      }}
+                      onClick={() => handleAddPlayer(player)}
                       className="w-full text-left px-3 py-2 hover:bg-gray-50 flex items-center"
                     >
                       <span className="bg-gray-200 text-gray-800 rounded-full w-7 h-7 flex items-center justify-center mr-2 text-xs font-semibold">
@@ -99,6 +105,8 @@ const AddPlayerDropdown: React.FC<AddPlayerDropdownProps> = ({
       )}
     </div>
   );
-};
+});
+
+AddPlayerDropdown.displayName = 'AddPlayerDropdown';
 
 export default AddPlayerDropdown; 

@@ -142,10 +142,12 @@ export default function GameLineup() {
       if (!params.teamId || !params.gameId || params.teamId === 'undefined' || params.gameId === 'undefined') {
         console.error('Invalid teamId or gameId', { teamId: params.teamId, gameId: params.gameId });
         setMyTeamHa('home'); // default
-        return;
+        return 'home';
       }
       
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/games/${params.teamId}/${params.gameId}/my_team_ha`);
+      
+      let result = 'home'; // Default value
       
       if (response.ok) {
         // Get the raw response text
@@ -156,34 +158,32 @@ export default function GameLineup() {
         
         // Parse the response
         if (cleanResponse === 'away' || cleanResponse.includes('"away"') || cleanResponse.includes("'away'")) {
-          setMyTeamHa('away');
+          result = 'away';
         } else if (cleanResponse === 'home' || cleanResponse.includes('"home"') || cleanResponse.includes("'home'")) {
-          setMyTeamHa('home');
+          result = 'home';
         } else {
           // Try to parse JSON if it's a JSON string
           try {
             const jsonResponse = JSON.parse(rawResponse);
             if (jsonResponse === 'away' || (typeof jsonResponse === 'object' && jsonResponse.value === 'away')) {
-              setMyTeamHa('away');
-              return;
+              result = 'away';
             } else if (jsonResponse === 'home' || (typeof jsonResponse === 'object' && jsonResponse.value === 'home')) {
-              setMyTeamHa('home');
-              return;
+              result = 'home';
             }
           } catch (jsonError) {
             // Not a valid JSON, continue with fallback
+            result = 'home';
           }
-          
-          // If we can't determine, use home as a fallback
-          setMyTeamHa('home');
         }
-      } else {
-        // Fallback to 'home' if API call fails
-        setMyTeamHa('home');
       }
+      
+      // Update state with the result
+      setMyTeamHa(result as 'home' | 'away');
+      return result;
     } catch (error) {
       // Fallback to 'home' if there's an exception
       setMyTeamHa('home');
+      return 'home';
     }
   };
   
@@ -290,14 +290,12 @@ export default function GameLineup() {
   
   // Fetch lineups
   const fetchLineups = async () => {
-    setLoading(true);
     try {
       // Validate required parameters
       if (!params.teamId || !params.gameId || params.teamId === 'undefined' || params.gameId === 'undefined') {
         console.error('Invalid teamId or gameId parameters', { teamId: params.teamId, gameId: params.gameId });
         setHomeLineup([]);
         setAwayLineup([]);
-        setLoading(false);
         return;
       }
       
@@ -305,62 +303,67 @@ export default function GameLineup() {
       const homeEndpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL}/lineup/${params.teamId}/${params.gameId}/home`;
       const awayEndpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL}/lineup/${params.teamId}/${params.gameId}/away`;
       
-      // First check if lineup is available by fetching away lineup (it contains the lineup_available flag)
-      const awayResponse = await fetch(awayEndpoint);
+      // Fetch both lineups concurrently for efficiency
+      const [homeResponse, awayResponse] = await Promise.all([
+        fetch(homeEndpoint),
+        fetch(awayEndpoint)
+      ]);
       
-      let lineupAvailable = 'no';
+      // Process away lineup
+      let awayLineupData: Player[] = [];
       if (awayResponse.ok) {
         try {
           const awayRawText = await awayResponse.text();
-          
           const awayData = JSON.parse(awayRawText);
-          
-          // Check for lineup_available flag in the response
-          if (awayData.lineup_available) {
-            lineupAvailable = awayData.lineup_available;
-          }
-          
-          // Process the away lineup data
-          const processedAwayLineup = processLineupData(awayData, 'away');
-          setAwayLineup(processedAwayLineup);
-        } catch (jsonError) {
+          awayLineupData = processLineupData(awayData, 'away');
+          setAwayLineup(awayLineupData);
+        } catch (error) {
+          console.error('Error processing away lineup:', error);
           setAwayLineup([]);
         }
       } else {
+        console.warn('Away lineup fetch failed:', awayResponse.status);
         setAwayLineup([]);
       }
       
-      // If lineup is not available, initialize with empty arrays and stop loading
-      if (lineupAvailable.toLowerCase() === 'no') {
-        setHomeLineup([]);
-        setLoading(false);
-        return;
-      }
-      
-      // If we get here, lineup is available, so fetch home lineup as well
-      const homeResponse = await fetch(homeEndpoint);
-      
       // Process home lineup
+      let homeLineupData: Player[] = [];
       if (homeResponse.ok) {
         try {
           const homeRawText = await homeResponse.text();
-          
           const homeData = JSON.parse(homeRawText);
-          
-          // Process the home lineup data
-          const processedHomeLineup = processLineupData(homeData, 'home');
-          setHomeLineup(processedHomeLineup);
-        } catch (jsonError) {
+          homeLineupData = processLineupData(homeData, 'home');
+          setHomeLineup(homeLineupData);
+        } catch (error) {
+          console.error('Error processing home lineup:', error);
           setHomeLineup([]);
         }
       } else {
+        console.warn('Home lineup fetch failed:', homeResponse.status);
         setHomeLineup([]);
       }
+      
+      // Update available innings based on all lineup data
+      const allInningNumbers = [
+        ...homeLineupData.map(p => p.inning_number),
+        ...awayLineupData.map(p => p.inning_number)
+      ];
+      
+      // Ensure we have at least innings 1-12 available plus any additional innings with data
+      const baseInnings = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+      
+      if (allInningNumbers.length > 0) {
+        // Get unique inning numbers
+        const uniqueInnings = Array.from(new Set(allInningNumbers)).sort((a, b) => a - b);
+        const mergedInnings = Array.from(new Set([...baseInnings, ...uniqueInnings])).sort((a, b) => a - b);
+        
+        setAvailableInnings(mergedInnings);
+        setMaxInning(Math.max(...mergedInnings));
+      }
     } catch (error) {
+      console.error('Error fetching lineups:', error);
       setHomeLineup([]);
       setAwayLineup([]);
-    } finally {
-      setLoading(false);
     }
   };
   
@@ -384,67 +387,58 @@ export default function GameLineup() {
       
       // Use the active_players endpoint for my team's data
       const teamActivePlayersEndpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL}/teams/${params.teamId}/active_players`;
-      let endpoint;
       
+      // Only fetch roster players for the user's team, use default players for opponent
       if (myTeamHa === activeTab) {
-        // If viewing my team's lineup, use my team's active players
-        endpoint = teamActivePlayersEndpoint;
-      } else {
-        // Generate a blank dataset for the opponent team
-        const blankDataset = {
-          team_id: params.teamId,
-          team_name: 'Opponent Team',
-          active_players_count: 0,
-          active_players: []
-        };
-        
-        // Use the blank dataset directly instead of fetching
-        setRosterPlayers([]);
-        return;
-      }
-      
-      const response = await fetch(endpoint);
-      
-      if (response.ok) {
+        // Fetch active players for my team
         try {
-          const rawText = await response.text();
+          const response = await fetch(teamActivePlayersEndpoint);
           
-          const data = JSON.parse(rawText);
-          
-          // Handle the new active_players endpoint format
-          if (data.active_players && Array.isArray(data.active_players)) {
-            // Transform the active_players format to our RosterPlayer format
-            const transformedPlayers = data.active_players.map((player: { 
-              jersey_number: number | string; 
-              player_name: string; 
-              position: string 
-            }) => ({
-              jersey_number: player.jersey_number.toString(),
-              player_name: player.player_name,
-              position: player.position // we'll keep this additional data
-            }));
+          if (response.ok) {
+            const rawText = await response.text();
+            const data = JSON.parse(rawText);
             
-            // Store active players separately for my team
-            if (myTeamHa === activeTab) {
+            // Handle the new active_players endpoint format
+            if (data.active_players && Array.isArray(data.active_players)) {
+              // Transform the active_players format to our RosterPlayer format
+              const transformedPlayers = data.active_players.map((player: { 
+                jersey_number: number | string; 
+                player_name: string; 
+                position: string 
+              }) => ({
+                jersey_number: player.jersey_number.toString(),
+                player_name: player.player_name,
+                position: player.position // we'll keep this additional data
+              }));
+              
+              // Store active players separately for use elsewhere in the UI
               setActivePlayersList(transformedPlayers);
+              setRosterPlayers(transformedPlayers);
+            } 
+            // Fall back to handling the traditional roster format
+            else if (Array.isArray(data)) {
+              setRosterPlayers(data);
+              setActivePlayersList(data);
+            } else {
+              console.warn('Unexpected roster data format, using defaults');
+              setRosterPlayers(getDefaultPlayers());
             }
-            
-            setRosterPlayers(transformedPlayers);
-          } 
-          // Fall back to handling the traditional roster format
-          else if (Array.isArray(data)) {
-            setRosterPlayers(data);
           } else {
+            console.warn(`Failed to fetch roster players: ${response.status}`);
             setRosterPlayers(getDefaultPlayers());
           }
-        } catch (jsonError) {
+        } catch (error) {
+          console.error('Error fetching roster players:', error);
           setRosterPlayers(getDefaultPlayers());
         }
       } else {
-        setRosterPlayers(getDefaultPlayers());
+        // For opponent team, use empty roster since we'll add players manually
+        setRosterPlayers([]);
+        // Clear active players list for opponent team
+        setActivePlayersList([]);
       }
     } catch (error) {
-      // Create default players as a fallback
+      console.error('Error in fetchRosterPlayers:', error);
       setRosterPlayers(getDefaultPlayers());
     }
   };
@@ -492,52 +486,26 @@ export default function GameLineup() {
   };
   
   // Refresh lineup data for a specific team
-  const refreshLineupData = async (teamChoice: 'home' | 'away', inningNumber: number) => {
+  const refreshLineupData = async () => {
+    // Skip API refresh if:
+    // 1. Lineup operation is in progress
+    // 2. Lineup has changed but not saved
+    // 3. Still in initial loading phase
+    // 4. When first loading the page (currentInning === 1 and we're in loading state)
+    if (loading || lineupChanged || lineupOperationInProgress || (loading && currentInning === 1)) {
+      return;
+    }
+    
+    setLineupOperationInProgress(true);
+    
     try {
-      setLoading(true);
-      
-      // Only proceed with refresh if lineup data should be available
-      const endpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL}/lineup/${params.teamId}/${params.gameId}/${teamChoice === 'home' ? 'home' : 'away'}`;
-      
-      const response = await fetch(endpoint, {
-        // Use cache: 'no-store' to ensure we're getting fresh data
-        cache: 'no-store',
-      });
-      
-      if (response.ok) {
-        try {
-          const rawText = await response.text();
-          
-          const data = JSON.parse(rawText);
-          
-          // Process the data
-          const processedLineup = processLineupData(data, teamChoice);
-          
-          // Update the lineup state
-          if (teamChoice === 'home') {
-            setHomeLineup(processedLineup);
-          } else {
-            setAwayLineup(processedLineup);
-          }
-        } catch (jsonError) {
-        }
-      } else {
-        const errorText = await response.text().catch(() => 'No response body');
-        
-        if (response.status === 404) {
-          // Handle 404 case - this is expected if lineup hasn't been saved yet
-          if (teamChoice === 'home') {
-            setHomeLineup([]);
-          } else {
-            setAwayLineup([]);
-          }
-        } else {
-          // Other error cases - log but don't show to user
-        }
+      if (params.teamId && params.gameId) {
+        await fetchLineups();
       }
     } catch (error) {
+      console.error('Error refreshing lineup data:', error);
     } finally {
-      setLoading(false);
+      setLineupOperationInProgress(false);
     }
   };
   
@@ -613,62 +581,89 @@ export default function GameLineup() {
 
   // Update data when active tab or current inning changes
   useEffect(() => {
-    // Skip API refresh when a lineup operation is in progress
-    if (lineupOperationInProgress) {
-      return;
-    }
+    // Only refresh data when:
+    // 1. We have valid parameters
+    // 2. Not in the middle of an operation
+    // 3. Not changing the lineup
+    // 4. Not in initial loading
+    // 5. Not the first load of inning 1
+    const isInitialLoad = loading && currentInning === 1;
     
-    // Skip API refresh when lineup has changed but not saved
-    if (lineupChanged) {
-      return;
+    if (
+      params.teamId && 
+      params.gameId && 
+      activeTab && 
+      currentInning && 
+      !lineupOperationInProgress && 
+      !lineupChanged && 
+      !loading &&
+      !isInitialLoad
+    ) {
+      refreshLineupData();
     }
-    
-    refreshLineupData(activeTab, currentInning);
-    
-    // Also update previous inning data if needed
-    if (currentInning > 1) {
-      updatePreviousInningLineup(currentInning - 1);
-    }
-  }, [activeTab, currentInning, lineupOperationInProgress, lineupChanged]);
+  }, [activeTab, currentInning, loading, lineupChanged, lineupOperationInProgress]);
   
-  // Fetch data on component mount
+  // Update the initial data loading useEffect
   useEffect(() => {
     const loadInitialData = async () => {
-      // Check if we have valid parameters before making any API calls
-      if (!params.teamId || params.teamId === 'undefined' || !params.gameId || params.gameId === 'undefined') {
-        console.error('Invalid parameters', { teamId: params.teamId, gameId: params.gameId });
+      // Validate parameters first
+      if (!params.teamId || params.teamId === 'undefined' || 
+          !params.gameId || params.gameId === 'undefined') {
         setLoading(false);
         return;
       }
       
-      // First get the my_team_ha value
-      await fetchMyTeamHa();
-      // Then fetch lineups
-      await fetchLineups();
-      // Fetch roster players last (depends on activeTab which is away by default)
-      await fetchRosterPlayers();
+      setLoading(true);
+      
+      try {
+        // 1. First get the team home/away status
+        const teamType = await fetchMyTeamHa();
+        
+        // 2. Set the active tab to match the user's team
+        setActiveTab(teamType as 'home' | 'away');
+        
+        // 3. Set initial inning to 1
+        setCurrentInning(1);
+        
+        // 4. Fetch lineups data (now with the correct activeTab)
+        await fetchLineups();
+        
+        // 5. Fetch roster players for the active tab
+        await fetchRosterPlayers();
+        
+      } catch (error) {
+        console.error('Error loading initial data:', error);
+      } finally {
+        setLoading(false);
+      }
     };
     
     loadInitialData();
+    // This effect should only run once on component mount
   }, []);
   
-  // Default to "away" tab since away team bats first
-  // Update activeTab based on myTeamHa if it changes
+  // Remove the separate roster players effect as it's now handled in the initial load
   useEffect(() => {
-    // We don't automatically change the active tab when myTeamHa changes
-    // This just ensures we have valid state for UI displays
-    if (myTeamHa !== 'home' && myTeamHa !== 'away') {
-      setMyTeamHa('home');
+    // Only load roster players when tab changes after the initial load
+    const loadRosterPlayers = async () => {
+      if (loading || !params.teamId || params.teamId === 'undefined') {
+        return;
+      }
+      
+      try {
+        await fetchRosterPlayers();
+      } catch (error) {
+        console.error('Error loading roster players:', error);
+      }
+    };
+    
+    // Skip the initial load since it's handled in loadInitialData
+    // Only refresh roster when activeTab changes after initial load
+    const isInitialLoad = loading && currentInning === 1;
+    if (activeTab && !isInitialLoad) {
+      loadRosterPlayers();
     }
-  }, [myTeamHa, activeTab]);
-  
-  // Update roster players when tab changes
-  useEffect(() => {
-    // Only fetch roster players if we have valid parameters
-    if (params.teamId && params.teamId !== 'undefined' && params.gameId && params.gameId !== 'undefined') {
-      fetchRosterPlayers();
-    }
-  }, [activeTab]);
+  }, [activeTab, loading]);
   
   // Now we need to implement proper move player functionality in the GameLineup component
   const handleMovePlayer = (player: Player, direction: 'up' | 'down') => {
