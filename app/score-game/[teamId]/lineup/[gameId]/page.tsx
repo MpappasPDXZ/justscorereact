@@ -477,7 +477,7 @@ export default function GameLineup() {
           showToast('Error loading roster players', 'error');
         }
       } else {
-        // For opponent team, use empty roster since we'll add players manually
+        // For opponent team, use empty roster since we'll add players manually.
         setRosterPlayers([]);
         // Clear active players list for opponent team
         setActivePlayersList([]);
