@@ -1,7 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { RosterPlayer } from './AddPlayerDropdown';
 
-interface AddPlayerDropdownProps {
+interface AddPlayerModalProps {
+  isOpen: boolean;
+  onClose: () => void;
   availablePlayers: RosterPlayer[];
   onAddPlayer: (player: RosterPlayer, inning: number) => void;
   loading: boolean;
@@ -11,7 +13,9 @@ interface AddPlayerDropdownProps {
   myTeamHa: 'home' | 'away';
 }
 
-const AddPlayerDropdown: React.FC<AddPlayerDropdownProps> = ({ 
+const AddPlayerModal: React.FC<AddPlayerModalProps> = ({ 
+  isOpen,
+  onClose,
   availablePlayers, 
   onAddPlayer, 
   loading,
@@ -20,47 +24,42 @@ const AddPlayerDropdown: React.FC<AddPlayerDropdownProps> = ({
   activeTab,
   myTeamHa
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   
-  // Close the dropdown when clicking outside
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
+    const handleEscapeKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
       }
     };
     
-    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscapeKey);
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscapeKey);
     };
-  }, []);
+  }, [onClose]);
   
   const isMyTeam = activeTab === myTeamHa;
 
+  if (!isOpen) return null;
+
   return (
-    <div className="relative inline-block" ref={dropdownRef}>
-      <button 
-        onClick={() => setIsOpen(!isOpen)}
-        className="py-3 px-4 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 font-medium text-base flex items-center"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-        </svg>
-        Add Player #{nextOrderNumber}
-      </button>
-      
-      {isOpen && (
-        <div className="absolute left-0 mt-1 w-72 bg-white shadow-lg rounded-md border border-gray-200 z-50 max-h-96 overflow-y-auto">
-          <div className="p-2 border-b border-gray-200 bg-gray-50 sticky top-0">
-            <h3 className="text-sm font-medium">Add {activeTab === 'home' ? 'Home' : 'Away'} Player (#{nextOrderNumber})</h3>
-            {!isMyTeam && (
-              <p className="text-xs text-amber-600 mt-1">
-                Note: Adding to non-team lineup. Will be saved on submit.
-              </p>
-            )}
-          </div>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-lg max-w-md w-full">
+        <div className="p-4 border-b flex justify-between items-center">
+          <h3 className="text-lg font-medium">Add {activeTab === 'home' ? 'Home' : 'Away'} Player (#{nextOrderNumber})</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        <div className="p-4">
+          {!isMyTeam && (
+            <p className="text-xs text-amber-600 mb-4 p-2 bg-amber-50 rounded border border-amber-200">
+              Note: Adding to non-team lineup. Will be saved on submit.
+            </p>
+          )}
           
           {loading ? (
             <div className="flex justify-center my-4 p-4">
@@ -71,13 +70,13 @@ const AddPlayerDropdown: React.FC<AddPlayerDropdownProps> = ({
               {availablePlayers.length === 0 ? (
                 <p className="text-center text-gray-500 my-4 p-4">No available players found.</p>
               ) : (
-                <div className="divide-y divide-gray-200">
+                <div className="max-h-96 overflow-y-auto divide-y divide-gray-200">
                   {availablePlayers.map((player, index) => (
                     <button 
                       key={`${player.jersey_number}-${index}`} 
                       onClick={() => {
                         onAddPlayer(player, currentInning);
-                        setIsOpen(false);
+                        onClose();
                       }}
                       className="w-full text-left px-3 py-2 hover:bg-gray-50 flex items-center"
                     >
@@ -92,9 +91,9 @@ const AddPlayerDropdown: React.FC<AddPlayerDropdownProps> = ({
             </>
           )}
         </div>
-      )}
+      </div>
     </div>
   );
 };
 
-export default AddPlayerDropdown; 
+export default AddPlayerModal; 
