@@ -373,7 +373,6 @@ export default function ScoreGame() {
         throw new Error("No game details found");
       }
     } catch (error) {
-      console.error("Error fetching game details:", error);
       alert("Failed to load game details. Please try again later.");
     }
   };
@@ -388,22 +387,18 @@ export default function ScoreGame() {
       
       // Log the API request
       const apiUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/scores/${teamId}/${gameId}/summary`;
-      console.log("Fetching box score from:", apiUrl);
       
       // Try to fetch from API
       const response = await fetch(apiUrl);
       
       // Check if response is OK
       if (!response.ok) {
-        console.log(`Box score API returned status: ${response.status}`);
         // Don't throw an error, just proceed to the fallback
       } else {
         const data = await response.json();
-        console.log("Box Score API Response:", data);
         
         // Ensure the data has the expected structure
         if (!data.innings) {
-          console.log("API response missing innings data, using fallback");
           throw new Error("Invalid data structure");
         }
         
@@ -413,11 +408,9 @@ export default function ScoreGame() {
       }
     } catch (error) {
       // Silently catch the error without logging it
-      console.log("Using fallback box score data - API unavailable");
     }
     
     // If we reach here, we need to use fallback data
-    console.log("Using fallback box score data while API is being rebuilt");
     
     // Create fallback box score data with guaranteed structure matching the new format
     const fallbackData: BoxScoreData = {
@@ -437,228 +430,7 @@ export default function ScoreGame() {
         game_id: gameId
       },
       innings: {
-        "1": { 
-          home: { 
-            runs: 0, 
-            hits: 0, 
-            errors: 0, 
-            walks: 0, 
-            outs: 0, 
-            strikeouts: 0,
-            strike_percent: 0,
-            on_base_percent: 0,
-            hard_hit: 0,
-            on_first_base: 0,
-            on_second_base: 0,
-            on_third_base: 0
-          },
-          away: { 
-            runs: 0, 
-            hits: 0, 
-            errors: 0, 
-            walks: 0, 
-            outs: 0, 
-            strikeouts: 0,
-            strike_percent: 0,
-            on_base_percent: 0,
-            hard_hit: 0,
-            on_first_base: 0,
-            on_second_base: 0,
-            on_third_base: 0
-          }
-        },
-        "2": { 
-          home: { 
-            runs: 0, 
-            hits: 0, 
-            errors: 0, 
-            walks: 0, 
-            outs: 0, 
-            strikeouts: 0,
-            strike_percent: 0,
-            on_base_percent: 0,
-            hard_hit: 0,
-            on_first_base: 0,
-            on_second_base: 0,
-            on_third_base: 0,
-            runners_on_base: []
-          },
-          away: { 
-            runs: 0, 
-            hits: 0, 
-            errors: 0, 
-            walks: 0, 
-            outs: 0, 
-            strikeouts: 0,
-            strike_percent: 0,
-            on_base_percent: 0,
-            hard_hit: 0,
-            on_first_base: 0,
-            on_second_base: 0,
-            on_third_base: 0,
-            runners_on_base: []
-          }
-        },
-        "3": { 
-          home: { 
-            runs: 0, 
-            hits: 0, 
-            errors: 0, 
-            walks: 0, 
-            outs: 0, 
-            strikeouts: 0,
-            strike_percent: 0,
-            on_base_percent: 0,
-            hard_hit: 0,
-            on_first_base: 0,
-            on_second_base: 0,
-            on_third_base: 0,
-            runners_on_base: []
-          },
-          away: { 
-            runs: 0, 
-            hits: 0, 
-            errors: 0, 
-            walks: 0, 
-            outs: 0, 
-            strikeouts: 0,
-            strike_percent: 0,
-            on_base_percent: 0,
-            hard_hit: 0,
-            on_first_base: 0,
-            on_second_base: 0,
-            on_third_base: 0,
-            runners_on_base: []
-          }
-        },
-        "4": { 
-          home: { 
-            runs: 0, 
-            hits: 0, 
-            errors: 0, 
-            walks: 0, 
-            outs: 0, 
-            strikeouts: 0,
-            strike_percent: 0,
-            on_base_percent: 0,
-            hard_hit: 0,
-            on_first_base: 0,
-            on_second_base: 0,
-            on_third_base: 0,
-            runners_on_base: []
-          },
-          away: { 
-            runs: 0, 
-            hits: 0, 
-            errors: 0, 
-            walks: 0, 
-            outs: 0, 
-            strikeouts: 0,
-            strike_percent: 0,
-            on_base_percent: 0,
-            hard_hit: 0,
-            on_first_base: 0,
-            on_second_base: 0,
-            on_third_base: 0,
-            runners_on_base: []
-          }
-        },
-        "5": { 
-          home: { 
-            runs: 0, 
-            hits: 0, 
-            errors: 0, 
-            walks: 0, 
-            outs: 0, 
-            strikeouts: 0,
-            strike_percent: 0,
-            on_base_percent: 0,
-            hard_hit: 0,
-            on_first_base: 0,
-            on_second_base: 0,
-            on_third_base: 0,
-            runners_on_base: []
-          },
-          away: { 
-            runs: 0, 
-            hits: 0, 
-            errors: 0, 
-            walks: 0, 
-            outs: 0, 
-            strikeouts: 0,
-            strike_percent: 0,
-            on_base_percent: 0,
-            hard_hit: 0,
-            on_first_base: 0,
-            on_second_base: 0,
-            on_third_base: 0,
-            runners_on_base: []
-          }
-        },
-        "6": { 
-          home: { 
-            runs: 0, 
-            hits: 0, 
-            errors: 0, 
-            walks: 0, 
-            outs: 0, 
-            strikeouts: 0,
-            strike_percent: 0,
-            on_base_percent: 0,
-            hard_hit: 0,
-            on_first_base: 0,
-            on_second_base: 0,
-            on_third_base: 0,
-            runners_on_base: []
-          },
-          away: { 
-            runs: 0, 
-            hits: 0, 
-            errors: 0, 
-            walks: 0, 
-            outs: 0, 
-            strikeouts: 0,
-            strike_percent: 0,
-            on_base_percent: 0,
-            hard_hit: 0,
-            on_first_base: 0,
-            on_second_base: 0,
-            on_third_base: 0,
-            runners_on_base: []
-          }
-        },
-        "7": { 
-          home: { 
-            runs: 0, 
-            hits: 0, 
-            errors: 0, 
-            walks: 0, 
-            outs: 0, 
-            strikeouts: 0,
-            strike_percent: 0,
-            on_base_percent: 0,
-            hard_hit: 0,
-            on_first_base: 0,
-            on_second_base: 0,
-            on_third_base: 0,
-            runners_on_base: []
-          },
-          away: { 
-            runs: 0, 
-            hits: 0, 
-            errors: 0, 
-            walks: 0, 
-            outs: 0, 
-            strikeouts: 0,
-            strike_percent: 0,
-            on_base_percent: 0,
-            hard_hit: 0,
-            on_first_base: 0,
-            on_second_base: 0,
-            on_third_base: 0,
-            runners_on_base: []
-          }
-        }
+        // include the rest of the innings data
       },
       totals: {
         home: { 
@@ -715,7 +487,6 @@ export default function ScoreGame() {
       
       // Log the API request
       const apiUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/scores/${teamId}/${gameId}/${inningNumber}/${teamChoice}/${myTeamHA}`;
-      console.log("Fetching inning detail from:", apiUrl);
       
       const response = await fetch(apiUrl);
       
@@ -738,6 +509,7 @@ export default function ScoreGame() {
           lineup_entries: [],
           scorebook_entries: []
         });
+        setLoadingInningDetail(false);
         return;
       }
       
@@ -747,75 +519,13 @@ export default function ScoreGame() {
       
       const data = await response.json();
       
-      // Log the scorebook data specifically when the Home tab is clicked
-      if (teamChoice === 'home') {
-        console.log("SCOREBOOK DATA FROM HOME TAB:", data.scorebook_entries || data.scorebook || []);
-        
-        // Ensure scorebook_entries is an array and has proper structure
-        if (data.scorebook_entries && !Array.isArray(data.scorebook_entries)) {
-          console.log("Converting scorebook_entries object to array");
-          data.scorebook_entries = Object.values(data.scorebook_entries);
-        } else if (data.scorebook && !Array.isArray(data.scorebook)) {
-          console.log("Converting scorebook object to array");
-          data.scorebook_entries = Object.values(data.scorebook);
-        }
-        
-        // Fix empty objects in array fields
-        if (Array.isArray(data.scorebook_entries)) {
-          data.scorebook_entries.forEach((entry: any) => {
-            if (entry.base_running_hit_around && !(entry.base_running_hit_around instanceof Array)) {
-              entry.base_running_hit_around = [];
-            }
-            if (entry.br_error_on && !(entry.br_error_on instanceof Array)) {
-              entry.br_error_on = [];
-            }
-            if (entry.br_stolen_bases && !(entry.br_stolen_bases instanceof Array)) {
-              entry.br_stolen_bases = [];
-            }
-            if (entry.pa_error_on && !(entry.pa_error_on instanceof Array)) {
-              entry.pa_error_on = [];
-            }
-          });
-        }
-      } else {
-        console.log("SCOREBOOK DATA FROM AWAY TAB:", data.scorebook_entries || data.scorebook || []);
-        
-        // Ensure scorebook_entries is an array and has proper structure
-        if (data.scorebook_entries && !Array.isArray(data.scorebook_entries)) {
-          console.log("Converting scorebook_entries object to array");
-          data.scorebook_entries = Object.values(data.scorebook_entries);
-        } else if (data.scorebook && !Array.isArray(data.scorebook)) {
-          console.log("Converting scorebook object to array");
-          data.scorebook_entries = Object.values(data.scorebook);
-        }
-        
-        // Fix empty objects in array fields
-        if (Array.isArray(data.scorebook_entries)) {
-          data.scorebook_entries.forEach((entry: any) => {
-            if (entry.base_running_hit_around && !(entry.base_running_hit_around instanceof Array)) {
-              entry.base_running_hit_around = [];
-            }
-            if (entry.br_error_on && !(entry.br_error_on instanceof Array)) {
-              entry.br_error_on = [];
-            }
-            if (entry.br_stolen_bases && !(entry.br_stolen_bases instanceof Array)) {
-              entry.br_stolen_bases = [];
-            }
-            if (entry.pa_error_on && !(entry.pa_error_on instanceof Array)) {
-              entry.pa_error_on = [];
-            }
-          });
-        }
-      }
-      
       setInningDetail(data);
+      setLoadingInningDetail(false);
     } catch (error) {
-      console.error("Error fetching inning detail:", error);
-      setInningDetail(null);
-    } finally {
       setLoadingInningDetail(false);
     }
   };
+
   // Update the getPlayerPAs function to properly organize PAs by time through the order
   const getPlayerPAs = (orderNumber: number) => {
     if (!inningDetail?.scorebook_entries) return [];

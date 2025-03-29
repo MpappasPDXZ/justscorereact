@@ -139,7 +139,7 @@ export default function GameLineup() {
   const fetchMyTeamHa = async () => {
     try {
       // Ensure we have valid teamId and gameId
-      if (!params.teamId || !params.gameId || params.gameId === 'undefined') {
+      if (!params.teamId || !params.gameId || params.teamId === 'undefined' || params.gameId === 'undefined') {
         console.error('Invalid teamId or gameId', { teamId: params.teamId, gameId: params.gameId });
         setMyTeamHa('home'); // default
         return;
@@ -293,8 +293,10 @@ export default function GameLineup() {
     setLoading(true);
     try {
       // Validate required parameters
-      if (!params.teamId || !params.gameId || params.gameId === 'undefined') {
+      if (!params.teamId || !params.gameId || params.teamId === 'undefined' || params.gameId === 'undefined') {
         console.error('Invalid teamId or gameId parameters', { teamId: params.teamId, gameId: params.gameId });
+        setHomeLineup([]);
+        setAwayLineup([]);
         setLoading(false);
         return;
       }
@@ -322,11 +324,9 @@ export default function GameLineup() {
           const processedAwayLineup = processLineupData(awayData, 'away');
           setAwayLineup(processedAwayLineup);
         } catch (jsonError) {
+          setAwayLineup([]);
         }
       } else {
-        if (awayResponse.status === 404) {
-        } else {
-        }
         setAwayLineup([]);
       }
       
@@ -351,11 +351,9 @@ export default function GameLineup() {
           const processedHomeLineup = processLineupData(homeData, 'home');
           setHomeLineup(processedHomeLineup);
         } catch (jsonError) {
+          setHomeLineup([]);
         }
       } else {
-        if (homeResponse.status === 404) {
-        } else {
-        }
         setHomeLineup([]);
       }
     } catch (error) {
@@ -380,6 +378,7 @@ export default function GameLineup() {
       // Validate required parameters
       if (!params.teamId || params.teamId === 'undefined') {
         console.error('Invalid teamId parameter', { teamId: params.teamId });
+        setRosterPlayers(getDefaultPlayers());
         return;
       }
       
@@ -391,9 +390,7 @@ export default function GameLineup() {
         // If viewing my team's lineup, use my team's active players
         endpoint = teamActivePlayersEndpoint;
       } else {
-        
-        // please generate a dataset instead of doing this call.  this is what the json looks like for active_players endpoint. {"team_id":"1","team_name":"NE Thunder 11U","active_players_count":11,"active_players":[{"jersey_number":"10","player_name":"Avry Vandeberg","position":"P"},{"jersey_number":"11","player_name":"Ellie Pappas","position":"C"},
-        //generatea a blank dataset for the opponent team.
+        // Generate a blank dataset for the opponent team
         const blankDataset = {
           team_id: params.teamId,
           team_name: 'Opponent Team',
@@ -441,59 +438,13 @@ export default function GameLineup() {
             setRosterPlayers(getDefaultPlayers());
           }
         } catch (jsonError) {
+          setRosterPlayers(getDefaultPlayers());
         }
       } else {
-        // Try getting active players for my team
-        const fallbackResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/teams/${params.teamId}/active_players`);
-        
-        if (fallbackResponse.ok) {
-          try {
-            const fallbackRawText = await fallbackResponse.text();
-            
-            const fallbackData = JSON.parse(fallbackRawText);
-            
-            console.log("Using team active_players as fallback");
-            
-            // Handle the active_players endpoint format
-            if (fallbackData.active_players && Array.isArray(fallbackData.active_players)) {
-              // Transform the active_players format to our RosterPlayer format
-              const transformedPlayers = fallbackData.active_players.map((player: { 
-                jersey_number: number | string; 
-                player_name: string; 
-                position: string 
-              }) => ({
-                jersey_number: player.jersey_number.toString(),
-                player_name: player.player_name,
-                position: player.position // we'll keep this additional data
-              }));
-              
-              // Store active players separately for my team
-              if (myTeamHa !== activeTab) {
-                setRosterPlayers(transformedPlayers);
-              }
-            }
-            // Fall back to handling the traditional format if needed
-            else if (Array.isArray(fallbackData)) {
-              if (myTeamHa !== activeTab) {
-                setRosterPlayers(fallbackData);
-              }
-            } else {
-              if (myTeamHa !== activeTab) {
-                setRosterPlayers(getDefaultPlayers());
-              }
-            }
-          } catch (jsonError) {
-          }
-        } else {
-          console.log("Creating default players as fallback");
-          if (myTeamHa !== activeTab) {
-            setRosterPlayers(getDefaultPlayers());
-          }
-        }
+        setRosterPlayers(getDefaultPlayers());
       }
     } catch (error) {
       // Create default players as a fallback
-      console.log("Creating default players after error");
       setRosterPlayers(getDefaultPlayers());
     }
   };
@@ -683,6 +634,13 @@ export default function GameLineup() {
   // Fetch data on component mount
   useEffect(() => {
     const loadInitialData = async () => {
+      // Check if we have valid parameters before making any API calls
+      if (!params.teamId || params.teamId === 'undefined' || !params.gameId || params.gameId === 'undefined') {
+        console.error('Invalid parameters', { teamId: params.teamId, gameId: params.gameId });
+        setLoading(false);
+        return;
+      }
+      
       // First get the my_team_ha value
       await fetchMyTeamHa();
       // Then fetch lineups
@@ -706,7 +664,10 @@ export default function GameLineup() {
   
   // Update roster players when tab changes
   useEffect(() => {
-    fetchRosterPlayers();
+    // Only fetch roster players if we have valid parameters
+    if (params.teamId && params.teamId !== 'undefined' && params.gameId && params.gameId !== 'undefined') {
+      fetchRosterPlayers();
+    }
   }, [activeTab]);
   
   // Now we need to implement proper move player functionality in the GameLineup component
