@@ -50,20 +50,33 @@ export default function ManageTeamForm({ onTeamCreated, isCreate }: ManageTeamFo
 
   const handleCreateOrEdit = async (formData: FormData) => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/create_team/`, {
-        method: 'POST',
+      // Prepare the data to be sent
+      const teamData = {
+        team_name: formData.get('team_name')?.toString().trim(),
+        head_coach: formData.get('head_coach')?.toString().trim(),
+        age: Number(formData.get('age')),
+        season: formData.get('season')?.toString(), // Convert number to string
+        session: formData.get('session')?.toString(),
+        created_on: selectedTeam?.created_on || getTodayFormatted(), // Use existing date or today
+        ...(selectedTeam?.team_id && { team_id: parseInt(selectedTeam.team_id) }) // Convert team_id to integer
+      };
+      
+      // Log the data being sent for debugging
+      console.log('Team data being sent:', teamData);
+      
+      // Determine the endpoint based on whether we're creating or editing
+      const endpoint = selectedTeam?.team_id 
+        ? `${process.env.NEXT_PUBLIC_API_BASE_URL}/teams/${parseInt(selectedTeam.team_id)}/edit` 
+        : `${process.env.NEXT_PUBLIC_API_BASE_URL}/teams/create_team/`;
+      
+      console.log('Using endpoint:', endpoint);
+      
+      const response = await fetch(endpoint, {
+        method: 'POST', // Using POST for both create and edit
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          team_name: formData.get('team_name')?.toString().trim(),
-          head_coach: formData.get('head_coach')?.toString().trim(),
-          age: Number(formData.get('age')),
-          season: formData.get('season')?.toString(), // Convert number to string
-          session: formData.get('session')?.toString(),
-          created_on: selectedTeam?.created_on || getTodayFormatted(), // Use existing date or today
-          ...(selectedTeam?.team_id && { team_id: selectedTeam.team_id })
-        })
+        body: JSON.stringify(teamData)
       });
 
       if (!response.ok) {

@@ -103,7 +103,6 @@ function RosterContent() {
       setPlayers(formattedRoster);
       setError(null);
     } catch (err) {
-      console.error('Error in fetchPlayers:', err);
       if (err instanceof Error && err.message.includes("No players found")) {
         setPlayers([]);
         setError(null);
@@ -168,11 +167,6 @@ function RosterContent() {
         defensive_position_allocation_four: playerData.defensive_position_allocation_four || null,
       };
 
-      // Debug logs
-      console.log('Raw player data:', playerData);
-      console.log('Formatted data:', formattedData);
-      console.log('JSON to send:', JSON.stringify(formattedData, null, 2));
-
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/teams/${teamId}/player`,
         {
@@ -204,7 +198,6 @@ function RosterContent() {
       // Force a re-render of the component
       setPlayers(prev => [...prev]);
     } catch (error) {
-      console.error("Error adding player:", error);
       setError(error instanceof Error ? error.message : "Failed to add player");
     }
   };
@@ -258,11 +251,6 @@ function RosterContent() {
         defensive_position_allocation_four: playerData.defensive_position_allocation_four || null,
       };
 
-      // Debug logs
-      console.log('Raw player data (edit):', playerData);
-      console.log('Formatted data (edit):', formattedData);
-      console.log('JSON to send (edit):', JSON.stringify(formattedData, null, 2));
-
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/teams/${teamId}/player`,
         {
@@ -283,7 +271,6 @@ function RosterContent() {
       setIsEditModalOpen(false);
       setEditingPlayer(null);
     } catch (error) {
-      console.error("Error updating player:", error);
       setError(error instanceof Error ? error.message : "Failed to update player");
     }
   };
@@ -329,11 +316,27 @@ function RosterContent() {
     return positionAllocations
   }
 
+  // Sort players by jersey number numerically
+  const sortedPlayers = [...players].sort((a, b) => {
+    // Convert jersey numbers to integers for proper numerical sorting
+    const jerseyA = parseInt(a.jersey_number) || 0; // fallback to 0 if not a valid number
+    const jerseyB = parseInt(b.jersey_number) || 0;
+    return jerseyA - jerseyB;
+  });
+
   // Filter players based on search term
-  const filteredPlayers = players.filter(player => 
-    player.player_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    player.jersey_number.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredPlayers = sortedPlayers.filter(player => {
+    if (!searchTerm) return true;
+    const term = searchTerm.toLowerCase();
+    return (
+      player.player_name.toLowerCase().includes(term) ||
+      player.jersey_number.toString().includes(term)
+    );
+  });
+
+  // Count filtered players for display
+  const filteredCount = filteredPlayers.length;
+  const totalCount = players.length;
 
   // Highlight matching text in player name or jersey number
   const highlightMatch = (text: string) => {
@@ -426,7 +429,7 @@ function RosterContent() {
           )}
         </div>
         <div className="text-xs text-gray-500 ml-2">
-          {filteredPlayers.length} of {players.length} players
+          {filteredCount} of {totalCount} players
         </div>
       </div>
 

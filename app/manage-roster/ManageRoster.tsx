@@ -54,7 +54,6 @@ export default function ManageRoster({ teamId, onPlayerAdded }: ManageRosterProp
         onPlayerAdded()
       }
     } catch (err) {
-      console.error('Fetch error:', err)
       setError("Failed to fetch roster")
     } finally {
       setLoading(false)
@@ -78,7 +77,7 @@ export default function ManageRoster({ teamId, onPlayerAdded }: ManageRosterProp
         onPlayerAdded(); // Call the callback to trigger parent refresh
       }
     } catch (error) {
-      console.error('Error adding player:', error);
+      setError("Failed to add player")
     }
   };
 
@@ -161,6 +160,13 @@ export default function ManageRoster({ teamId, onPlayerAdded }: ManageRosterProp
     player.jersey_number.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Sort players by jersey number numerically
+  const sortedPlayers = [...filteredPlayers].sort((a, b) => {
+    const jerseyA = parseInt(a.jersey_number) || 0; // fallback to 0 if not a valid number
+    const jerseyB = parseInt(b.jersey_number) || 0;
+    return jerseyA - jerseyB;
+  });
+
   // Highlight matching text in player name
   const highlightMatch = (text: string) => {
     if (!searchTerm) return text;
@@ -218,7 +224,7 @@ export default function ManageRoster({ teamId, onPlayerAdded }: ManageRosterProp
         <div className="flex justify-between items-center mb-1">
           <h1 className="text-base font-bold text-gray-800">Team Roster</h1>
           <div className="text-xs text-gray-500 self-center">
-            {filteredPlayers.length} of {players.length} players
+            {sortedPlayers.length} of {players.length} players
           </div>
         </div>
         
@@ -248,94 +254,98 @@ export default function ManageRoster({ teamId, onPlayerAdded }: ManageRosterProp
         </div>
       </div>
 
-      {loading ? (
-        <div className="flex justify-center items-center h-16">
-          <p className="text-gray-500 text-sm">Loading roster...</p>
-        </div>
-      ) : error ? (
-        <div className="bg-red-50 border border-red-200 rounded-md p-2 text-sm">
-          <p className="text-red-600">{error}</p>
-        </div>
-      ) : (
-        <div className="overflow-x-auto bg-white rounded-md shadow-sm border border-gray-200">
-          <table className="min-w-full divide-y divide-gray-200 text-xs">
+      {/* Table displaying the roster */}
+      <div className="bg-white rounded-md border border-gray-200 shadow-sm overflow-hidden">
+        {loading ? (
+          <div className="p-4 text-center">
+            <div className="inline-block animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-indigo-500"></div>
+            <p className="mt-2 text-sm text-gray-600">Loading roster...</p>
+          </div>
+        ) : error ? (
+          <div className="p-4 text-center text-red-500">{error}</div>
+        ) : sortedPlayers.length === 0 ? (
+          <div className="p-4 text-center">
+            {searchTerm ? (
+              <p className="text-gray-500">No players match your search: <span className="font-medium">&quot;{searchTerm}&quot;</span></p>
+            ) : (
+              <p className="text-gray-500">No players found. Add players to create a roster.</p>
+            )}
+          </div>
+        ) : (
+          <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
-              <tr className="text-left text-gray-500 uppercase tracking-wider">
-                <th scope="col" className="px-3 py-1.5">Name</th>
-                <th scope="col" className="px-3 py-1.5">Jersey #</th>
-                <th scope="col" className="px-3 py-1.5">Status</th>
-                <th scope="col" className="px-3 py-1.5">Positions</th>
-                <th scope="col" className="px-3 py-1.5">Actions</th>
+              <tr>
+                <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
+                  Jersey
+                </th>
+                <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Name
+                </th>
+                <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
+                  Positions
+                </th>
+                <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">
+                  Status
+                </th>
+                <th scope="col" className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
+                  
+                </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {players.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-3 py-1.5 text-center text-xs text-gray-500">
-                    No players in the roster yet
+              {sortedPlayers.map((player) => (
+                <tr key={player.jersey_number} className="hover:bg-gray-50">
+                  <td className="px-3 py-1.5 whitespace-nowrap">
+                    <div className="text-xs text-gray-900">{highlightMatch(player.jersey_number)}</div>
                   </td>
-                </tr>
-              ) : filteredPlayers.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-3 py-1.5 text-center text-xs text-gray-500">
-                    No players match your search: <span className="font-medium">&quot;{searchTerm}&quot;</span>
-                  </td>
-                </tr>
-              ) : (
-                filteredPlayers.map((player) => (
-                  <tr key={player.jersey_number} className="hover:bg-gray-50">
-                    <td className="px-3 py-1.5 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <span className="text-xs font-medium text-gray-900">{highlightMatch(player.player_name)}</span>
-                        <button
-                          className="text-gray-400 hover:text-red-600 transition-colors ml-2"
-                          onClick={() => {
-                            if (window.confirm(`Are you sure you want to delete ${player.player_name}?`)) {
-                              handleDeletePlayer(player)
-                            }
-                          }}
-                        >
-                          <TrashIcon className="h-3 w-3" />
-                        </button>
-                      </div>
-                    </td>
-                    <td className="px-3 py-1.5 whitespace-nowrap">
-                      <div className="text-xs text-gray-900">{highlightMatch(player.jersey_number)}</div>
-                    </td>
-                    <td className="px-3 py-1.5 whitespace-nowrap">
-                      <span className={`px-1.5 inline-flex text-[10px] leading-4 font-medium rounded-full ${
-                        player.active === "Active" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                      }`}>
-                        {player.active}
-                      </span>
-                    </td>
-                    <td className="px-3 py-1.5 whitespace-nowrap">
-                      <div className="flex flex-col gap-0.5">
-                        {renderPositions(player)}
-                      </div>
-                    </td>
-                    <td className="px-3 py-1.5 whitespace-nowrap">
+                  <td className="px-3 py-1.5 whitespace-nowrap">
+                    <div className="flex items-center">
+                      <span className="text-xs font-medium text-gray-900">{highlightMatch(player.player_name)}</span>
                       <button
-                        className={`text-[10px] py-0.5 px-1.5 rounded ${
-                          player.active === "Active" 
-                            ? "text-red-600 border border-red-300 hover:bg-red-50" 
-                            : "text-green-600 border border-green-300 hover:bg-green-50"
-                        }`}
-                        onClick={() => handleUpdatePlayer({ 
-                          ...player, 
-                          active: player.active === "Active" ? "Inactive" : "Active" 
-                        })}
+                        className="text-gray-400 hover:text-red-600 transition-colors ml-2"
+                        onClick={() => {
+                          if (window.confirm(`Are you sure you want to delete ${player.player_name}?`)) {
+                            handleDeletePlayer(player)
+                          }
+                        }}
                       >
-                        {player.active === "Active" ? "Deactivate" : "Activate"}
+                        <TrashIcon className="h-3 w-3" />
                       </button>
-                    </td>
-                  </tr>
-                ))
-              )}
+                    </div>
+                  </td>
+                  <td className="px-3 py-1.5 whitespace-nowrap">
+                    <div className="flex flex-col gap-0.5">
+                      {renderPositions(player)}
+                    </div>
+                  </td>
+                  <td className="px-3 py-1.5 whitespace-nowrap">
+                    <span className={`px-1.5 inline-flex text-[10px] leading-4 font-medium rounded-full ${
+                      player.active === "Active" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                    }`}>
+                      {player.active}
+                    </span>
+                  </td>
+                  <td className="px-3 py-1.5 whitespace-nowrap">
+                    <button
+                      className={`text-[10px] py-0.5 px-1.5 rounded ${
+                        player.active === "Active" 
+                          ? "text-red-600 border border-red-300 hover:bg-red-50" 
+                          : "text-green-600 border border-green-300 hover:bg-green-50"
+                      }`}
+                      onClick={() => handleUpdatePlayer({ 
+                        ...player, 
+                        active: player.active === "Active" ? "Inactive" : "Active" 
+                      })}
+                    >
+                      {player.active === "Active" ? "Deactivate" : "Activate"}
+                    </button>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
-        </div>
-      )}
+        )}
+      </div>
 
       <AddPlayerModal
         isOpen={isAddPlayerModalOpen}

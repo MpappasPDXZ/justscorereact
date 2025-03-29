@@ -30,6 +30,10 @@ export default function TeamList({ onTeamSelect, searchTerm = "" }: TeamListProp
   const [showEditModal, setShowEditModal] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [pendingDeleteTeamId, setPendingDeleteTeamId] = useState<string | null>(null)
+  const [deletingTeamId, setDeletingTeamId] = useState<string | null>(null)
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false)
+  const [teamToDelete, setTeamToDelete] = useState<string | null>(null)
   const router = useRouter()
 
   // Fetch teams list
@@ -54,6 +58,50 @@ export default function TeamList({ onTeamSelect, searchTerm = "" }: TeamListProp
     
     setFilteredTeams(filtered)
   }, [searchTerm, teams])
+
+  // Effect to handle team deletion outside the click handler
+  useEffect(() => {
+    // Only run when pendingDeleteTeamId changes and isn't null
+    if (pendingDeleteTeamId) {
+      const deleteTeam = async () => {
+        try {
+          setDeletingTeamId(pendingDeleteTeamId);
+          
+          // Optimistically update UI first (before API call)
+          setTeams(prevTeams => prevTeams.filter(team => team.team_id !== pendingDeleteTeamId));
+          setFilteredTeams(prevTeams => prevTeams.filter(team => team.team_id !== pendingDeleteTeamId));
+          
+          // Then make the API call
+          const response = await fetch(
+            `${process.env.NEXT_PUBLIC_API_BASE_URL}/teams/${parseInt(pendingDeleteTeamId)}`,
+            {
+              method: 'DELETE',
+            }
+          );
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to delete team');
+          }
+          
+          // Only fetch teams if needed (optional refresh)
+          fetchTeams();
+        } catch (error) {
+          console.error('Error deleting team:', error);
+          alert('Failed to delete team. Please try again.');
+          
+          // Revert the optimistic update if there was an error
+          fetchTeams();
+        } finally {
+          setDeletingTeamId(null);
+          setPendingDeleteTeamId(null);
+        }
+      };
+      
+      // Start the deletion process on next frame
+      deleteTeam();
+    }
+  }, [pendingDeleteTeamId]);
 
   const fetchTeams = async () => {
     try {
@@ -89,28 +137,36 @@ export default function TeamList({ onTeamSelect, searchTerm = "" }: TeamListProp
       if (!selectedTeam?.team_id) {
         throw new Error('No team ID found');
       }
+      
+      // Create the team data object with consistent data types
+      const teamData = {
+        team_id: parseInt(selectedTeam.team_id),
+        team_name: formData.get('team_name')?.toString().trim(),
+        head_coach: formData.get('head_coach')?.toString().trim(),
+        age: Number(formData.get('age')),
+        season: formData.get('season')?.toString(), // Explicitly convert to string
+        session: formData.get('session')?.toString(), // Explicitly convert to string
+        created_on: selectedTeam.created_on
+      };
+      
+      // Log the data for debugging
+      console.log('Editing team with data:', teamData);
+      console.log('Using edit endpoint:', `${process.env.NEXT_PUBLIC_API_BASE_URL}/teams/${parseInt(selectedTeam.team_id)}/edit`);
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/teams/${selectedTeam.team_id}/metadata`, 
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/teams/${parseInt(selectedTeam.team_id)}/edit`, 
         {
-          method: 'PUT',
+          method: 'POST', // Changed from PUT to POST
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            team_id: selectedTeam.team_id,
-            team_name: formData.get('team_name'),
-            head_coach: formData.get('head_coach'),
-            age: Number(formData.get('age')),
-            season: formData.get('season'),
-            session: formData.get('session'),
-            created_on: selectedTeam.created_on
-          })
+          body: JSON.stringify(teamData)
         }
       );
 
       if (!response.ok) {
         const errorData = await response.json();
+        console.error('Server error response:', errorData);
         throw new Error(errorData.detail || 'Failed to save team');
       }
       
@@ -124,31 +180,35 @@ export default function TeamList({ onTeamSelect, searchTerm = "" }: TeamListProp
     }
   };
 
-  const handleDelete = async (teamId: string) => {
-    // Add confirmation dialog
-    if (!confirm('Are you sure you want to delete this team? This action cannot be undone.')) {
-      return;
-    }
-
-    try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/teams/${teamId}`,
-        {
-          method: 'DELETE',
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to delete team');
-      }
-
-      // Refresh the team list after successful deletion
-      fetchTeams();
-    } catch (error) {
-      console.error('Error deleting team:', error);
-      alert('Failed to delete team. Please try again.');
-    }
+  // Quick click handler that just opens the confirm modal
+  const handleDeleteClick = (teamId: string, event: React.MouseEvent) => {
+    // Stop event propagation to prevent team selection
+    event.stopPropagation();
+    
+    // Don't do anything if already in the process of deleting
+    if (deletingTeamId || pendingDeleteTeamId) return;
+    
+    // Set the team to delete and show the confirmation modal
+    setTeamToDelete(teamId);
+    setShowDeleteConfirmModal(true);
+  };
+  
+  // Confirm deletion - triggered by modal
+  const confirmDelete = () => {
+    if (!teamToDelete) return;
+    
+    // Set pending delete ID - the useEffect will handle the actual deletion
+    setPendingDeleteTeamId(teamToDelete);
+    
+    // Close the modal and clear the team to delete
+    setShowDeleteConfirmModal(false);
+    setTeamToDelete(null);
+  };
+  
+  // Cancel deletion
+  const cancelDelete = () => {
+    setShowDeleteConfirmModal(false);
+    setTeamToDelete(null);
   };
 
   const handleTeamClick = (teamId: string) => {
@@ -206,13 +266,21 @@ export default function TeamList({ onTeamSelect, searchTerm = "" }: TeamListProp
                     </svg>
                   </button>
                   <button
-                    onClick={() => handleDelete(team.team_id)}
+                    onClick={(e) => handleDeleteClick(team.team_id, e)}
                     className="text-red-600 hover:text-red-800"
                     title="Delete team"
+                    disabled={deletingTeamId === team.team_id}
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
+                    {deletingTeamId === team.team_id ? (
+                      <svg className="w-4 h-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    )}
                   </button>
                 </div>
               </div>
@@ -301,6 +369,32 @@ export default function TeamList({ onTeamSelect, searchTerm = "" }: TeamListProp
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirmModal && teamToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white p-6 rounded-lg w-96">
+            <h2 className="text-xl font-bold mb-4">Confirm Deletion</h2>
+            <p>Are you sure you want to delete this team? This action cannot be undone.</p>
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={cancelDelete}
+                className="px-4 py-2 border rounded text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+              >
+                Delete
+              </button>
+            </div>
           </div>
         </div>
       )}
