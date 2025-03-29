@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import EditGameModal from "../EditGameModal";
 
 // Add TrashIcon component
@@ -19,6 +20,20 @@ const TrashIcon = (props: React.SVGProps<SVGSVGElement>) => (
       strokeWidth={2} 
       d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" 
     />
+  </svg>
+);
+
+// Back arrow icon
+const BackIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg 
+    xmlns="http://www.w3.org/2000/svg" 
+    className="h-3 w-3 mr-0.5" 
+    fill="none" 
+    viewBox="0 0 24 24" 
+    stroke="currentColor"
+    {...props}
+  >
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
   </svg>
 );
 
@@ -213,13 +228,27 @@ export default function TeamGames() {
   return (
     <div className="container mx-auto px-4 py-0">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-800">Games for Team {teamId}</h1>
-        <button
-          onClick={handleCreateGame}
-          className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 transition-colors"
-        >
-          Create Game
-        </button>
+        <div className="flex items-center space-x-3">
+          <h1 className="text-2xl font-bold text-gray-800">Games for Team {teamId}</h1>
+        </div>
+        <div className="flex space-x-2">
+          <button
+            onClick={() => router.push(`/score-game`)}
+            className="flex items-center justify-center h-7 px-1.5 rounded-lg text-xs font-medium text-gray-600 border border-gray-300 hover:bg-gray-50 transition-colors"
+          >
+            <BackIcon />
+            Back
+          </button>
+          <button
+            onClick={handleCreateGame}
+            className="flex items-center justify-center h-7 px-3 rounded-lg text-xs font-medium border bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            Create Game
+          </button>
+        </div>
       </div>
       
       {games.length === 0 ? (
@@ -270,9 +299,12 @@ export default function TeamGames() {
                     <div className="flex items-center space-x-3">
                       <button
                         onClick={() => handleScoreGame(game)}
-                        className="bg-indigo-600 text-white px-2 py-0.5 rounded text-xs hover:bg-indigo-700 transition-colors"
+                        className="flex items-center justify-center h-6 px-2 rounded text-xs font-medium border bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 transition-colors"
                         title="Score game"
                       >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
                         Score
                       </button>
                       
