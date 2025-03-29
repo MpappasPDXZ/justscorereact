@@ -103,7 +103,7 @@ export default function ScoreGame() {
         <div className="flex space-x-2">
           <button
             onClick={() => router.push('/')}
-            className="flex items-center justify-center h-7 px-1.5 rounded-lg text-xs font-medium text-gray-600 border border-gray-300 hover:bg-gray-50 transition-colors"
+            className="flex items-center justify-center py-2 px-3 rounded-md shadow-sm text-xs font-medium text-gray-600 border border-gray-300 hover:bg-gray-50 transition-colors"
           >
             <BackIcon />
             Back
@@ -173,7 +173,7 @@ export default function ScoreGame() {
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <button
                       onClick={() => handleTeamSelect(team.team_id)}
-                      className="flex items-center justify-center h-7 px-1.5 rounded-lg text-xs font-medium border bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700 transition-colors ml-auto"
+                      className="flex items-center justify-center py-2 px-3 rounded-md shadow-sm text-xs font-medium border bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700 transition-colors ml-auto"
                       title="Select team"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

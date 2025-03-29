@@ -8,6 +8,20 @@ import BaseballDiamondModal from "../components/BaseballDiamondModal"
 import { BaseballIcon } from "../components/BaseballIcon"
 import type { PlayerData } from './AddPlayerModal'
 
+// Back arrow icon
+const BackIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg 
+    xmlns="http://www.w3.org/2000/svg" 
+    className="h-3 w-3 mr-2" 
+    fill="none" 
+    viewBox="0 0 24 24" 
+    stroke="currentColor"
+    {...props}
+  >
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+  </svg>
+);
+
 export interface Player {
   player_id: string
   team_id: string
@@ -323,26 +337,36 @@ function RosterContent() {
         <div className="flex space-x-2">
           <button
             onClick={() => router.push("/manage-team")}
-            className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-          >
-            Back to Team List
+            className="flex items-center justify-center py-2 px-3 rounded-md shadow-sm text-xs font-medium text-gray-600 border border-gray-300 hover:bg-gray-50 transition-colors"
+          >            
+          <BackIcon />
+            Back
           </button>
           <button
             onClick={() => setIsAddPlayerModalOpen(true)}
-            className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            className="flex items-center justify-center py-2 px-3 rounded-md shadow-sm text-xs font-medium text-white border border-indigo-600 bg-indigo-600 hover:bg-indigo-700 transition-colors"
           >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
             Add Player
           </button>
           <button
             onClick={() => router.push(`/depth-chart?teamId=${teamId}`)}
-            className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            className="flex items-center justify-center py-2 px-3 rounded-md shadow-sm text-xs font-medium text-gray-600 border border-gray-300 hover:bg-gray-50 transition-colors"
           >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+            </svg>
             Depth Chart
           </button>
           <button
             onClick={() => setIsBaseballDiamondOpen(true)}
-            className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            className="flex items-center justify-center py-2 px-3 rounded-md shadow-sm text-xs font-medium text-gray-600 border border-gray-300 hover:bg-gray-50 transition-colors"
           >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 2L2 12l10 10 10-10L12 2z" />
+            </svg>
             Position Visual
           </button>
         </div>

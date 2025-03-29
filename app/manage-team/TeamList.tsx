@@ -20,12 +20,16 @@ interface TeamMetadata {
 
 interface TeamListProps {
   onTeamSelect: (teamId: string) => void
+  searchTerm?: string
 }
 
-export default function TeamList({ onTeamSelect }: TeamListProps) {
+export default function TeamList({ onTeamSelect, searchTerm = "" }: TeamListProps) {
   const [teams, setTeams] = useState<Team[]>([])
+  const [filteredTeams, setFilteredTeams] = useState<Team[]>([])
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null)
   const [showEditModal, setShowEditModal] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const router = useRouter()
 
   // Fetch teams list
@@ -33,14 +37,37 @@ export default function TeamList({ onTeamSelect }: TeamListProps) {
     fetchTeams()
   }, [])
 
+  // Apply search filter when searchTerm changes
+  useEffect(() => {
+    if (!searchTerm.trim()) {
+      setFilteredTeams(teams)
+      return
+    }
+    
+    const term = searchTerm.toLowerCase()
+    const filtered = teams.filter(team => 
+      team.team_name.toLowerCase().includes(term) || 
+      team.head_coach.toLowerCase().includes(term) ||
+      team.team_id.toLowerCase().includes(term) ||
+      team.season.toLowerCase().includes(term)
+    )
+    
+    setFilteredTeams(filtered)
+  }, [searchTerm, teams])
+
   const fetchTeams = async () => {
     try {
+      setLoading(true)
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/teams/read_metadata_duckdb`)
       if (!response.ok) throw new Error('Failed to fetch teams')
       const data: TeamMetadata = await response.json()
       setTeams(data.metadata || [])
+      setFilteredTeams(data.metadata || [])
     } catch (error) {
       console.error('Error fetching teams:', error)
+      setError('Failed to load teams. Please try again later.')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -128,44 +155,71 @@ export default function TeamList({ onTeamSelect }: TeamListProps) {
     router.push(`/manage-roster?teamId=${teamId}`)
   }
 
+  if (loading) return (
+    <div className="flex justify-center items-center h-64">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+    </div>
+  )
+
+  if (error) return (
+    <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+      <strong className="font-bold">Error!</strong>
+      <span className="block sm:inline"> {error}</span>
+    </div>
+  )
+
   return (
-    <div className="space-y-4">
-      {teams.map((team) => (
-        <div 
-          key={team.team_id}
-          className="flex items-center justify-between p-4 bg-white rounded-lg shadow hover:bg-gray-50 cursor-pointer"
-          onClick={() => handleTeamClick(team.team_id)}
-        >
-          <div>
-            <h3 className="font-semibold">{team.team_name}</h3>
-            <p className="text-sm text-gray-500">Coach: {team.head_coach}</p>
-            <p className="text-sm text-gray-500">
-              Age: {team.age} - {team.season} {team.session}
-            </p>
-            <p className="text-xs text-gray-400">Created: {team.created_on}</p>
-          </div>
-          <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-            <button
-              onClick={() => handleEdit(team.team_id)}
-              className="text-indigo-600 hover:text-indigo-800"
-              title="Edit team"
+    <div className="bg-white shadow-md rounded-lg overflow-hidden max-w-3xl mx-auto">
+      {filteredTeams.length === 0 ? (
+        <div className="p-3 text-gray-700 text-center">No teams match your search criteria.</div>
+      ) : (
+        <ul className="divide-y divide-gray-200">
+          {filteredTeams.map((team) => (
+            <li 
+              key={team.team_id}
+              className="py-2 px-3 hover:bg-gray-50 cursor-pointer transition-colors duration-150"
+              onClick={() => handleTeamClick(team.team_id)}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-            </button>
-            <button
-              onClick={() => handleDelete(team.team_id)}
-              className="text-red-600 hover:text-red-800"
-              title="Delete team"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      ))}
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium text-gray-900">{team.team_name}</p>
+                  </div>
+                  <div className="flex items-center text-xs text-gray-500 mt-0.5">
+                    <span>Coach: {team.head_coach}</span>
+                    <span className="mx-1.5">•</span>
+                    <span>Age: {team.age}</span>
+                    <span className="mx-1.5">•</span>
+                    <span>{team.season} {team.session}</span>
+                    <span className="mx-1.5">•</span>
+                    <span>ID: {team.team_id}</span>
+                  </div>
+                </div>
+                <div className="flex gap-2 ml-4" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    onClick={() => handleEdit(team.team_id)}
+                    className="text-indigo-600 hover:text-indigo-800"
+                    title="Edit team"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => handleDelete(team.team_id)}
+                    className="text-red-600 hover:text-red-800"
+                    title="Delete team"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {/* Edit Modal */}
       {showEditModal && selectedTeam && (

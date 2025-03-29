@@ -234,14 +234,14 @@ export default function TeamGames() {
         <div className="flex space-x-2">
           <button
             onClick={() => router.push(`/score-game`)}
-            className="flex items-center justify-center h-7 px-1.5 rounded-lg text-xs font-medium text-gray-600 border border-gray-300 hover:bg-gray-50 transition-colors"
+            className="flex items-center justify-center py-2 px-3 rounded-md shadow-sm text-xs font-medium text-gray-600 border border-gray-300 hover:bg-gray-50 transition-colors"
           >
             <BackIcon />
             Back
           </button>
           <button
             onClick={handleCreateGame}
-            className="flex items-center justify-center h-7 px-3 rounded-lg text-xs font-medium border bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 transition-colors"
+            className="flex items-center justify-center py-2 px-3 rounded-md shadow-sm text-xs font-medium border bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 transition-colors"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -260,31 +260,31 @@ export default function TeamGames() {
           <table className="min-w-full divide-y divide-gray-200 table-fixed">
             <thead className="bg-gray-50">
               <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500  tracking-wider w-20">
                   Actions
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500  tracking-wider">
                   Date & Time
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500  tracking-wider">
                   Opponent
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500  tracking-wider">
                   Coach
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500  tracking-wider">
                   Field
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500  tracking-wider w-24">
                   Field Type
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500  tracking-wider w-20">
                   Temp
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500  tracking-wider">
                   Status
                 </th>
-                <th scope="col" className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
+                <th scope="col" className="px-2 py-3 text-left text-xs font-medium text-gray-500  tracking-wider w-16">
                   Game ID
                 </th>
               </tr>
@@ -299,7 +299,8 @@ export default function TeamGames() {
                     <div className="flex items-center space-x-3">
                       <button
                         onClick={() => handleScoreGame(game)}
-                        className="flex items-center justify-center h-6 px-2 rounded text-xs font-medium border bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 transition-colors"
+                        //className="flex items-center justify-center py-2 px-3 rounded-md shadow-sm text-xs font-medium border bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 transition-colors"
+                        className="flex items-center justify-center py-2 px-3 rounded-md shadow-sm text-xs font-medium border bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700 transition-colors"
                         title="Score game"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

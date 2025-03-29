@@ -123,38 +123,45 @@ function DepthChartContent() {
   if (error) return <div>Error: {error}</div>
 
   return (
-    <div className="max-w-full mx-auto p-4">
-      <div className="flex justify-between items-center mb-4">
+
+    <div className="mb-0 mt-[-10px] max-w-full mx-auto p-4">
+      <div className="flex justify-between items-center mb-2">
         <h1 className="text-2xl font-bold">Depth Chart</h1>
         <div className="flex gap-2">
           <button
+            onClick={() => router.push(`/manage-roster?teamId=${teamId}`)}
+            className="flex items-center justify-center py-2 px-3 rounded-md shadow-sm text-xs font-medium text-gray-600 border border-gray-300 hover:bg-gray-50 transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to Roster
+          </button>
+          <button
             onClick={handleSaveDepthChart}
             disabled={saveStatus === 'saving'}
-            className={`py-2 px-4 border rounded-md shadow-sm text-sm font-medium transition-colors
+            className={`flex items-center justify-center py-2 px-3 rounded-md shadow-sm text-xs font-medium transition-colors
               ${saveStatus === 'saving' 
                 ? 'bg-gray-100 text-gray-500' 
                 : saveStatus === 'success'
                 ? 'bg-green-50 text-green-700 border-green-200'
                 : saveStatus === 'error'
                 ? 'bg-red-50 text-red-700 border-red-200'
-                : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+                : 'border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
               }`}
           >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 13l4 4L19 7" />
+            </svg>
             {saveStatus === 'saving' ? 'Saving...' 
               : saveStatus === 'success' ? 'Saved!'
               : saveStatus === 'error' ? 'Error!'
               : 'Save Changes'}
           </button>
-          <button
-            onClick={() => router.push(`/manage-roster?teamId=${teamId}`)}
-            className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-          >
-            Back to Roster
-          </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-9 gap-2">
+      <div className="grid grid-cols-9 gap-2 mt-4">
         {positions.map(position => (
           <div key={position} className="font-bold text-gray-500 text-sm uppercase text-center">
             {position}
@@ -166,7 +173,7 @@ function DepthChartContent() {
             {positionPlayers[position]?.map((player, index) => (
               <div
                 key={`${position}_${player.jersey_number}`}
-                className="bg-white p-2 pt-4 mb-2 border rounded shadow-sm hover:bg-gray-50 relative group h-14 flex flex-col justify-center items-center"
+                className="bg-white p-2 pt-4 mb-3 border rounded shadow-sm hover:bg-gray-50 relative group h-14 flex flex-col justify-center items-center"
               >
                 <div className="absolute -top-2 -left-2 w-5 h-5 border-2 border-indigo-600 bg-white text-indigo-600 rounded-full flex items-center justify-center text-[10px] font-bold">
                   {player.player_rank}
