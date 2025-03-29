@@ -138,6 +138,13 @@ export default function GameLineup() {
   // Fetch my_team_ha value
   const fetchMyTeamHa = async () => {
     try {
+      // Ensure we have valid teamId and gameId
+      if (!params.teamId || !params.gameId || params.gameId === 'undefined') {
+        console.error('Invalid teamId or gameId', { teamId: params.teamId, gameId: params.gameId });
+        setMyTeamHa('home'); // default
+        return;
+      }
+      
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/games/${params.teamId}/${params.gameId}/my_team_ha`);
       
       if (response.ok) {
@@ -285,6 +292,13 @@ export default function GameLineup() {
   const fetchLineups = async () => {
     setLoading(true);
     try {
+      // Validate required parameters
+      if (!params.teamId || !params.gameId || params.gameId === 'undefined') {
+        console.error('Invalid teamId or gameId parameters', { teamId: params.teamId, gameId: params.gameId });
+        setLoading(false);
+        return;
+      }
+      
       // Log the URLs we're fetching for debugging purposes
       const homeEndpoint = `${process.env.NEXT_PUBLIC_API_URL}/lineup/${params.teamId}/${params.gameId}/home`;
       const awayEndpoint = `${process.env.NEXT_PUBLIC_API_URL}/lineup/${params.teamId}/${params.gameId}/away`;
@@ -363,6 +377,12 @@ export default function GameLineup() {
   // Fetch roster players for the current team
   const fetchRosterPlayers = async () => {
     try {
+      // Validate required parameters
+      if (!params.teamId || params.teamId === 'undefined') {
+        console.error('Invalid teamId parameter', { teamId: params.teamId });
+        return;
+      }
+      
       // Use the active_players endpoint for my team's data
       const teamActivePlayersEndpoint = `${process.env.NEXT_PUBLIC_API_URL}/teams/${params.teamId}/active_players`;
       let endpoint;
@@ -424,7 +444,7 @@ export default function GameLineup() {
         }
       } else {
         // Try getting active players for my team
-        const fallbackResponse = await fetch(teamActivePlayersEndpoint);
+        const fallbackResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/teams/${params.teamId}/active_players`);
         
         if (fallbackResponse.ok) {
           try {

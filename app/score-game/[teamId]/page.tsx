@@ -161,6 +161,11 @@ export default function TeamGames() {
 
   // Add function to handle Score button click
   const handleScoreGame = (game: Game) => {
+    if (!game.game_id || game.game_id === 'undefined') {
+      console.error('Invalid game ID', game);
+      setError('Cannot score game: invalid game ID');
+      return;
+    }
     router.push(`/score-game/${teamId}/lineup/${game.game_id}`);
   };
 

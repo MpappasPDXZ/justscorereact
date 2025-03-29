@@ -337,9 +337,12 @@ export default function ScoreGame() {
   const [debugMode, setDebugMode] = useState(false);
   
   useEffect(() => {
-    if (teamId && gameId) {
+    if (teamId && gameId && teamId !== 'undefined' && gameId !== 'undefined') {
       fetchGameDetails();
       fetchBoxScore();
+    } else {
+      console.error("Invalid teamId or gameId", { teamId, gameId });
+      setLoading(false);
     }
   }, [teamId, gameId]);
 
@@ -355,6 +358,11 @@ export default function ScoreGame() {
 
   const fetchGameDetails = async () => {
     try {
+      if (!teamId || !gameId || teamId === 'undefined' || gameId === 'undefined') {
+        console.error("Invalid parameters for fetchGameDetails", { teamId, gameId });
+        return;
+      }
+      
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/games/${teamId}/${gameId}`);
       if (!response.ok) throw new Error("Failed to fetch game details");
       const data = await response.json();
@@ -372,6 +380,12 @@ export default function ScoreGame() {
 
   const fetchBoxScore = async () => {
     try {
+      if (!teamId || !gameId || teamId === 'undefined' || gameId === 'undefined') {
+        console.error("Invalid parameters for fetchBoxScore", { teamId, gameId });
+        setLoading(false);
+        return;
+      }
+      
       // Log the API request
       const apiUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/scores/${teamId}/${gameId}/summary`;
       console.log("Fetching box score from:", apiUrl);
@@ -686,6 +700,12 @@ export default function ScoreGame() {
 
   const fetchInningDetail = async (inningNumber: string, teamChoice: 'home' | 'away') => {
     try {
+      if (!teamId || !gameId || teamId === 'undefined' || gameId === 'undefined') {
+        console.error("Invalid parameters for fetchInningDetail", { teamId, gameId, inningNumber, teamChoice });
+        setLoadingInningDetail(false);
+        return;
+      }
+      
       setLoadingInningDetail(true);
       setSelectedInning(inningNumber);
       setSelectedTeam(teamChoice);
