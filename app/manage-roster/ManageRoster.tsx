@@ -33,6 +33,7 @@ export default function ManageRoster({ teamId, onPlayerAdded }: ManageRosterProp
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isAddPlayerModalOpen, setIsAddPlayerModalOpen] = useState(false)
+  const [searchTerm, setSearchTerm] = useState("")
 
   useEffect(() => {
     fetchRoster()
@@ -130,100 +131,196 @@ export default function ManageRoster({ teamId, onPlayerAdded }: ManageRosterProp
              pos.allocation !== "None"
     })
 
-    return positions.map((pos, index) => {
-      // Now we know allocation is a string that's not "None"
-      const allocationPercentage = Math.round(Number.parseFloat(pos.allocation as string) * 100)
+    // If no positions, show "None"
+    if (positions.length === 0) {
+      return <div className="text-[10px] text-gray-500">None</div>;
+    }
+
+    // Only show the primary position and total count
+    const primaryPos = positions[0];
+    const allocationPercentage = Math.round(Number.parseFloat(primaryPos.allocation as string) * 100);
+    
+    if (positions.length === 1) {
       return (
-        <div key={index} className="text-sm text-gray-500">
-          {index + 1}: {pos.name} {allocationPercentage}%
+        <div className="text-[10px] text-gray-500">
+          <b>{primaryPos.name}</b> ({allocationPercentage}%)
         </div>
-      )
-    })
+      );
+    }
+    
+    return (
+      <div className="text-[10px] text-gray-500">
+        <b>{primaryPos.name}</b> ({allocationPercentage}%) +{positions.length - 1}
+      </div>
+    );
   }
 
+  // Filter players based on search term
+  const filteredPlayers = players.filter(player => 
+    player.player_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    player.jersey_number.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  // Highlight matching text in player name
+  const highlightMatch = (text: string) => {
+    if (!searchTerm) return text;
+    
+    const index = text.toLowerCase().indexOf(searchTerm.toLowerCase());
+    if (index === -1) return text;
+    
+    const before = text.substring(0, index);
+    const match = text.substring(index, index + searchTerm.length);
+    const after = text.substring(index + searchTerm.length);
+    
+    return (
+      <>
+        {before}
+        <span className="bg-yellow-100">{match}</span>
+        {after}
+      </>
+    );
+  };
+
   return (
-    <div className="max-w-4xl mx-auto p-4">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Team Roster</h1>
+    <div className="max-w-4xl mx-auto p-3">
+      <div className="flex items-center mb-3 space-x-2 overflow-x-auto">
+        <button
+          onClick={() => window.history.back()}
+          className="py-2 px-3 rounded-md shadow-sm text-xs font-medium bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 transition-colors"
+        >
+          Back
+        </button>
+        
         <button
           onClick={() => setIsAddPlayerModalOpen(true)}
-          className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-md shadow-sm hover:from-indigo-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          className="py-2 px-3 rounded-md shadow-sm text-xs font-medium bg-green-600 text-white border border-green-600 hover:bg-green-700 transition-colors"
         >
           Add Player
         </button>
+        
+        <button
+          onClick={() => window.location.href = `/depth-chart?teamId=${teamId}`}
+          className="py-2 px-3 rounded-md shadow-sm text-xs font-medium bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 transition-colors"
+        >
+          Depth Chart
+        </button>
+        
+        <button
+          onClick={() => window.location.href = `/position-visual?teamId=${teamId}`}
+          className="py-2 px-3 rounded-md shadow-sm text-xs font-medium bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 transition-colors"
+        >
+          Position Visual
+        </button>
+      </div>
+      
+      {/* Search Box */}
+      <div className="mb-3 p-2 border border-gray-200 rounded-md bg-gray-50">
+        <div className="flex justify-between items-center mb-1">
+          <h1 className="text-base font-bold text-gray-800">Team Roster</h1>
+          <div className="text-xs text-gray-500 self-center">
+            {filteredPlayers.length} of {players.length} players
+          </div>
+        </div>
+        
+        <div className="relative w-full">
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search by name or jersey number..."
+            className="w-full text-sm py-2 pl-9 pr-4 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm"
+          />
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          {searchTerm && (
+            <button 
+              className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+              onClick={() => setSearchTerm("")}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
 
       {loading ? (
-        <div className="flex justify-center items-center h-32">
-          <p className="text-gray-500">Loading roster...</p>
+        <div className="flex justify-center items-center h-16">
+          <p className="text-gray-500 text-sm">Loading roster...</p>
         </div>
       ) : error ? (
-        <div className="bg-red-50 border border-red-200 rounded-md p-4">
+        <div className="bg-red-50 border border-red-200 rounded-md p-2 text-sm">
           <p className="text-red-600">{error}</p>
         </div>
       ) : (
-        <div className="overflow-x-auto bg-white rounded-lg shadow">
-          <table className="min-w-full divide-y divide-gray-200">
+        <div className="overflow-x-auto bg-white rounded-md shadow-sm border border-gray-200">
+          <table className="min-w-full divide-y divide-gray-200 text-xs">
             <thead className="bg-gray-50">
-              <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Name
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Jersey #
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Primary Position
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
+              <tr className="text-left text-gray-500 uppercase tracking-wider">
+                <th scope="col" className="px-3 py-1.5">Name</th>
+                <th scope="col" className="px-3 py-1.5">Jersey #</th>
+                <th scope="col" className="px-3 py-1.5">Status</th>
+                <th scope="col" className="px-3 py-1.5">Positions</th>
+                <th scope="col" className="px-3 py-1.5">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {players.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
+                  <td colSpan={5} className="px-3 py-1.5 text-center text-xs text-gray-500">
                     No players in the roster yet
                   </td>
                 </tr>
+              ) : filteredPlayers.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-3 py-1.5 text-center text-xs text-gray-500">
+                    No players match your search: <span className="font-medium">&quot;{searchTerm}&quot;</span>
+                  </td>
+                </tr>
               ) : (
-                players.map((player) => (
+                filteredPlayers.map((player) => (
                   <tr key={player.jersey_number} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center justify-between">
-                        <div className="text-sm font-medium text-gray-900">{player.player_name}</div>
+                    <td className="px-3 py-1.5 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <span className="text-xs font-medium text-gray-900">{highlightMatch(player.player_name)}</span>
                         <button
-                          className="text-gray-400 hover:text-red-600 transition-colors"
+                          className="text-gray-400 hover:text-red-600 transition-colors ml-2"
                           onClick={() => {
                             if (window.confirm(`Are you sure you want to delete ${player.player_name}?`)) {
                               handleDeletePlayer(player)
                             }
                           }}
                         >
-                          <TrashIcon className="h-4 w-4" />
+                          <TrashIcon className="h-3 w-3" />
                         </button>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{player.jersey_number}</div>
+                    <td className="px-3 py-1.5 whitespace-nowrap">
+                      <div className="text-xs text-gray-900">{highlightMatch(player.jersey_number)}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                    <td className="px-3 py-1.5 whitespace-nowrap">
+                      <span className={`px-1.5 inline-flex text-[10px] leading-4 font-medium rounded-full ${
                         player.active === "Active" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
                       }`}>
                         {player.active}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {renderPositions(player)}
+                    <td className="px-3 py-1.5 whitespace-nowrap">
+                      <div className="flex flex-col gap-0.5">
+                        {renderPositions(player)}
+                      </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-3 py-1.5 whitespace-nowrap">
                       <button
-                        className="text-indigo-600 hover:text-indigo-900 mr-3"
+                        className={`text-[10px] py-0.5 px-1.5 rounded ${
+                          player.active === "Active" 
+                            ? "text-red-600 border border-red-300 hover:bg-red-50" 
+                            : "text-green-600 border border-green-300 hover:bg-green-50"
+                        }`}
                         onClick={() => handleUpdatePlayer({ 
                           ...player, 
                           active: player.active === "Active" ? "Inactive" : "Active" 

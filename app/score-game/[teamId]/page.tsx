@@ -90,6 +90,7 @@ export default function TeamGames() {
   const [homeLineup, setHomeLineup] = useState<Player[]>([]);
   const [awayLineup, setAwayLineup] = useState<Player[]>([]);
   const [activeTab, setActiveTab] = useState<'home' | 'away'>('home');
+  const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
     if (teamId) {
@@ -97,19 +98,20 @@ export default function TeamGames() {
     }
   }, [teamId]);
   
-  console.log("score-game-->teamId-->page.tsx-->teamId:", teamId);
-  
   const fetchGames = async (teamId: string) => {
     try {
       setLoading(true);
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/games/${teamId}`);
       if (!response.ok) throw new Error("Failed to fetch games");
       const data = await response.json();
-      console.log("score-game-->teamId-->page.tsx-->data:", data);
       
       // Check if data.games exists and is an array
       if (data && Array.isArray(data.games)) {
-        setGames(data.games);
+        // Sort games by date (ascending)
+        const sortedGames = [...data.games].sort((a, b) => {
+          return new Date(a.event_date).getTime() - new Date(b.event_date).getTime();
+        });
+        setGames(sortedGames);
       } else {
         setGames([]);
       }
@@ -212,6 +214,31 @@ export default function TeamGames() {
     }
   };
 
+  // Filter games based on search term
+  const filteredGames = games.filter(game => 
+    game.away_team_name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  // Highlight matching text in opponent name
+  const highlightMatch = (text: string) => {
+    if (!searchTerm) return text;
+    
+    const index = text.toLowerCase().indexOf(searchTerm.toLowerCase());
+    if (index === -1) return text;
+    
+    const before = text.substring(0, index);
+    const match = text.substring(index, index + searchTerm.length);
+    const after = text.substring(index + searchTerm.length);
+    
+    return (
+      <>
+        {before}
+        <span className="bg-yellow-100">{match}</span>
+        {after}
+      </>
+    );
+  };
+
   if (loading) return (
     <div className="flex justify-center items-center h-64">
       <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
@@ -241,13 +268,44 @@ export default function TeamGames() {
           </button>
           <button
             onClick={handleCreateGame}
-            className="flex items-center justify-center py-2 px-3 rounded-md shadow-sm text-xs font-medium border bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 transition-colors"
+            className="flex items-center justify-center py-2 px-3 rounded-md shadow-sm text-xs font-medium border bg-green-600 text-white border-green-600 hover:bg-green-700 transition-colors"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
             Create Game
           </button>
+        </div>
+      </div>
+      
+      {/* Modern search */}
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex-1 relative max-w-sm">
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search opponents..."
+            className="w-full text-sm py-2 pl-9 pr-4 border-b border-gray-300 focus:border-indigo-500 focus:outline-none transition-colors"
+          />
+          <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          {searchTerm && (
+            <button 
+              className="absolute inset-y-0 right-0 pr-2 flex items-center text-gray-400 hover:text-gray-600"
+              onClick={() => setSearchTerm("")}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+        <div className="text-xs text-gray-500 ml-2">
+          {filteredGames.length} of {games.length} games
         </div>
       </div>
       
@@ -255,55 +313,58 @@ export default function TeamGames() {
         <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
           <p className="text-yellow-700">No games found for this team.</p>
         </div>
+      ) : filteredGames.length === 0 ? (
+        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
+          <p className="text-yellow-700">No opponents match your search: <span className="font-medium">&quot;{searchTerm}&quot;</span></p>
+        </div>
       ) : (
         <div className="overflow-x-auto bg-white rounded-lg shadow">
           <table className="min-w-full divide-y divide-gray-200 table-fixed">
             <thead className="bg-gray-50">
               <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500  tracking-wider w-20">
+                <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 tracking-wider w-20">
                   Actions
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500  tracking-wider">
+                <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 tracking-wider w-16">
+                  Game ID
+                </th>
+                <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 tracking-wider w-28">
                   Date & Time
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500  tracking-wider">
+                <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 tracking-wider w-32">
                   Opponent
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500  tracking-wider">
+                <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 tracking-wider w-24">
                   Coach
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500  tracking-wider">
+                <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 tracking-wider w-32">
                   Field
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500  tracking-wider w-24">
+                <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 tracking-wider w-24">
                   Field Type
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500  tracking-wider w-20">
+                <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 tracking-wider w-20">
                   Temp
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500  tracking-wider">
+                <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 tracking-wider w-16">
                   Status
-                </th>
-                <th scope="col" className="px-2 py-3 text-left text-xs font-medium text-gray-500  tracking-wider w-16">
-                  Game ID
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {games.map((game) => (
+              {filteredGames.map((game) => (
                 <tr 
                   key={game.game_id}
                   className="hover:bg-gray-50 transition-colors duration-150"
                 >
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                  <td className="px-4 py-3 whitespace-nowrap text-xs font-medium">
                     <div className="flex items-center space-x-3">
                       <button
                         onClick={() => handleScoreGame(game)}
-                        //className="flex items-center justify-center py-2 px-3 rounded-md shadow-sm text-xs font-medium border bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 transition-colors"
-                        className="flex items-center justify-center py-2 px-3 rounded-md shadow-sm text-xs font-medium border bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700 transition-colors"
+                        className="flex items-center justify-center py-2 px-4 rounded-md shadow-sm text-xs font-medium border bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700 transition-colors"
                         title="Score game"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                         </svg>
                         Score
@@ -311,16 +372,16 @@ export default function TeamGames() {
                       
                       <button
                         onClick={() => handleGameClick(game)}
-                        className="text-indigo-600 hover:text-indigo-800"
+                        className="p-2 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-600 hover:bg-purple-600 hover:border-purple-600 hover:text-white transition-colors"
                         title="Edit game"
                       >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                         </svg>
                       </button>
                       
                       <button
-                        className="text-gray-400 hover:text-red-600 transition-colors"
+                        className="p-2 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-600 hover:bg-purple-600 hover:border-purple-600 hover:text-white transition-colors"
                         onClick={() => {
                           if (window.confirm(`Are you sure you want to delete game ${game.game_id}?`)) {
                             handleDeleteGame(game);
@@ -328,35 +389,44 @@ export default function TeamGames() {
                         }}
                         title="Delete game"
                       >
-                        <TrashIcon className="h-5 w-5" />
+                        <TrashIcon className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{game.event_date}</div>
-                    <div className="text-sm text-gray-500">{formatTime(game.event_hour, game.event_minute)}</div>
+                  <td className="px-4 py-3 whitespace-nowrap text-xs">
+                    <div className="text-xs text-gray-900">{game.game_id}</div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">
-                      {game.my_team_ha === "home" ? 
-                        `${game.away_team_name} (Away)` : 
-                        `${game.away_team_name} (Home)`}
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <div className="text-xs text-gray-900">{game.event_date}</div>
+                    <div className="text-xs text-gray-500">{formatTime(game.event_hour, game.event_minute)}</div>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <div className="text-xs font-medium text-gray-900">
+                      {game.my_team_ha === "home" ? (
+                        <>
+                          {highlightMatch(game.away_team_name)} <span className="text-gray-500">(Away)</span>
+                        </>
+                      ) : (
+                        <>
+                          {highlightMatch(game.away_team_name)} <span className="text-gray-500">(Home)</span>
+                        </>
+                      )}
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{game.coach}</div>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <div className="text-xs text-gray-900">{game.coach}</div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{game.field_name}</div>
-                    <div className="text-sm text-gray-500">{game.field_location}</div>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <div className="text-xs text-gray-900">{game.field_name}</div>
+                    <div className="text-xs text-gray-500">{game.field_location}</div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-xs">
-                    <div className="text-sm text-gray-900">{game.field_type}</div>
+                  <td className="px-4 py-3 whitespace-nowrap text-xs">
+                    <div className="text-xs text-gray-900">{game.field_type}</div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-xs">
-                    <div className="text-sm text-gray-900">{game.field_temperature}°F</div>
+                  <td className="px-4 py-3 whitespace-nowrap text-xs">
+                    <div className="text-xs text-gray-900">{game.field_temperature}°F</div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-4 py-3 whitespace-nowrap">
                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                       game.game_status === "open" 
                         ? "bg-green-100 text-green-800" 
@@ -364,9 +434,6 @@ export default function TeamGames() {
                     }`}>
                       {game.game_status}
                     </span>
-                  </td>
-                  <td className="px-2 py-4 whitespace-nowrap text-xs">
-                    <div className="text-sm text-gray-900">{game.game_id}</div>
                   </td>
                 </tr>
               ))}

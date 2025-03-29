@@ -50,6 +50,7 @@ function RosterContent() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [editingPlayer, setEditingPlayer] = useState<Player | null>(null)
   const [isBaseballDiamondOpen, setIsBaseballDiamondOpen] = useState(false)
+  const [searchTerm, setSearchTerm] = useState("")
   const router = useRouter()
   const searchParams = useSearchParams()
   const teamId = searchParams.get("teamId")
@@ -126,7 +127,7 @@ function RosterContent() {
     return positions.map((pos, index) => {
       const allocationPercentage = Math.round(Number.parseFloat(pos.allocation || '0') * 100)
       return (
-        <div key={index} className="text-sm text-gray-500">
+        <div key={index} className="text-xs text-gray-500">
           {index + 1}: {pos.name} {allocationPercentage}%
         </div>
       )
@@ -328,8 +329,34 @@ function RosterContent() {
     return positionAllocations
   }
 
+  // Filter players based on search term
+  const filteredPlayers = players.filter(player => 
+    player.player_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    player.jersey_number.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  // Highlight matching text in player name or jersey number
+  const highlightMatch = (text: string) => {
+    if (!searchTerm) return text;
+    
+    const index = text.toLowerCase().indexOf(searchTerm.toLowerCase());
+    if (index === -1) return text;
+    
+    const before = text.substring(0, index);
+    const match = text.substring(index, index + searchTerm.length);
+    const after = text.substring(index + searchTerm.length);
+    
+    return (
+      <>
+        {before}
+        <span className="bg-yellow-100">{match}</span>
+        {after}
+      </>
+    );
+  };
+
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-3xl mx-auto">
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">
           Manage Roster
@@ -344,10 +371,10 @@ function RosterContent() {
           </button>
           <button
             onClick={() => setIsAddPlayerModalOpen(true)}
-            className="flex items-center justify-center py-2 px-3 rounded-md shadow-sm text-xs font-medium text-white border border-indigo-600 bg-indigo-600 hover:bg-indigo-700 transition-colors"
+            className="flex items-center justify-center py-2 px-3 rounded-md shadow-sm text-xs font-medium text-white border border-green-600 bg-green-600 hover:bg-green-700 transition-colors"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
             Add Player
           </button>
@@ -372,32 +399,54 @@ function RosterContent() {
         </div>
       </div>
 
+      {/* Modern search */}
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex-1 relative max-w-sm">
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search players..."
+            className="w-full text-sm py-2 pl-9 pr-4 border-b border-gray-300 focus:border-indigo-500 focus:outline-none transition-colors"
+          />
+          <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          {searchTerm && (
+            <button 
+              className="absolute inset-y-0 right-0 pr-2 flex items-center text-gray-400 hover:text-gray-600"
+              onClick={() => setSearchTerm("")}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+        <div className="text-xs text-gray-500 ml-2">
+          {filteredPlayers.length} of {players.length} players
+        </div>
+      </div>
+
       <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-        <table className="min-w-full divide-y divide-gray-200">
+        <table className="min-w-full divide-y divide-gray-200 text-xs table-fixed">
           <thead className="bg-gray-50">
             <tr>
-              <th
-                scope="col"
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-              >
+              <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/12">
+                #
+              </th>
+              <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-3/12">
                 Name
               </th>
-              <th
-                scope="col"
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-              >
-                Jersey
+              <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-2/12">
+                Actions
               </th>
-              <th
-                scope="col"
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-              >
-                Active
+              <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-2/12">
+                Status
               </th>
-              <th
-                scope="col"
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-              >
+              <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-4/12">
                 Positions
               </th>
             </tr>
@@ -405,61 +454,73 @@ function RosterContent() {
           <tbody className="bg-white divide-y divide-gray-200">
             {loading ? (
               <tr>
-                <td colSpan={4} className="px-6 py-4 text-center text-sm text-gray-500">
+                <td colSpan={5} className="px-3 py-2 text-center text-xs text-gray-500">
                   Loading roster...
                 </td>
               </tr>
             ) : error ? (
               <tr>
-                <td colSpan={4} className="px-6 py-4 text-center text-sm text-gray-500">
+                <td colSpan={5} className="px-3 py-2 text-center text-xs text-gray-500">
                   {error}
                 </td>
               </tr>
             ) : players.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-6 py-4 text-center text-sm text-gray-500">
-                  No players in the roster yet. Add players to see them listed here.
+                <td colSpan={5} className="px-3 py-2 text-center">
+                  <p className="text-xs text-gray-500">No players in the roster yet</p>
+                  <button
+                    onClick={() => setIsAddPlayerModalOpen(true)}
+                    className="mt-2 px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                  >
+                    Add your first player
+                  </button>
+                </td>
+              </tr>
+            ) : filteredPlayers.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-3 py-2 text-center text-xs text-gray-500">
+                  No players match your search: <span className="font-medium">&quot;{searchTerm}&quot;</span>
                 </td>
               </tr>
             ) : (
-              players.map((player) => (
+              filteredPlayers.map((player) => (
                 <tr key={player.jersey_number}>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm font-medium text-gray-900">{player.player_name}</div>
-                      <div className="flex space-x-2">
-                        <button
-                          className="text-gray-400 hover:text-blue-600 transition-colors"
-                          onClick={() => initializeEditPlayer(player.jersey_number)}
-                        >
-                          <PencilIcon className="h-4 w-4" />
-                        </button>
-                        <button
-                          className="text-gray-400 hover:text-red-600 transition-colors"
-                          onClick={() => {
-                            if (window.confirm(`Are you sure you want to delete ${player.player_name}?`)) {
-                              handleDeletePlayer(player)
-                            }
-                          }}
-                        >
-                          <TrashIcon className="h-4 w-4" />
-                        </button>
-                      </div>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    <div className="text-xs text-gray-900">{highlightMatch(player.jersey_number)}</div>
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    <div className="text-xs font-medium text-gray-900">{highlightMatch(player.player_name)}</div>
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => initializeEditPlayer(player.jersey_number)}
+                        className="p-1.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-600 hover:bg-purple-600 hover:border-purple-600 hover:text-white transition-colors"
+                      >
+                        <PencilIcon className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeletePlayer(player)}
+                        className="p-1.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-600 hover:bg-purple-600 hover:border-purple-600 hover:text-white transition-colors"
+                      >
+                        <TrashIcon className="h-3.5 w-3.5" />
+                      </button>
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{player.jersey_number}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-3 py-2 whitespace-nowrap">
                     <span
-                      className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        player.active === "Active" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                      className={`text-xs px-2 py-1 rounded-full ${
+                        player.active === "Active"
+                          ? "bg-green-100 text-green-800"
+                          : "bg-red-100 text-red-800"
                       }`}
                     >
                       {player.active}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">{renderPositions(player)}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    {renderPositions(player)}
+                  </td>
                 </tr>
               ))
             )}

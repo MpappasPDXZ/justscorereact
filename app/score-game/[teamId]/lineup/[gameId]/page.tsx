@@ -103,9 +103,9 @@ export default function GameLineup() {
   // Create refs inside the component
   const isInitialRender = React.useRef(true);
   
-  // Default 12 innings with ability to add more
-  const [availableInnings, setAvailableInnings] = useState<number[]>([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
-  const [maxInning, setMaxInning] = useState<number>(12);
+  // Default to just showing inning 1 initially
+  const [availableInnings, setAvailableInnings] = useState<number[]>([1]);
+  const [maxInning, setMaxInning] = useState<number>(1);
   
   // Update the state to include the active players separately
   const [activePlayersList, setActivePlayersList] = useState<{
@@ -261,34 +261,76 @@ export default function GameLineup() {
   };
   
   // Add a new inning
-  const handleAddInning = () => {
-    // Calculate the next inning number
-    const nextInning = Math.max(...availableInnings) + 1;
-    
-    // First create an empty inning in the lineup (so the UI shows it right away)
-    const emptyInningPlaceholder: Player[] = [];
-    
-    // Set the lineup for this inning with an empty array - this makes the inning selectable
-    if (activeTab === 'home') {
-      setHomeLineup(prev => [...prev, ...emptyInningPlaceholder]);
-    } else {
-      setAwayLineup(prev => [...prev, ...emptyInningPlaceholder]);
-    }
-    
-    // Update available innings to include the new one
-    setAvailableInnings(prev => {
-      if (prev.includes(nextInning)) {
-        return prev;
+  const handleAddInning = async () => {
+    try {
+      setLoading(true);
+      
+      // Get the current lineup for this tab
+      const currentLineup = activeTab === 'home' ? homeLineup : awayLineup;
+      
+      // Check if inning 1 has been saved (has players)
+      const inning1HasPlayers = currentLineup.some(p => p.inning_number === 1);
+      if (!inning1HasPlayers) {
+        showToast('You must save inning 1 before adding more innings', 'warning');
+        setLoading(false);
+        return;
       }
-      return [...prev, nextInning].sort((a, b) => a - b);
-    });
-    
-    // Navigate to the new inning
-    setCurrentInning(nextInning);
-    
-    // Mark as changed so the user knows to save
-    // Even though it's empty, it's a structural change
-    setLineupChanged(true);
+      
+      // Find the highest inning with data
+      const savedInnings = Array.from(new Set(
+        currentLineup.map(player => player.inning_number)
+      )).sort((a, b) => a - b);
+      
+      // Determine what inning to copy from
+      const lastSavedInning = savedInnings.length > 0 ? savedInnings[savedInnings.length - 1] : 0;
+      
+      // If we don't have any innings saved, can't continue
+      if (lastSavedInning === 0) {
+        showToast('Cannot find any saved innings', 'error');
+        setLoading(false);
+        return;
+      }
+      
+      // Determine the next inning number
+      const nextInning = lastSavedInning + 1;
+      
+      // Add the new inning to UI immediately
+      setAvailableInnings(prev => {
+        if (prev.includes(nextInning)) return prev;
+        const newInnings = [...prev, nextInning].sort((a, b) => a - b);
+        return newInnings;
+      });
+      
+      // Set current inning to the new one
+      setCurrentInning(nextInning);
+      
+      // Use the copy endpoint to copy the previous inning's data
+      showToast(`Copying lineup from inning ${lastSavedInning} to inning ${nextInning}...`, 'info');
+      
+      // Make sure we're using the correct API URL
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL;
+      
+      const copyResponse = await fetch(
+        `${apiBaseUrl}/lineup/${params.teamId}/${params.gameId}/${activeTab}/copy/${lastSavedInning}/${nextInning}`,
+        { method: 'POST' }
+      );
+      
+      if (copyResponse.ok) {
+        showToast(`Added inning ${nextInning} with data from inning ${lastSavedInning}`, 'success');
+        
+        // Refresh lineup data to show the copied players
+        await fetchLineups();
+      } else {
+        const errorText = await copyResponse.text();
+        console.error('Copy inning response error:', errorText);
+        showToast(`Failed to copy data from inning ${lastSavedInning}`, 'error');
+      }
+    } catch (error) {
+      console.error('Error adding inning:', error);
+      showToast('Error adding inning', 'error');
+    } finally {
+      setLoading(false);
+    }
   };
   
   // Fetch lineups
@@ -346,16 +388,17 @@ export default function GameLineup() {
         ...awayLineupData.map(p => p.inning_number)
       ];
       
-      // Ensure we have at least innings 1-12 available plus any additional innings with data
-      const baseInnings = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
-      
       if (allInningNumbers.length > 0) {
         // Get unique inning numbers
         const uniqueInnings = Array.from(new Set(allInningNumbers)).sort((a, b) => a - b);
-        const mergedInnings = Array.from(new Set([...baseInnings, ...uniqueInnings])).sort((a, b) => a - b);
         
-        setAvailableInnings(mergedInnings);
-        setMaxInning(Math.max(...mergedInnings));
+        // Always include inning 1 if not already present
+        if (!uniqueInnings.includes(1)) {
+          uniqueInnings.unshift(1);
+        }
+        
+        setAvailableInnings(uniqueInnings);
+        setMaxInning(Math.max(...uniqueInnings));
       }
     } catch (error) {
       console.error('Error fetching lineups:', error);
@@ -377,7 +420,6 @@ export default function GameLineup() {
     try {
       // Validate required parameters
       if (!params.teamId || params.teamId === 'undefined') {
-        console.error('Invalid teamId parameter', { teamId: params.teamId });
         setRosterPlayers(getDefaultPlayers());
         return;
       }
@@ -386,7 +428,10 @@ export default function GameLineup() {
       const teamActivePlayersEndpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL}/teams/${params.teamId}/active_players`;
       
       // Only fetch roster players for the user's team, use default players for opponent
-      if (myTeamHa === activeTab) {
+      if (activeTab === myTeamHa) {
+        // Show toast notification
+        showToast('Loading roster players...', 'info');
+        
         // Fetch active players for my team
         try {
           const response = await fetch(teamActivePlayersEndpoint);
@@ -411,22 +456,25 @@ export default function GameLineup() {
               // Store active players separately for use elsewhere in the UI
               setActivePlayersList(transformedPlayers);
               setRosterPlayers(transformedPlayers);
+              
+              showToast(`Loaded ${transformedPlayers.length} players`, 'success');
             } 
             // Fall back to handling the traditional roster format
             else if (Array.isArray(data)) {
               setRosterPlayers(data);
               setActivePlayersList(data);
+              showToast(`Loaded ${data.length} players`, 'success');
             } else {
-              console.warn('Unexpected roster data format, using defaults');
               setRosterPlayers(getDefaultPlayers());
+              showToast('Unable to load roster players (format error)', 'warning');
             }
           } else {
-            console.warn(`Failed to fetch roster players: ${response.status}`);
             setRosterPlayers(getDefaultPlayers());
+            showToast(`Failed to load roster players: ${response.status}`, 'error');
           }
         } catch (error) {
-          console.error('Error fetching roster players:', error);
           setRosterPlayers(getDefaultPlayers());
+          showToast('Error loading roster players', 'error');
         }
       } else {
         // For opponent team, use empty roster since we'll add players manually
@@ -435,8 +483,8 @@ export default function GameLineup() {
         setActivePlayersList([]);
       }
     } catch (error) {
-      console.error('Error in fetchRosterPlayers:', error);
       setRosterPlayers(getDefaultPlayers());
+      showToast('Error loading roster players', 'error');
     }
   };
   
@@ -602,7 +650,7 @@ export default function GameLineup() {
     // This will trigger UI update when lineups change
   }, [homeLineup, awayLineup]);
 
-  // Update the initial data loading useEffect with cleanly separated loading phases
+  // Initial data loading effect
   useEffect(() => {
     // Create a flag to track if component is mounted
     let isMounted = true;
@@ -618,122 +666,20 @@ export default function GameLineup() {
       setLoading(true);
       
       try {
-        // 1. First get the team home/away status without setting state yet
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/games/${params.teamId}/${params.gameId}/my_team_ha`);
-        
-        let teamType = 'home'; // Default value
-        
-        if (response.ok) {
-          const rawResponse = await response.text();
-          const cleanResponse = rawResponse.trim().toLowerCase();
-          
-          if (cleanResponse === 'away' || cleanResponse.includes('"away"') || cleanResponse.includes("'away'")) {
-            teamType = 'away';
-          } else if (cleanResponse === 'home' || cleanResponse.includes('"home"') || cleanResponse.includes("'home'")) {
-            teamType = 'home';
-          } else {
-            try {
-              const jsonResponse = JSON.parse(rawResponse);
-              if (jsonResponse === 'away' || (typeof jsonResponse === 'object' && jsonResponse.value === 'away')) {
-                teamType = 'away';
-              }
-            } catch (jsonError) {
-              // Not a valid JSON, continue with default 'home'
-            }
-          }
-        }
+        // 1. First get the team home/away status
+        const teamType = await fetchMyTeamHa();
         
         // Guard against unmounted component
         if (!isMounted) return;
         
-        // 2. Set all the initial state values in one batch
-        setMyTeamHa(teamType as 'home' | 'away');
+        // 2. Set active tab to the user's team type
         setActiveTab(teamType as 'home' | 'away');
-        setCurrentInning(1);
         
-        // 3. Fetch lineup data for both home and away
-        const homeEndpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL}/lineup/${params.teamId}/${params.gameId}/home`;
-        const awayEndpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL}/lineup/${params.teamId}/${params.gameId}/away`;
+        // 3. Fetch lineup data
+        await fetchLineups();
         
-        // Fetch both simultaneously
-        const [homeResponse, awayResponse] = await Promise.all([
-          fetch(homeEndpoint),
-          fetch(awayEndpoint)
-        ]);
-        
-        // Guard against unmounted component
-        if (!isMounted) return;
-        
-        // 4. Process home lineup data
-        if (homeResponse.ok) {
-          try {
-            const homeData = JSON.parse(await homeResponse.text());
-            const homeLineupData = processLineupData(homeData, 'home');
-            setHomeLineup(homeLineupData);
-          } catch (error) {
-            setHomeLineup([]);
-          }
-        } else {
-          setHomeLineup([]);
-        }
-        
-        // 5. Process away lineup data
-        if (awayResponse.ok) {
-          try {
-            const awayData = JSON.parse(await awayResponse.text());
-            const awayLineupData = processLineupData(awayData, 'away');
-            setAwayLineup(awayLineupData);
-          } catch (error) {
-            setAwayLineup([]);
-          }
-        } else {
-          setAwayLineup([]);
-        }
-        
-        // 6. Fetch roster players based on the team type
-        const teamActivePlayersEndpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL}/teams/${params.teamId}/active_players`;
-        
-        if (teamType === myTeamHa) {
-          // Only fetch roster data for user's team
-          const rosterResponse = await fetch(teamActivePlayersEndpoint);
-          
-          // Guard against unmounted component
-          if (!isMounted) return;
-          
-          if (rosterResponse.ok) {
-            try {
-              const data = JSON.parse(await rosterResponse.text());
-              
-              if (data.active_players && Array.isArray(data.active_players)) {
-                const transformedPlayers = data.active_players.map((player: { 
-                  jersey_number: number | string; 
-                  player_name: string; 
-                  position: string 
-                }) => ({
-                  jersey_number: player.jersey_number.toString(),
-                  player_name: player.player_name,
-                  position: player.position
-                }));
-                
-                setActivePlayersList(transformedPlayers);
-                setRosterPlayers(transformedPlayers);
-              } else if (Array.isArray(data)) {
-                setRosterPlayers(data);
-                setActivePlayersList(data);
-              } else {
-                setRosterPlayers(getDefaultPlayers());
-              }
-            } catch (error) {
-              setRosterPlayers(getDefaultPlayers());
-            }
-          } else {
-            setRosterPlayers(getDefaultPlayers());
-          }
-        } else {
-          // For opponent team, use empty roster
-          setRosterPlayers([]);
-          setActivePlayersList([]);
-        }
+        // 4. Fetch roster players after setting the active tab
+        await fetchRosterPlayers();
       } catch (error) {
         console.error('Error loading initial data:', error);
       } finally {
@@ -753,23 +699,35 @@ export default function GameLineup() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty dependency array - this effect runs only once on component mount
 
+  // Add an effect to update roster players when activeTab changes
+  useEffect(() => {
+    // Only fetch roster players if we know myTeamHa
+    if (myTeamHa && activeTab === myTeamHa) {
+      fetchRosterPlayers();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, myTeamHa]); // Re-run if activeTab or myTeamHa changes
+
   // Helper function to update available innings
   const updateAvailableInnings = (homeLineupData: Player[], awayLineupData: Player[]) => {
-    const allInningNumbers = [
-      ...homeLineupData.map(p => p.inning_number),
-      ...awayLineupData.map(p => p.inning_number)
-    ];
+    // Get all innings that have lineup data
+    const homeInnings = Array.from(new Set(homeLineupData.map(p => p.inning_number)));
+    const awayInnings = Array.from(new Set(awayLineupData.map(p => p.inning_number)));
     
-    // Ensure we have at least innings 1-12 available plus any additional innings with data
-    const baseInnings = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+    // Combine all inning numbers
+    const allInningNumbers = [...homeInnings, ...awayInnings];
     
     if (allInningNumbers.length > 0) {
       // Get unique inning numbers
       const uniqueInnings = Array.from(new Set(allInningNumbers)).sort((a, b) => a - b);
-      const mergedInnings = Array.from(new Set([...baseInnings, ...uniqueInnings])).sort((a, b) => a - b);
       
-      setAvailableInnings(mergedInnings);
-      setMaxInning(Math.max(...mergedInnings));
+      // Always include inning 1 if not already present
+      if (!uniqueInnings.includes(1)) {
+        uniqueInnings.unshift(1);
+      }
+      
+      setAvailableInnings(uniqueInnings);
+      setMaxInning(Math.max(...uniqueInnings));
     }
   };
 
@@ -1053,7 +1011,7 @@ export default function GameLineup() {
   };
   
   return (
-    <div className="container mx-auto px-1 py-0">
+    <div className="container mx-auto px-1 py-0 max-w-full">
       {/* Toast Component */}
       <Toast 
         message={toast.message}
@@ -1064,13 +1022,14 @@ export default function GameLineup() {
       />
       
       <div className="mb-0 mt-[-10px]">
-        <div className="flex justify-between items-center mb-1">
-          <div className="flex items-center space-x-3">
-            <h1 className="text-2xl font-bold">Offensive Lineup Manager</h1>
+        <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-1 gap-2">
+          <div className="flex items-center">
+            <h1 className="text-2xl font-bold">Offensive Lineup</h1>
           </div>
           
-          {/* Action buttons moved next to the title */}
-          <div className="flex space-x-2">
+          {/* Action buttons next to the title */}
+          <div className="flex flex-wrap gap-2 mt-2 md:mt-0">
+            {/* Back button */}
             <button
               onClick={() => router.push(`/score-game/${params.teamId}`)}
               className="flex items-center justify-center py-2 px-3 rounded-md shadow-sm text-xs font-medium text-gray-600 border border-gray-300 hover:bg-gray-50 transition-colors"
@@ -1081,86 +1040,56 @@ export default function GameLineup() {
               Back
             </button>
             
-            {/* New Inning button */}
+            {/* Defensive Positions button */}
             <button
-              onClick={handleStartNewInning}
-              className={`flex items-center justify-center py-2 px-3 rounded-md shadow-sm text-xs font-medium border ${
-                awayLineup.some(p => p.inning_number === currentInning) || homeLineup.some(p => p.inning_number === currentInning)
-                  ? 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 transition-colors'
-                  : 'text-gray-400 border-gray-300 bg-gray-50 cursor-not-allowed'
-              }`}
-              disabled={!(awayLineup.some(p => p.inning_number === currentInning) || homeLineup.some(p => p.inning_number === currentInning))}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-              <span>New Inning</span>
-            </button>
-            
-            {/* Save button */}
-            <button 
-              onClick={saveLineups}
+              onClick={() => router.push(`/score-game/${params.teamId}/lineup/${params.gameId}/defense`)}
               className="flex items-center justify-center py-2 px-3 rounded-md shadow-sm text-xs font-medium border bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 transition-colors"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5l7 7-7 7" />
+              </svg>
+              <span>Defensive Positions</span>
+            </button>
+            
+            {/* Save Lineup button */}
+            <button 
+              onClick={saveLineups}
+              className="flex items-center justify-center py-2 px-3 rounded-md shadow-sm text-xs font-medium bg-indigo-600 text-white hover:bg-indigo-700 border border-indigo-600"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
               </svg>
-              <span>Save Lineup</span>
+              <span>Save</span>
             </button>
             
-            {/* Delete button */}
+            {/* Delete Lineup button */}
             <button 
               onClick={handleDeleteLineup}
-              className={`flex items-center justify-center py-2 px-3 rounded-md shadow-sm text-xs font-medium border ${
-                !(activeTab === 'home' ? homeLineup : awayLineup).some(p => p.inning_number === currentInning)
-                  ? 'text-gray-400 border-gray-300 cursor-not-allowed'
-                  : 'text-red-700 border-red-500 hover:bg-red-50 transition-colors'
+              className={`flex items-center justify-center py-2 px-3 rounded-md shadow-sm text-xs font-medium transition-colors ${
+                (activeTab === 'home' ? homeLineup : awayLineup)?.some(p => p.inning_number === currentInning)
+                  ? 'text-red-700 border-red-500 hover:bg-red-50 border'
+                  : 'text-gray-400 border-gray-300 cursor-not-allowed border'
               }`}
-              disabled={!(activeTab === 'home' ? homeLineup : awayLineup).some(p => p.inning_number === currentInning)}
+              disabled={!(activeTab === 'home' ? homeLineup : awayLineup)?.some(p => p.inning_number === currentInning)}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
               </svg>
-              <span>Delete Lineup</span>
+              <span>Delete Inning</span>
             </button>
-            
-            {/* Score Game button - only shows when My Team has at least one inning saved */}
-            {((myTeamHa === 'home' && homeLineup.some(p => p.inning_number > 0)) || 
-              (myTeamHa === 'away' && awayLineup.some(p => p.inning_number > 0))) && !lineupChanged && (
-              <button 
-                onClick={() => router.push(`/score-game/${params.teamId}/score/${params.gameId}`)}
-                className="flex items-center justify-center py-2 px-3 rounded-md shadow-sm text-xs font-medium border bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700 transition-colors"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                <span>Score Game</span>
-              </button>
-            )}
-            
-            {/* Unsaved indicator */}
-            {lineupChanged && (
-              <span className="text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-md shadow-sm border border-amber-200 flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-                Unsaved
-              </span>
-            )}
           </div>
         </div>
         
-        {/* InningSelector with addPlayerForm inputs inline */}
+        {/* InningSelector with add player form inline */}
         <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 mb-4">
-          <div className="flex justify-between items-center">
-            <div className="flex-1">
+          <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-3">
+            <div className="w-full md:w-auto">
               <label className="block text-xs text-gray-500 mb-1">Innings</label>
               <div className="mt-1">
                 <InningSelector 
                   currentInning={currentInning}
                   setCurrentInning={setCurrentInning}
                   availableInnings={availableInnings}
-                  handleCopyPreviousInning={handleCopyPreviousInning}
                   handleAddInning={handleAddInning}
                   saveLineups={saveLineups}
                   lineupChanged={lineupChanged}
@@ -1168,14 +1097,15 @@ export default function GameLineup() {
                   homeLineup={homeLineup}
                   awayLineup={awayLineup}
                   handleDeleteLineup={handleDeleteLineup}
-                  fetchPreviousInningLineup={fetchPreviousInningLineup}
                   hideActionButtons={true}
+                  isLoading={loading}
+                  key={`inning-selector-${homeLineup.length}-${awayLineup.length}-${activeTab}`}
                 />
               </div>
             </div>
             
-            {/* AddPlayerForm inputs without wrapping form */}
-            <div className="flex items-center space-x-2">
+            {/* Add player form - show if we have valid lineup */}
+            <div className="flex flex-wrap items-center gap-2 mt-2 md:mt-0 w-full md:w-auto">
               {activeTab === myTeamHa ? (
                 <div className="relative w-48">
                   <label className="block text-xs text-gray-500 mb-1">Player</label>
@@ -1204,6 +1134,13 @@ export default function GameLineup() {
                       id="jerseyInput"
                       placeholder="#"
                       className="w-full py-2 px-2 text-center border border-gray-300 rounded-md shadow-sm text-xs focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                      onChange={(e) => {
+                        // Always update the name field to match the current jersey number
+                        const nameInput = document.getElementById('nameInput') as HTMLInputElement;
+                        if (nameInput) {
+                          nameInput.value = e.target.value;
+                        }
+                      }}
                     />
                   </div>
                   
@@ -1284,92 +1221,87 @@ export default function GameLineup() {
       
       {/* Team tabs - kept separate from AddPlayerForm */}
       <div className="border-b border-gray-200 bg-gray-100 shadow-sm rounded-t-lg mt-2">
-        <nav className="flex items-center px-4">
-          <button
-            onClick={() => {
-              // Only fetch new roster data if changing tabs
-              if (activeTab !== 'away') {
-                setActiveTab('away');
-                setCurrentInning(1);
-                
-                // Only fetch roster data if not already loaded
-                if (myTeamHa === 'away' && rosterPlayers.length === 0) {
-                  // Simple inline function to fetch roster data
-                  const fetchRosterData = async () => {
-                    try {
-                      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/teams/${params.teamId}/active_players`);
-                      if (response.ok) {
-                        const data = JSON.parse(await response.text());
-                        processRosterPlayers(data);
-                      }
-                    } catch (error) {
-                      console.error('Error fetching roster data:', error);
-                    }
-                  };
+        <nav className="flex items-center justify-between px-4">
+          <div className="flex items-center">
+            <button
+              onClick={() => {
+                // Only change tab if it's different
+                if (activeTab !== 'away') {
+                  setActiveTab('away');
+                  setCurrentInning(1);
                   
-                  fetchRosterData();
-                } else if (myTeamHa !== 'away') {
-                  // For opponent team, use empty roster
-                  setRosterPlayers([]);
-                  setActivePlayersList([]);
+                  // Load roster players if this is "my team"
+                  if (myTeamHa === 'away') {
+                    // Simple inline timeout to allow state to update first
+                    setTimeout(() => {
+                      fetchRosterPlayers();
+                    }, 50);
+                  } else {
+                    // For opponent, clear roster
+                    setRosterPlayers([]);
+                    setActivePlayersList([]);
+                  }
                 }
-              }
-            }}
-            className={`relative mr-4 py-3.5 px-6 font-medium text-sm transition-all duration-200 focus:outline-none ${
-              activeTab === 'away'
-                ? 'bg-white border-t border-l border-r border-gray-200 text-indigo-600 font-semibold -mb-px rounded-t-lg shadow-sm'
-                : 'text-gray-500 hover:text-indigo-500 hover:bg-gray-50 rounded-t-lg'
-            }`}
-          >
-            {myTeamHa === 'away' ? 'My Team (Away)' : 'Away Team'}
-            <div className={`absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-t transform transition-transform duration-200 ${activeTab === 'away' ? 'scale-x-100' : 'scale-x-0'}`}></div>
-          </button>
-          <button
-            onClick={() => {
-              // Only fetch new roster data if changing tabs
-              if (activeTab !== 'home') {
-                setActiveTab('home');
-                setCurrentInning(1);
-                
-                // Only fetch roster data if not already loaded
-                if (myTeamHa === 'home' && rosterPlayers.length === 0) {
-                  // Simple inline function to fetch roster data
-                  const fetchRosterData = async () => {
-                    try {
-                      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/teams/${params.teamId}/active_players`);
-                      if (response.ok) {
-                        const data = JSON.parse(await response.text());
-                        processRosterPlayers(data);
-                      }
-                    } catch (error) {
-                      console.error('Error fetching roster data:', error);
-                    }
-                  };
+              }}
+              className={`relative mr-4 py-3.5 px-6 font-medium text-sm transition-all duration-200 focus:outline-none ${
+                activeTab === 'away'
+                  ? 'bg-white border-t border-l border-r border-gray-200 text-indigo-600 font-semibold -mb-px rounded-t-lg shadow-sm'
+                  : 'text-gray-500 hover:text-indigo-500 hover:bg-gray-50 rounded-t-lg'
+              }`}
+            >
+              {myTeamHa === 'away' ? 'My Team (Away)' : 'Away Team'}
+              <div className={`absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-t transform transition-transform duration-200 ${activeTab === 'away' ? 'scale-x-100' : 'scale-x-0'}`}></div>
+            </button>
+            <button
+              onClick={() => {
+                // Only change tab if it's different
+                if (activeTab !== 'home') {
+                  setActiveTab('home');
+                  setCurrentInning(1);
                   
-                  fetchRosterData();
-                } else if (myTeamHa !== 'home') {
-                  // For opponent team, use empty roster
-                  setRosterPlayers([]);
-                  setActivePlayersList([]);
+                  // Load roster players if this is "my team"
+                  if (myTeamHa === 'home') {
+                    // Simple inline timeout to allow state to update first
+                    setTimeout(() => {
+                      fetchRosterPlayers();
+                    }, 50);
+                  } else {
+                    // For opponent, clear roster
+                    setRosterPlayers([]);
+                    setActivePlayersList([]);
+                  }
                 }
-              }
-            }}
-            className={`relative mr-4 py-3.5 px-6 font-medium text-sm transition-all duration-200 focus:outline-none ${
-              activeTab === 'home'
-                ? 'bg-white border-t border-l border-r border-gray-200 text-indigo-600 font-semibold -mb-px rounded-t-lg shadow-sm'
-                : 'text-gray-500 hover:text-indigo-500 hover:bg-gray-50 rounded-t-lg'
-            }`}
-          >
-            {myTeamHa === 'home' ? 'My Team (Home)' : 'Home Team'}
-            <div className={`absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-t transform transition-transform duration-200 ${activeTab === 'home' ? 'scale-x-100' : 'scale-x-0'}`}></div>
-          </button>
+              }}
+              className={`relative mr-4 py-3.5 px-6 font-medium text-sm transition-all duration-200 focus:outline-none ${
+                activeTab === 'home'
+                  ? 'bg-white border-t border-l border-r border-gray-200 text-indigo-600 font-semibold -mb-px rounded-t-lg shadow-sm'
+                  : 'text-gray-500 hover:text-indigo-500 hover:bg-gray-50 rounded-t-lg'
+              }`}
+            >
+              {myTeamHa === 'home' ? 'My Team (Home)' : 'Home Team'}
+              <div className={`absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-t transform transition-transform duration-200 ${activeTab === 'home' ? 'scale-x-100' : 'scale-x-0'}`}></div>
+            </button>
+          </div>
+          
+          {/* Score Game button - only shows when My Team has at least one inning saved */}
+          {((myTeamHa === 'home' && homeLineup.some(p => p.inning_number > 0)) || 
+            (myTeamHa === 'away' && awayLineup.some(p => p.inning_number > 0))) && !lineupChanged && (
+            <button 
+              onClick={() => router.push(`/score-game/${params.teamId}/score/${params.gameId}`)}
+              className="flex items-center justify-center py-2 px-4 rounded-md text-sm font-medium border bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700 transition-all duration-300 shadow-sm animate-fadeIn"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              <span>Score Game</span>
+            </button>
+          )}
         </nav>
       </div>
       
       {/* Current team lineup - all innings horizontally */}
       <div className="bg-white shadow-sm rounded-b-lg overflow-hidden mb-6 border border-gray-200 border-t-0">
         <div className="p-4">
-          {/* Get unique innings from the current team's lineup */}
           {(() => {
             const currentTeamLineup = activeTab === 'home' ? homeLineup : awayLineup;
             
@@ -1379,12 +1311,12 @@ export default function GameLineup() {
             // Ensure we have the current inning and the next inning in our display
             let inningsToDisplay = [...existingInnings];
             
-            // Add current inning if not already in the list
+            // Always include the current inning if not already in the list
             if (!inningsToDisplay.includes(currentInning)) {
               inningsToDisplay.push(currentInning);
             }
             
-            // Add next inning if not already in the list
+            // Maybe include the next inning if it's available
             const nextInning = currentInning + 1;
             if (!inningsToDisplay.includes(nextInning) && availableInnings.includes(nextInning)) {
               inningsToDisplay.push(nextInning);
@@ -1400,8 +1332,8 @@ export default function GameLineup() {
             }
             
             return (
-              <div className="overflow-x-auto pb-4">
-                <div className="flex space-x-6">
+              <div className="overflow-x-auto pb-4 w-full">
+                <div className="flex space-x-6 min-w-max">
                   {inningsToDisplay.map(inning => (
                     <div 
                       key={inning} 
