@@ -1,9 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-
-export interface RosterPlayer {
-  jersey_number: string;
-  player_name: string;
-}
+import { RosterPlayer } from './AddPlayerDropdown';
 
 interface AddPlayerDropdownProps {
   availablePlayers: RosterPlayer[];
@@ -101,5 +97,4 @@ const AddPlayerDropdown: React.FC<AddPlayerDropdownProps> = ({
   );
 };
 
-export default AddPlayerDropdown;
-export type { RosterPlayer }; 
+export default AddPlayerDropdown; 

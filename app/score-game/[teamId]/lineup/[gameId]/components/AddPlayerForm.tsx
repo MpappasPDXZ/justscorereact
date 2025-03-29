@@ -105,6 +105,7 @@ const AddPlayerForm: React.FC<AddPlayerFormProps> = ({
           {isMyTeam ? (
             // My team - show player dropdown
             <div className="relative w-48">
+              <label className="block text-xs text-gray-500 mb-1">Player</label>
               <select
                 value={selectedPlayerId}
                 onChange={(e) => setSelectedPlayerId(e.target.value)}
@@ -119,12 +120,12 @@ const AddPlayerForm: React.FC<AddPlayerFormProps> = ({
                   </option>
                 ))}
               </select>
-              <span className="absolute -top-5 left-0 text-xs text-gray-500">Player</span>
             </div>
           ) : (
             // Opponent team - show manual entry fields
             <>
               <div className="relative w-16">
+                <label className="block text-xs text-gray-500 mb-1">Jersey #</label>
                 <input
                   type="text"
                   value={jerseyNumber}
@@ -134,10 +135,10 @@ const AddPlayerForm: React.FC<AddPlayerFormProps> = ({
                   required
                   title="Jersey Number"
                 />
-                <span className="absolute -top-5 left-0 text-xs text-gray-500">Jersey #</span>
               </div>
               
               <div className="relative w-32 ml-2">
+                <label className="block text-xs text-gray-500 mb-1">Name</label>
                 <input
                   type="text"
                   value={playerName}
@@ -147,12 +148,12 @@ const AddPlayerForm: React.FC<AddPlayerFormProps> = ({
                   required
                   title="Player Name"
                 />
-                <span className="absolute -top-5 left-0 text-xs text-gray-500">Name</span>
               </div>
             </>
           )}
           
           <div className="relative w-16 ml-2">
+            <label className="block text-xs text-gray-500 mb-1">Order #</label>
             <input
               type="text"
               value={nextOrderNumber}
@@ -160,10 +161,10 @@ const AddPlayerForm: React.FC<AddPlayerFormProps> = ({
               className="w-full py-2 px-2 text-center border border-gray-300 bg-gray-100 rounded-md shadow-sm text-gray-600 text-xs focus:outline-none"
               title="Order Number"
             />
-            <span className="absolute -top-5 left-0 text-xs text-gray-500">Order #</span>
           </div>
           
           <div className="relative w-16 ml-2">
+            <label className="block text-xs text-gray-500 mb-1">Inning</label>
             <input
               type="text"
               value={currentInning}
@@ -171,7 +172,6 @@ const AddPlayerForm: React.FC<AddPlayerFormProps> = ({
               className="w-full py-2 px-2 text-center border border-gray-300 bg-gray-100 rounded-md shadow-sm text-gray-600 text-xs focus:outline-none"
               title="Inning Number"
             />
-            <span className="absolute -top-5 left-0 text-xs text-gray-500">Inning</span>
           </div>
         </div>
         

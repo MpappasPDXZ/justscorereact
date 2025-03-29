@@ -73,35 +73,29 @@ const LineupTable: React.FC<LineupTableProps> = ({
                 colSpan={columnCount} 
                 className={`px-3 py-2 text-left text-sm font-bold border-b-[0.5px] ${
                   isCurrentInning 
-                    ? 'text-indigo-600 bg-indigo-100 border-indigo-200 py-2.5' 
+                    ? 'text-indigo-600 bg-white border-indigo-600 py-2.5' 
                     : 'text-gray-900 bg-gray-100 border-gray-200'
                 } ${onInningClick ? 'cursor-pointer hover:bg-opacity-80' : ''}`}
                 onClick={handleInningHeaderClick}
-                title={onInningClick ? "Click to select this inning" : undefined}
               >
                 <div className="flex items-center">
                   {isCurrentInning ? 'Current: ' : ''}Inning {inningNumber}
-                  {onInningClick && !isCurrentInning && (
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
-                    </svg>
-                  )}
                 </div>
               </th>
             </tr>
           )}
           <tr>
-            <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-5 border-b-[0.5px] border-gray-200" title="Order Number">
+            <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 tracking-wider w-4 border-b-[0.5px] border-gray-200">
               O
             </th>
-            <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-13 border-b-[0.5px] border-gray-200">
+            <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 tracking-wider w-13 border-b-[0.5px] border-gray-200">
               Jersey #
             </th>
-            <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-36 border-b-[0.5px] border-gray-200">
+            <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 tracking-wider w-36 border-b-[0.5px] border-gray-200">
               Player Name
             </th>
             {showActions && (
-              <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-16 border-b-[0.5px] border-gray-200">
+              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 tracking-wider w-16 border-b-[0.5px] border-gray-200">
                 Actions
               </th>
             )}
@@ -112,25 +106,24 @@ const LineupTable: React.FC<LineupTableProps> = ({
             .sort((a, b) => a.order_number - b.order_number)
             .map((player, index) => (
               <tr key={`${player.home_or_away}-${player.jersey_number}-${index}`} className="bg-white">
-                <td className="px-3 py-2.5 whitespace-nowrap text-sm text-left font-medium text-gray-900">
+                <td className="px-3 py-2 whitespace-nowrap text-xs text-left font-medium text-gray-900">
                   {player.order_number}
                 </td>
-                <td className="px-3 py-2.5 whitespace-nowrap text-sm text-center">
+                <td className="px-3 py-2 whitespace-nowrap text-xs text-center">
                   <div className="flex justify-center">
-                    <span className="w-7 h-7 flex items-center justify-center bg-gray-100 text-gray-700 text-sm rounded-full border-[0.5px] border-gray-300">
+                    <span className="w-6 h-6 flex items-center justify-center bg-gray-100 text-gray-700 text-xs rounded-full border-[0.5px] border-gray-300">
                       {player.jersey_number}
                     </span>
                   </div>
                 </td>
-                <td className="px-3 py-2.5 whitespace-nowrap text-sm text-left text-gray-900">
+                <td className="px-3 py-2 whitespace-nowrap text-xs text-left text-gray-900">
                   {player.name}
                 </td>
                 {showActions && (
-                  <td className="px-3 py-2.5 whitespace-nowrap text-left text-sm font-medium">
+                  <td className="px-3 py-2 whitespace-nowrap text-left text-xs font-medium">
                     <div className="flex items-center space-x-1.5">
                       <button
-                        className="p-0.5 w-7 h-7 rounded-md border border-gray-300 bg-white text-indigo-600 hover:bg-indigo-50 transition-colors flex items-center justify-center disabled:bg-white disabled:text-gray-300 disabled:border-gray-200 disabled:cursor-not-allowed"
-                        title="Move Up"
+                        className="p-0.5 w-6 h-6 rounded-md border border-gray-300 bg-white text-indigo-600 hover:bg-indigo-50 transition-colors flex items-center justify-center disabled:bg-white disabled:text-gray-300 disabled:border-gray-200 disabled:cursor-not-allowed"
                         onClick={() => onMovePlayer && onMovePlayer(player, 'up')}
                         disabled={index === 0}
                       >
@@ -139,8 +132,7 @@ const LineupTable: React.FC<LineupTableProps> = ({
                         </svg>
                       </button>
                       <button
-                        className="p-0.5 w-7 h-7 rounded-md border border-gray-300 bg-white text-red-600 hover:bg-red-50 transition-colors flex items-center justify-center disabled:bg-white disabled:text-gray-300 disabled:border-gray-200 disabled:cursor-not-allowed"
-                        title="Move Down"
+                        className="p-0.5 w-6 h-6 rounded-md border border-gray-300 bg-white text-red-600 hover:bg-red-50 transition-colors flex items-center justify-center disabled:bg-white disabled:text-gray-300 disabled:border-gray-200 disabled:cursor-not-allowed"
                         onClick={() => onMovePlayer && onMovePlayer(player, 'down')}
                         disabled={index === players.length - 1}
                       >
@@ -149,8 +141,7 @@ const LineupTable: React.FC<LineupTableProps> = ({
                         </svg>
                       </button>
                       <button
-                        className="p-0.5 w-7 h-7 rounded-md border border-gray-300 bg-white text-red-600 hover:bg-red-50 transition-colors flex items-center justify-center"
-                        title="Remove Player"
+                        className="p-0.5 w-6 h-6 rounded-md border border-gray-300 bg-white text-red-600 hover:bg-red-50 transition-colors flex items-center justify-center"
                         onClick={() => onRemovePlayer && onRemovePlayer(player)}
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

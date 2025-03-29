@@ -9,6 +9,17 @@ const config: Config = {
   ],
   theme: {
   	extend: {
+  		keyframes: {
+  			fadeInOut: {
+  				'0%': { opacity: '0', transform: 'translate(-50%, -20px)' },
+  				'10%': { opacity: '1', transform: 'translate(-50%, 0)' },
+  				'80%': { opacity: '1', transform: 'translate(-50%, 0)' },
+  				'100%': { opacity: '0', transform: 'translate(-50%, -20px)' },
+  			},
+  		},
+  		animation: {
+  			fadeInOut: 'fadeInOut 2s ease-in-out forwards',
+  		},
   		colors: {
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',

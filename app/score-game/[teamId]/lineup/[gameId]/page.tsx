@@ -8,6 +8,7 @@ import LineupTable, { Player } from "./components/LineupTable";
 import InningSelector from "./components/InningSelector";
 import AddPlayerDropdown, { RosterPlayer } from "./components/AddPlayerDropdown";
 import AddPlayerForm, { PlayerFormInput } from "./components/AddPlayerForm";
+import Toast from './components/Toast';
 
 interface Game {
   away_team_name: string;
@@ -110,6 +111,30 @@ export default function GameLineup() {
     position: string;
   }[]>([]);
   
+  // Toast notification state
+  const [toast, setToast] = useState({
+    visible: false,
+    message: '',
+    type: 'info' as 'success' | 'error' | 'warning' | 'info'
+  });
+  
+  // Function to show toast
+  const showToast = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info') => {
+    setToast({
+      visible: true,
+      message,
+      type
+    });
+  };
+
+  // Function to hide toast
+  const hideToast = () => {
+    setToast(prev => ({
+      ...prev,
+      visible: false
+    }));
+  };
+  
   // Fetch my_team_ha value
   const fetchMyTeamHa = async () => {
     try {
@@ -118,47 +143,38 @@ export default function GameLineup() {
       if (response.ok) {
         // Get the raw response text
         const rawResponse = await response.text();
-        console.log("Raw my_team_ha response:", rawResponse);
         
         // Standardize and clean response
         const cleanResponse = rawResponse.trim().toLowerCase();
         
         // Parse the response
         if (cleanResponse === 'away' || cleanResponse.includes('"away"') || cleanResponse.includes("'away'")) {
-          console.log("Setting my_team_ha to 'away'");
           setMyTeamHa('away');
         } else if (cleanResponse === 'home' || cleanResponse.includes('"home"') || cleanResponse.includes("'home'")) {
-          console.log("Setting my_team_ha to 'home'");
           setMyTeamHa('home');
         } else {
           // Try to parse JSON if it's a JSON string
           try {
             const jsonResponse = JSON.parse(rawResponse);
             if (jsonResponse === 'away' || (typeof jsonResponse === 'object' && jsonResponse.value === 'away')) {
-              console.log("Parsed JSON: Setting my_team_ha to 'away'");
               setMyTeamHa('away');
               return;
             } else if (jsonResponse === 'home' || (typeof jsonResponse === 'object' && jsonResponse.value === 'home')) {
-              console.log("Parsed JSON: Setting my_team_ha to 'home'");
               setMyTeamHa('home');
               return;
             }
           } catch (jsonError) {
             // Not a valid JSON, continue with fallback
-            console.warn("Response is not valid JSON:", jsonError);
           }
           
           // If we can't determine, use home as a fallback
-          console.warn("Could not determine my_team_ha from response, using 'home' as fallback");
           setMyTeamHa('home');
         }
       } else {
-        console.error("Error fetching my_team_ha:", response.status, response.statusText);
         // Fallback to 'home' if API call fails
         setMyTeamHa('home');
       }
     } catch (error) {
-      console.error("Error in fetchMyTeamHa:", error);
       // Fallback to 'home' if there's an exception
       setMyTeamHa('home');
     }
@@ -172,7 +188,8 @@ export default function GameLineup() {
     const prevInning = currentInning - 1;
     let madeChanges = false;
     
-    console.log(`Copying lineup from inning ${prevInning} to inning ${currentInning}`);
+    // Show toast notification for starting the copy operation
+    showToast(`Copying players from inning ${prevInning}...`, 'info');
     
     // Copy home lineup
     const prevInningHomePlayers = homeLineup.filter(p => p.inning_number === prevInning);
@@ -181,8 +198,6 @@ export default function GameLineup() {
       const currentInningHomePlayers = homeLineup.filter(p => p.inning_number === currentInning);
       
       if (currentInningHomePlayers.length === 0) {
-        console.log(`Copying ${prevInningHomePlayers.length} home players from inning ${prevInning} to ${currentInning}`);
-        
         // Create copies of players from previous inning with the new inning number
         const newInningHomePlayers = prevInningHomePlayers.map(player => ({
           ...player,
@@ -202,8 +217,6 @@ export default function GameLineup() {
       const currentInningAwayPlayers = awayLineup.filter(p => p.inning_number === currentInning);
       
       if (currentInningAwayPlayers.length === 0) {
-        console.log(`Copying ${prevInningAwayPlayers.length} away players from inning ${prevInning} to ${currentInning}`);
-        
         // Create copies of players from previous inning with the new inning number
         const newInningAwayPlayers = prevInningAwayPlayers.map(player => ({
           ...player,
@@ -217,17 +230,17 @@ export default function GameLineup() {
     }
     
     if (madeChanges) {
-      console.log(`Successfully copied lineup data from inning ${prevInning} to inning ${currentInning}`);
       setLineupChanged(true);
+      showToast(`Players copied from inning ${prevInning} to ${currentInning}`, 'success');
     } else {
       // If current inning already has players
       const hasHomePlayers = homeLineup.some(p => p.inning_number === currentInning);
       const hasAwayPlayers = awayLineup.some(p => p.inning_number === currentInning);
       
       if (hasHomePlayers || hasAwayPlayers) {
-        console.log(`Inning ${currentInning} already has players. Not copying from inning ${prevInning}.`);
+        showToast(`Inning ${currentInning} already has players`, 'warning');
       } else {
-        console.log(`No players found in inning ${prevInning} to copy.`);
+        showToast(`No players found in inning ${prevInning} to copy`, 'warning');
       }
     }
     
@@ -241,7 +254,6 @@ export default function GameLineup() {
   const handleAddInning = () => {
     // Calculate the next inning number
     const nextInning = Math.max(...availableInnings) + 1;
-    console.log(`Adding new inning ${nextInning}`);
     
     // First create an empty inning in the lineup (so the UI shows it right away)
     const emptyInningPlaceholder: Player[] = [];
@@ -277,56 +289,35 @@ export default function GameLineup() {
       const homeEndpoint = `${process.env.NEXT_PUBLIC_API_URL}/lineup/${params.teamId}/${params.gameId}/home`;
       const awayEndpoint = `${process.env.NEXT_PUBLIC_API_URL}/lineup/${params.teamId}/${params.gameId}/away`;
       
-      console.log(`Fetching home lineup from: ${homeEndpoint}`);
-      console.log(`Fetching away lineup from: ${awayEndpoint}`);
-      
       // First check if lineup is available by fetching away lineup (it contains the lineup_available flag)
-      console.log(`Checking lineup availability from: ${awayEndpoint}`);
       const awayResponse = await fetch(awayEndpoint);
-      
-      // Log response status for debugging
-      console.log(`Away lineup response status: ${awayResponse.status}`);
       
       let lineupAvailable = 'no';
       if (awayResponse.ok) {
         try {
           const awayRawText = await awayResponse.text();
-          console.log('=== RAW AWAY LINEUP RESPONSE ===');
-          console.log(awayRawText.substring(0, 500) + (awayRawText.length > 500 ? '...' : ''));
-          console.log('=== END RAW AWAY LINEUP RESPONSE ===');
           
           const awayData = JSON.parse(awayRawText);
-          console.log('=== PARSED AWAY LINEUP DATA ===');
-          console.log(JSON.stringify(awayData, null, 2).substring(0, 500) + (JSON.stringify(awayData, null, 2).length > 500 ? '...' : ''));
-          console.log('=== END PARSED AWAY LINEUP DATA ===');
           
           // Check for lineup_available flag in the response
           if (awayData.lineup_available) {
             lineupAvailable = awayData.lineup_available;
-            console.log(`Lineup availability status from response: ${lineupAvailable}`);
           }
           
           // Process the away lineup data
           const processedAwayLineup = processLineupData(awayData, 'away');
-          console.log(`Processed ${processedAwayLineup.length} away players`);
           setAwayLineup(processedAwayLineup);
         } catch (jsonError) {
-          console.error('Error parsing away lineup JSON:', jsonError);
-          setAwayLineup([]);
         }
       } else {
-        console.log(`Away lineup fetch failed: ${awayResponse.status} ${awayResponse.statusText}`);
         if (awayResponse.status === 404) {
-          console.log('Away lineup might not exist yet. This is normal for a new game.');
         } else {
-          console.log('Unexpected error with away lineup fetch');
         }
         setAwayLineup([]);
       }
       
       // If lineup is not available, initialize with empty arrays and stop loading
       if (lineupAvailable.toLowerCase() === 'no') {
-        console.log('No lineup data available yet according to response. Starting with empty lineups.');
         setHomeLineup([]);
         setLoading(false);
         return;
@@ -334,40 +325,26 @@ export default function GameLineup() {
       
       // If we get here, lineup is available, so fetch home lineup as well
       const homeResponse = await fetch(homeEndpoint);
-      console.log(`Home lineup response status: ${homeResponse.status}`);
       
       // Process home lineup
       if (homeResponse.ok) {
         try {
           const homeRawText = await homeResponse.text();
-          console.log('=== RAW HOME LINEUP RESPONSE ===');
-          console.log(homeRawText.substring(0, 500) + (homeRawText.length > 500 ? '...' : ''));
-          console.log('=== END RAW HOME LINEUP RESPONSE ===');
           
           const homeData = JSON.parse(homeRawText);
-          console.log('=== PARSED HOME LINEUP DATA ===');
-          console.log(JSON.stringify(homeData, null, 2).substring(0, 500) + (JSON.stringify(homeData, null, 2).length > 500 ? '...' : ''));
-          console.log('=== END PARSED HOME LINEUP DATA ===');
           
           // Process the home lineup data
           const processedHomeLineup = processLineupData(homeData, 'home');
-          console.log(`Processed ${processedHomeLineup.length} home players`);
           setHomeLineup(processedHomeLineup);
         } catch (jsonError) {
-          console.error('Error parsing home lineup JSON:', jsonError);
-          setHomeLineup([]);
         }
       } else {
-        console.error(`Home lineup fetch failed: ${homeResponse.status} ${homeResponse.statusText}`);
         if (homeResponse.status === 404) {
-          console.log('Home lineup might not exist yet. This is normal for a new game.');
         } else {
-          console.log('Unexpected error with home lineup fetch');
         }
         setHomeLineup([]);
       }
     } catch (error) {
-      console.error('Error fetching lineups:', error);
       setHomeLineup([]);
       setAwayLineup([]);
     } finally {
@@ -403,32 +380,19 @@ export default function GameLineup() {
           active_players_count: 0,
           active_players: []
         };
-        // Remove these lines that are causing the 404 error
-        // endpoint = `${process.env.NEXT_PUBLIC_API_URL}/games/${params.teamId}/${params.gameId}/${activeTab}_roster`;
-        // endpoint = `${process.env.NEXT_PUBLIC_API_URL}/games/${params.teamId}/${params.gameId}/${activeTab}_roster`;
         
         // Use the blank dataset directly instead of fetching
-        console.log('Using blank dataset for opponent team');
         setRosterPlayers([]);
         return;
       }
       
-      console.log(`Fetching roster from: ${endpoint}`);
       const response = await fetch(endpoint);
-      
-      console.log(`Roster response status: ${response.status}`);
       
       if (response.ok) {
         try {
           const rawText = await response.text();
-          console.log('=== RAW ROSTER RESPONSE ===');
-          console.log(rawText);
-          console.log('=== END RAW ROSTER RESPONSE ===');
           
           const data = JSON.parse(rawText);
-          console.log('=== PARSED ROSTER DATA ===');
-          console.log(JSON.stringify(data, null, 2));
-          console.log('=== END PARSED ROSTER DATA ===');
           
           // Handle the new active_players endpoint format
           if (data.active_players && Array.isArray(data.active_players)) {
@@ -446,42 +410,27 @@ export default function GameLineup() {
             // Store active players separately for my team
             if (myTeamHa === activeTab) {
               setActivePlayersList(transformedPlayers);
-              console.log(`Stored ${transformedPlayers.length} active players for my team`);
             }
             
             setRosterPlayers(transformedPlayers);
-            console.log(`Successfully loaded ${transformedPlayers.length} players from active_players endpoint`);
           } 
           // Fall back to handling the traditional roster format
           else if (Array.isArray(data)) {
             setRosterPlayers(data);
-            console.log(`Successfully loaded ${data.length} players from traditional roster endpoint`);
           } else {
-            console.warn('Roster data is not in expected format, using default players');
             setRosterPlayers(getDefaultPlayers());
           }
         } catch (jsonError) {
-          console.error('Error parsing roster JSON:', jsonError);
-          setRosterPlayers(getDefaultPlayers());
         }
       } else {
-        console.warn(`No specific roster found for ${activeTab} team, using fallback options`);
-        
         // Try getting active players for my team
         const fallbackResponse = await fetch(teamActivePlayersEndpoint);
-        console.log(`Fallback active_players response status: ${fallbackResponse.status}`);
         
         if (fallbackResponse.ok) {
           try {
             const fallbackRawText = await fallbackResponse.text();
-            console.log('=== RAW FALLBACK ACTIVE_PLAYERS RESPONSE ===');
-            console.log(fallbackRawText);
-            console.log('=== END RAW FALLBACK ACTIVE_PLAYERS RESPONSE ===');
             
             const fallbackData = JSON.parse(fallbackRawText);
-            console.log('=== PARSED FALLBACK ACTIVE_PLAYERS DATA ===');
-            console.log(JSON.stringify(fallbackData, null, 2));
-            console.log('=== END PARSED FALLBACK ACTIVE_PLAYERS DATA ===');
             
             console.log("Using team active_players as fallback");
             
@@ -499,31 +448,21 @@ export default function GameLineup() {
               }));
               
               // Store active players separately for my team
-              setActivePlayersList(transformedPlayers);
-              console.log(`Stored ${transformedPlayers.length} active players from fallback`);
-              
               if (myTeamHa !== activeTab) {
                 setRosterPlayers(transformedPlayers);
-                console.log(`Loaded ${transformedPlayers.length} players from fallback active_players endpoint`);
               }
             }
             // Fall back to handling the traditional format if needed
             else if (Array.isArray(fallbackData)) {
               if (myTeamHa !== activeTab) {
                 setRosterPlayers(fallbackData);
-                console.log(`Loaded ${fallbackData.length} players from fallback traditional roster`);
               }
             } else {
-              console.warn('Fallback data is not in expected format, using default players');
               if (myTeamHa !== activeTab) {
                 setRosterPlayers(getDefaultPlayers());
               }
             }
           } catch (jsonError) {
-            console.error('Error parsing fallback active_players JSON:', jsonError);
-            if (myTeamHa !== activeTab) {
-              setRosterPlayers(getDefaultPlayers());
-            }
           }
         } else {
           console.log("Creating default players as fallback");
@@ -533,7 +472,6 @@ export default function GameLineup() {
         }
       }
     } catch (error) {
-      console.error('Error fetching roster players', error);
       // Create default players as a fallback
       console.log("Creating default players after error");
       setRosterPlayers(getDefaultPlayers());
@@ -575,6 +513,9 @@ export default function GameLineup() {
       setAwayLineup([...awayLineup, newPlayer]);
     }
     
+    // Show a toast notification
+    showToast(`Player ${player.player_name} (#${player.jersey_number}) added to ${teamType} lineup`, 'success');
+    
     setLineupChanged(true);
     setIsAddPlayerModalOpen(false);
   };
@@ -585,32 +526,21 @@ export default function GameLineup() {
       setLoading(true);
       
       // Only proceed with refresh if lineup data should be available
-      // Ensure we're using the literal string 'home' or 'away'
       const endpoint = `${process.env.NEXT_PUBLIC_API_URL}/lineup/${params.teamId}/${params.gameId}/${teamChoice === 'home' ? 'home' : 'away'}`;
-      console.log(`Refreshing ${teamChoice} lineup from: ${endpoint}`);
       
       const response = await fetch(endpoint, {
         // Use cache: 'no-store' to ensure we're getting fresh data
         cache: 'no-store',
       });
       
-      console.log(`${teamChoice} lineup refresh response status: ${response.status}`);
-      
       if (response.ok) {
         try {
           const rawText = await response.text();
-          console.log(`=== RAW ${teamChoice.toUpperCase()} LINEUP REFRESH RESPONSE ===`);
-          console.log(rawText.substring(0, 500) + (rawText.length > 500 ? '...' : ''));
-          console.log(`=== END RAW ${teamChoice.toUpperCase()} LINEUP REFRESH RESPONSE ===`);
           
           const data = JSON.parse(rawText);
-          console.log(`=== PARSED ${teamChoice.toUpperCase()} REFRESH DATA ===`);
-          console.log(JSON.stringify(data, null, 2).substring(0, 500) + (JSON.stringify(data, null, 2).length > 500 ? '...' : ''));
-          console.log(`=== END PARSED ${teamChoice.toUpperCase()} REFRESH DATA ===`);
           
           // Process the data
           const processedLineup = processLineupData(data, teamChoice);
-          console.log(`Processed ${processedLineup.length} ${teamChoice} players`);
           
           // Update the lineup state
           if (teamChoice === 'home') {
@@ -619,17 +549,12 @@ export default function GameLineup() {
             setAwayLineup(processedLineup);
           }
         } catch (jsonError) {
-          console.error(`Error parsing ${teamChoice} lineup JSON:`, jsonError);
         }
       } else {
         const errorText = await response.text().catch(() => 'No response body');
         
         if (response.status === 404) {
           // Handle 404 case - this is expected if lineup hasn't been saved yet
-          console.log(`${teamChoice} lineup not found (404). This is normal for a new lineup.`);
-          console.log(`Response body:`, errorText.substring(0, 200) + (errorText.length > 200 ? '...' : ''));
-          
-          // Set empty lineup for the team
           if (teamChoice === 'home') {
             setHomeLineup([]);
           } else {
@@ -637,12 +562,9 @@ export default function GameLineup() {
           }
         } else {
           // Other error cases - log but don't show to user
-          console.error(`${teamChoice} lineup refresh failed:`, response.status, response.statusText);
-          console.error(`Response body:`, errorText.substring(0, 500) + (errorText.length > 500 ? '...' : ''));
         }
       }
     } catch (error) {
-      console.error(`Error refreshing ${teamChoice} lineup:`, error);
     } finally {
       setLoading(false);
     }
@@ -661,7 +583,6 @@ export default function GameLineup() {
       
       // Filter for only the current inning's players to avoid duplication
       const currentInningPlayers = getCurrentInningPlayers();
-      console.log(`Saving ${currentInningPlayers.length} players for ${activeTab} team, inning ${currentInning}`);
       
       if (activeTab === 'home') {
         // Format home lineup data according to the specified model
@@ -677,9 +598,6 @@ export default function GameLineup() {
         
         // Updated endpoint with inning_number parameter
         endpoint = `${process.env.NEXT_PUBLIC_API_URL}/lineup/${teamId}/${gameId}/home/${currentInning}`;
-        console.log('=== HOME LINEUP JSON TO BE SENT ===');
-        console.log(JSON.stringify(lineupData, null, 2));
-        console.log('=== END HOME LINEUP ===');
       } else {
         // Format away lineup data according to the specified model
         lineupData = currentInningPlayers.map(player => ({
@@ -694,13 +612,7 @@ export default function GameLineup() {
         
         // Updated endpoint with inning_number parameter
         endpoint = `${process.env.NEXT_PUBLIC_API_URL}/lineup/${teamId}/${gameId}/away/${currentInning}`;
-        console.log('=== AWAY LINEUP JSON TO BE SENT ===');
-        console.log(JSON.stringify(lineupData, null, 2));
-        console.log('=== END AWAY LINEUP ===');
       }
-      
-      // Log the endpoint
-      console.log(`Sending ${activeTab} lineup for inning ${currentInning} to: ${endpoint}`);
       
       // Save lineup for active tab only
       const response = await fetch(endpoint, {
@@ -711,56 +623,35 @@ export default function GameLineup() {
         body: JSON.stringify(lineupData),
       });
       
-      console.log(`${activeTab} lineup save response status: ${response.status}`);
-      
-      // Log the response text if available
-      try {
-        const responseText = await response.text();
-        console.log(`=== ${activeTab.toUpperCase()} LINEUP SAVE RESPONSE ===`);
-        console.log(responseText);
-        console.log(`=== END ${activeTab.toUpperCase()} LINEUP SAVE RESPONSE ===`);
-      } catch (error) {
-        console.log(`No ${activeTab} response text available`);
-      }
-      
       if (response.ok) {
-        console.log(`${activeTab} lineup saved successfully`);
-        
         // Remove the separate lineup availability API call/update
         setLineupChanged(false);
-        alert(`${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} lineup for inning ${currentInning} saved successfully`);
+        showToast(`${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} lineup for inning ${currentInning} saved successfully`, 'success');
       } else {
-        console.error(`Failed to save ${activeTab} lineup`);
-        alert(`Failed to save ${activeTab} lineup. Please try again.`);
+        showToast(`Failed to save ${activeTab} lineup. Please try again.`, 'error');
       }
     } catch (error) {
-      console.error('Error saving lineup:', error);
-      alert('An error occurred while saving the lineup.');
+      showToast('An error occurred while saving the lineup.', 'error');
     }
   };
   
   // Update lineup display immediately after lineup changes
   useEffect(() => {
     // This will trigger UI update when lineups change
-    console.log("Lineup data changed, updating UI...");
-    // No action needed, just the dependency array is enough for re-render
   }, [homeLineup, awayLineup]);
 
   // Update data when active tab or current inning changes
   useEffect(() => {
     // Skip API refresh when a lineup operation is in progress
     if (lineupOperationInProgress) {
-      console.log("Skipping API refresh during lineup operation");
       return;
     }
     
     // Skip API refresh when lineup has changed but not saved
     if (lineupChanged) {
-      console.log("Skipping API refresh because lineup has unsaved changes");
       return;
     }
     
-    console.log("Refreshing lineup data from API for", activeTab, "inning", currentInning);
     refreshLineupData(activeTab, currentInning);
     
     // Also update previous inning data if needed
@@ -786,20 +677,15 @@ export default function GameLineup() {
   // Default to "away" tab since away team bats first
   // Update activeTab based on myTeamHa if it changes
   useEffect(() => {
-    // Log the values for debugging
-    console.log("My team is:", myTeamHa, "Active tab is:", activeTab);
-    
     // We don't automatically change the active tab when myTeamHa changes
     // This just ensures we have valid state for UI displays
     if (myTeamHa !== 'home' && myTeamHa !== 'away') {
-      console.warn("Invalid myTeamHa value, defaulting to 'home'");
       setMyTeamHa('home');
     }
   }, [myTeamHa, activeTab]);
   
   // Update roster players when tab changes
   useEffect(() => {
-    console.log(`Tab changed to ${activeTab}, fetching roster and active players data...`);
     fetchRosterPlayers();
   }, [activeTab]);
   
@@ -850,48 +736,69 @@ export default function GameLineup() {
   };
   
   // Delete lineup for the current inning and active tab
-  const handleDeleteLineup = () => {
-    if (activeTab === 'home') {
-      // Filter out players from the current inning
-      const updatedLineup = homeLineup.filter(
-        player => player.inning_number !== currentInning
-      );
-      setHomeLineup(updatedLineup);
-    } else {
-      // Filter out players from the current inning
-      const updatedLineup = awayLineup.filter(
-        player => player.inning_number !== currentInning
-      );
-      setAwayLineup(updatedLineup);
+  const handleDeleteLineup = async () => {
+    try {
+      // Parse teamId and gameId from params
+      const teamId = parseInt(params.teamId as string);
+      const gameId = parseInt(params.gameId as string);
+      
+      // Show loading toast
+      showToast(`Deleting ${activeTab} lineup for inning ${currentInning}...`, 'info');
+      
+      // Determine the endpoint based on active tab
+      const endpoint = `${process.env.NEXT_PUBLIC_API_URL}/lineup/${teamId}/${gameId}/${activeTab}/${currentInning}`;
+      
+      // Make DELETE request to the API
+      const response = await fetch(endpoint, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+      
+      if (response.ok) {
+        // Update local state to reflect the deletion
+        if (activeTab === 'home') {
+          // Filter out players from the current inning
+          const updatedLineup = homeLineup.filter(
+            player => player.inning_number !== currentInning
+          );
+          setHomeLineup(updatedLineup);
+        } else {
+          // Filter out players from the current inning
+          const updatedLineup = awayLineup.filter(
+            player => player.inning_number !== currentInning
+          );
+          setAwayLineup(updatedLineup);
+        }
+        
+        // Show success toast
+        showToast(`${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} lineup for inning ${currentInning} deleted`, 'success');
+        
+        // Mark as changed
+        setLineupChanged(true);
+      } else {
+        showToast(`Failed to delete lineup. Server returned: ${response.status}`, 'error');
+      }
+    } catch (error) {
+      showToast('An error occurred while deleting the lineup', 'error');
     }
-    
-    // Mark as changed so the user knows to save
-    setLineupChanged(true);
   };
   
   // Fetch previous inning lineup data from server for creating a new inning
   const fetchPreviousInningLineup = async (inningNumber: number) => {
     setLineupOperationInProgress(true);
     try {
-      console.log(`Fetching previous inning lineup data for creating inning ${inningNumber}`);
-      
       // Fetch data for the current active tab team
       const teamChoice = activeTab; // 'home' or 'away'
       const endpoint = `${process.env.NEXT_PUBLIC_API_URL}/lineup/${params.teamId}/${params.gameId}/${teamChoice}/${inningNumber - 1}/new_inning`;
       
-      console.log(`Fetching lineup template from: ${endpoint}`);
       const response = await fetch(endpoint);
       
       if (response.ok) {
-        // Log raw response data for debugging
-        const rawText = await response.text();
-        console.log(`=== RAW NEW INNING RESPONSE ===`);
-        console.log(rawText);
-        console.log(`=== END RAW NEW INNING RESPONSE ===`);
-        
         // Parse the raw text to JSON
+        const rawText = await response.text();
         const data = JSON.parse(rawText);
-        console.log(`Received lineup template data structure:`, Object.keys(data));
         
         // The API response format has {message, team_id, game_id, team_choice, source_inning, lineup: Array}
         if (data.lineup && Array.isArray(data.lineup) && data.lineup.length > 0) {
@@ -911,8 +818,6 @@ export default function GameLineup() {
             };
           });
           
-          console.log(`Transformed ${sourcePlayers.length} players for inning ${inningNumber}:`, sourcePlayers);
-          
           // ATOMIC UPDATE: First completely remove any existing players for this inning
           let currentLineup;
           if (teamChoice === 'home') {
@@ -921,7 +826,6 @@ export default function GameLineup() {
             currentLineup = currentLineup.filter(p => p.inning_number !== inningNumber);
             // Add all the new players at once
             currentLineup = [...currentLineup, ...sourcePlayers];
-            console.log(`Setting homeLineup with ${currentLineup.length} players (${sourcePlayers.length} for inning ${inningNumber})`);
             setHomeLineup(currentLineup);
           } else {
             currentLineup = [...awayLineup];
@@ -929,7 +833,6 @@ export default function GameLineup() {
             currentLineup = currentLineup.filter(p => p.inning_number !== inningNumber);
             // Add all the new players at once
             currentLineup = [...currentLineup, ...sourcePlayers];
-            console.log(`Setting awayLineup with ${currentLineup.length} players (${sourcePlayers.length} for inning ${inningNumber})`);
             setAwayLineup(currentLineup);
           }
           
@@ -939,35 +842,27 @@ export default function GameLineup() {
           // Set current inning to the populated inning
           setCurrentInning(inningNumber);
           
-          console.log(`Successfully populated inning ${inningNumber} with ${sourcePlayers.length} players`);
           return true;
         } else {
-          console.log(`No lineup data returned from the server for inning ${inningNumber - 1}`);
           return false;
         }
       } else {
-        console.error(`Error fetching lineup template: ${response.status} ${response.statusText}`);
         return false;
       }
     } catch (error) {
-      console.error('Error fetching previous inning lineup:', error);
       return false;
     } finally {
       // Ensure lineupOperationInProgress is reset
       setLineupOperationInProgress(false);
-      console.log('Lineup operation complete');
     }
   };
   
   // Helper function to get players for the current inning and tab
   const getCurrentInningPlayers = (): Player[] => {
     const currentLineup = activeTab === 'home' ? homeLineup : awayLineup;
-    console.log(`Filtering players for ${activeTab} team, inning ${currentInning}`);
-    console.log(`Total players in lineup: ${currentLineup.length}`);
     
     // Filter players for the current inning
     const inningPlayers = currentLineup.filter(player => player.inning_number === currentInning);
-    console.log(`Found ${inningPlayers.length} players for inning ${currentInning}`);
     
     return inningPlayers;
   };
@@ -976,7 +871,6 @@ export default function GameLineup() {
   
   // Use useEffect to log when the current players change
   useEffect(() => {
-    console.log(`Current players updated: ${currentPlayers.length} players for inning ${currentInning}`);
   }, [currentPlayers, currentInning]);
   
   // Get previous inning players
@@ -992,65 +886,325 @@ export default function GameLineup() {
   
   const previousPlayers = getPreviousInningPlayers();
   
-  return (
-    <div className="container mx-auto px-1 py-1">
-      <div className="mb-0">
-        <h1 className="text-2xl font-bold mb-1">Offensive Lineup Manager</h1>
+  // Start new inning - using server-side data
+  const handleStartNewInning = async () => {
+    // Calculate the next inning number
+    const nextInning = currentInning + 1;
+    
+    // Check if the next inning exists in available innings
+    const nextInningExists = availableInnings.includes(nextInning);
+    
+    if (!nextInningExists) {
+      // If next inning doesn't exist yet, add it first
+      handleAddInning();
+      
+      // Show toast notification
+      showToast(`Starting new inning ${nextInning}`, 'info');
+      
+      // Delay fetching data so UI can update first
+      setTimeout(async () => {
+        const success = await fetchPreviousInningLineup(nextInning);
+        if (!success) {
+          showToast(`Failed to populate inning ${nextInning}`, 'error');
+        } else {
+          showToast(`Inning ${nextInning} created successfully`, 'success');
+        }
+      }, 300);
+    } else {
+      // The inning already exists, let's check if it has data
+      const hasNextInningData = (activeTab === 'home' ? homeLineup : awayLineup).some(p => p.inning_number === nextInning);
+      
+      if (!hasNextInningData) {
+        // First navigate to the next inning
+        // First set the current inning, then populate
+        setCurrentInning(nextInning);
         
-        {/* InningSelector moved above tabs */}
+        // Show toast notification
+        showToast(`Populating inning ${nextInning}...`, 'info');
+        
+        // Delay fetching data so UI can update first
+        setTimeout(async () => {
+          const success = await fetchPreviousInningLineup(nextInning);
+          if (!success) {
+            showToast(`Failed to populate inning ${nextInning}`, 'error');
+          } else {
+            showToast(`Inning ${nextInning} populated successfully`, 'success');
+          }
+        }, 300);
+      } else {
+        // Just navigate to the next inning, it already has data
+        setCurrentInning(nextInning);
+        showToast(`Navigated to inning ${nextInning}`, 'info');
+      }
+    }
+  };
+  
+  // Confirm delete lineup in InningSelector - this will be passed to the component
+  const confirmDeleteLineup = () => {
+    handleDeleteLineup();
+  };
+  
+  return (
+    <div className="container mx-auto px-1 py-0">
+      {/* Toast Component */}
+      <Toast 
+        message={toast.message}
+        type={toast.type}
+        isVisible={toast.visible}
+        onClose={hideToast}
+        duration={2000}
+      />
+      
+      <div className="mb-0 mt-[-10px]">
+        <div className="flex justify-between items-center mb-1">
+          <div className="flex items-center space-x-3">
+            <h1 className="text-2xl font-bold">Offensive Lineup Manager</h1>
+          </div>
+          
+          {/* Action buttons moved next to the title */}
+          <div className="flex space-x-2">
+            <button
+              onClick={() => router.push(`/score-game/${params.teamId}`)}
+              className="flex items-center justify-center h-7 px-1.5 rounded-lg text-xs font-medium text-gray-600 border border-gray-300 hover:bg-gray-50 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Back
+            </button>
+            
+            {/* New Inning button */}
+            <button
+              onClick={handleStartNewInning}
+              className={`flex items-center justify-center h-7 px-1.5 rounded-lg text-xs font-medium border ${
+                awayLineup.some(p => p.inning_number === currentInning) || homeLineup.some(p => p.inning_number === currentInning)
+                  ? 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 transition-colors'
+                  : 'text-gray-400 border-gray-300 bg-gray-50 cursor-not-allowed'
+              }`}
+              disabled={!(awayLineup.some(p => p.inning_number === currentInning) || homeLineup.some(p => p.inning_number === currentInning))}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              <span>New Inning</span>
+            </button>
+            
+            {/* Save button */}
+            <button 
+              onClick={saveLineups}
+              className="flex items-center justify-center h-7 px-1.5 rounded-lg text-xs font-medium border bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+              </svg>
+              <span>Save Lineup</span>
+            </button>
+            
+            {/* Delete button */}
+            <button 
+              onClick={handleDeleteLineup}
+              className={`flex items-center justify-center h-7 px-1.5 rounded-lg text-xs font-medium border ${
+                !(activeTab === 'home' ? homeLineup : awayLineup).some(p => p.inning_number === currentInning)
+                  ? 'text-gray-400 border-gray-300 cursor-not-allowed'
+                  : 'text-red-700 border-red-500 hover:bg-red-50 transition-colors'
+              }`}
+              disabled={!(activeTab === 'home' ? homeLineup : awayLineup).some(p => p.inning_number === currentInning)}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              <span>Delete Lineup</span>
+            </button>
+            
+            {/* Score Game button - only shows when My Team has at least one inning saved */}
+            {((myTeamHa === 'home' && homeLineup.some(p => p.inning_number > 0)) || 
+              (myTeamHa === 'away' && awayLineup.some(p => p.inning_number > 0))) && !lineupChanged && (
+              <button 
+                onClick={() => router.push(`/score-game/${params.teamId}/score/${params.gameId}`)}
+                className="flex items-center justify-center h-7 px-1.5 rounded-lg text-xs font-medium border bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700 transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span>Score Game</span>
+              </button>
+            )}
+            
+            {/* Unsaved indicator */}
+            {lineupChanged && (
+              <span className="text-xs text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-lg border border-amber-200 flex items-center h-7">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                Unsaved
+              </span>
+            )}
+          </div>
+        </div>
+        
+        {/* InningSelector with addPlayerForm inputs inline */}
         <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 mb-4">
-          <h2 className="text-sm font-semibold text-gray-700 mb-2">Inning Actions</h2>
-          <InningSelector 
-            currentInning={currentInning}
-            setCurrentInning={setCurrentInning}
-            availableInnings={availableInnings}
-            handleCopyPreviousInning={handleCopyPreviousInning}
-            handleAddInning={handleAddInning}
-            saveLineups={saveLineups}
-            lineupChanged={lineupChanged}
-            activeTab={activeTab}
-            homeLineup={homeLineup}
-            awayLineup={awayLineup}
-            handleDeleteLineup={handleDeleteLineup}
-            fetchPreviousInningLineup={fetchPreviousInningLineup}
-          />
+          <div className="flex justify-between items-center">
+            <div className="flex-1">
+              <label className="block text-xs text-gray-500 mb-1">Innings</label>
+              <div className="mt-1">
+                <InningSelector 
+                  currentInning={currentInning}
+                  setCurrentInning={setCurrentInning}
+                  availableInnings={availableInnings}
+                  handleCopyPreviousInning={handleCopyPreviousInning}
+                  handleAddInning={handleAddInning}
+                  saveLineups={saveLineups}
+                  lineupChanged={lineupChanged}
+                  activeTab={activeTab}
+                  homeLineup={homeLineup}
+                  awayLineup={awayLineup}
+                  handleDeleteLineup={handleDeleteLineup}
+                  fetchPreviousInningLineup={fetchPreviousInningLineup}
+                  hideActionButtons={true}
+                />
+              </div>
+            </div>
+            
+            {/* AddPlayerForm inputs without wrapping form */}
+            <div className="flex items-center space-x-2">
+              {activeTab === myTeamHa ? (
+                <div className="relative w-48">
+                  <label className="block text-xs text-gray-500 mb-1">Player</label>
+                  <select
+                    id="playerSelect"
+                    className="w-full py-2 px-2 border border-gray-300 rounded-md shadow-sm text-xs focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                    onChange={(e) => {
+                      // Store selected player ID in a data attribute
+                      e.currentTarget.dataset.selectedPlayerId = e.currentTarget.value;
+                    }}
+                  >
+                    <option value="">Select a player...</option>
+                    {activePlayersList.map(player => (
+                      <option key={player.jersey_number} value={player.jersey_number}>
+                        #{player.jersey_number} - {player.player_name} {player.position ? `(${player.position})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <>
+                  <div className="relative w-16">
+                    <label className="block text-xs text-gray-500 mb-1">Jersey #</label>
+                    <input
+                      type="text"
+                      id="jerseyInput"
+                      placeholder="#"
+                      className="w-full py-2 px-2 text-center border border-gray-300 rounded-md shadow-sm text-xs focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                    />
+                  </div>
+                  
+                  <div className="relative w-32">
+                    <label className="block text-xs text-gray-500 mb-1">Name</label>
+                    <input
+                      type="text"
+                      id="nameInput"
+                      placeholder="Player Name"
+                      className="w-full py-2 px-2 border border-gray-300 rounded-md shadow-sm text-xs focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                    />
+                  </div>
+                </>
+              )}
+              
+              <div className="relative w-16">
+                <label className="block text-xs text-gray-500 mb-1">Order #</label>
+                <input
+                  type="text"
+                  value={getNextOrderNumber()}
+                  disabled
+                  className="w-full py-2 px-2 text-center border border-gray-300 bg-gray-100 rounded-md shadow-sm text-gray-600 text-xs focus:outline-none"
+                />
+              </div>
+              
+              <div className="relative w-16">
+                <label className="block text-xs text-gray-500 mb-1">Inning</label>
+                <input
+                  type="text"
+                  value={currentInning}
+                  disabled
+                  className="w-full py-2 px-2 text-center border border-gray-300 bg-gray-100 rounded-md shadow-sm text-gray-600 text-xs focus:outline-none"
+                />
+              </div>
+              
+              <div className="mt-5">
+                <button
+                  onClick={() => {
+                    if (activeTab === myTeamHa) {
+                      const selectElem = document.getElementById('playerSelect') as HTMLSelectElement;
+                      const selectedPlayerId = selectElem?.value;
+                      if (selectedPlayerId) {
+                        const selectedPlayer = activePlayersList.find(p => p.jersey_number === selectedPlayerId);
+                        if (selectedPlayer) {
+                          handleAddPlayer({
+                            jersey_number: selectedPlayer.jersey_number,
+                            player_name: selectedPlayer.player_name
+                          }, currentInning);
+                          
+                          // Reset the select element
+                          selectElem.value = "";
+                        }
+                      }
+                    } else {
+                      const jerseyInput = document.getElementById('jerseyInput') as HTMLInputElement;
+                      const nameInput = document.getElementById('nameInput') as HTMLInputElement;
+                      if (jerseyInput && nameInput && jerseyInput.value && nameInput.value) {
+                        handleAddPlayer({
+                          jersey_number: jerseyInput.value,
+                          player_name: nameInput.value
+                        }, currentInning);
+                        
+                        // Reset the input fields
+                        jerseyInput.value = '';
+                        nameInput.value = '';
+                      }
+                    }
+                  }}
+                  className="py-2 px-3 border rounded-md shadow-sm text-xs font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 border-indigo-600 text-indigo-600 bg-transparent hover:bg-indigo-50"
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       
-      {/* Team tabs with inline add player form for both teams */}
-      <div className="border-b border-gray-200 bg-white shadow-sm rounded-t-lg">
+      {/* Team tabs - kept separate from AddPlayerForm */}
+      <div className="border-b border-gray-200 bg-gray-100 shadow-sm rounded-t-lg mt-2">
         <nav className="flex items-center px-4">
           <button
-            onClick={() => setActiveTab('away')}
-            className={`mr-2 py-3 px-8 font-medium text-sm transition-colors rounded-t-lg ${
+            onClick={() => {
+              setActiveTab('away');
+              setCurrentInning(1);
+            }}
+            className={`relative mr-4 py-3.5 px-6 font-medium text-sm transition-all duration-200 focus:outline-none ${
               activeTab === 'away'
-                ? 'bg-white border-t border-l border-r border-gray-200 text-indigo-600 font-semibold -mb-px'
-                : 'bg-gray-50 text-gray-600 hover:text-gray-800 hover:bg-gray-100'
+                ? 'bg-white border-t border-l border-r border-gray-200 text-indigo-600 font-semibold -mb-px rounded-t-lg shadow-sm'
+                : 'text-gray-500 hover:text-indigo-500 hover:bg-gray-50 rounded-t-lg'
             }`}
           >
             {myTeamHa === 'away' ? 'My Team (Away)' : 'Away Team'}
+            <div className={`absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-t transform transition-transform duration-200 ${activeTab === 'away' ? 'scale-x-100' : 'scale-x-0'}`}></div>
           </button>
           <button
-            onClick={() => setActiveTab('home')}
-            className={`mr-2 py-3 px-8 font-medium text-sm transition-colors rounded-t-lg ${
+            onClick={() => {
+              setActiveTab('home');
+              setCurrentInning(1);
+            }}
+            className={`relative mr-4 py-3.5 px-6 font-medium text-sm transition-all duration-200 focus:outline-none ${
               activeTab === 'home'
-                ? 'bg-white border-t border-l border-r border-gray-200 text-indigo-600 font-semibold -mb-px'
-                : 'bg-gray-50 text-gray-600 hover:text-gray-800 hover:bg-gray-100'
+                ? 'bg-white border-t border-l border-r border-gray-200 text-indigo-600 font-semibold -mb-px rounded-t-lg shadow-sm'
+                : 'text-gray-500 hover:text-indigo-500 hover:bg-gray-50 rounded-t-lg'
             }`}
           >
             {myTeamHa === 'home' ? 'My Team (Home)' : 'Home Team'}
+            <div className={`absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-t transform transition-transform duration-200 ${activeTab === 'home' ? 'scale-x-100' : 'scale-x-0'}`}></div>
           </button>
-          
-          {/* Add player form for all teams */}
-          <AddPlayerForm
-            currentInning={currentInning}
-            nextOrderNumber={getNextOrderNumber()}
-            onAddPlayer={handleAddPlayer}
-            activeTab={activeTab}
-            myTeamHa={myTeamHa}
-            activePlayers={activePlayersList}
-            lineupChanged={lineupChanged}
-          />
         </nav>
       </div>
       
@@ -1093,7 +1247,7 @@ export default function GameLineup() {
                   {inningsToDisplay.map(inning => (
                     <div 
                       key={inning} 
-                      className={`flex-none ${inning === currentInning ? 'border-2 border-indigo-300 rounded-lg' : ''}`}
+                      className={`flex-none ${inning === currentInning ? 'border border-indigo-600 rounded-lg' : ''}`}
                     >
                       <LineupTable
                         players={currentTeamLineup.filter(player => player.inning_number === inning)}
@@ -1113,9 +1267,13 @@ export default function GameLineup() {
                                 p.order_number === player.order_number)
                             ));
                           }
+                          showToast(`Player ${player.name} (#${player.jersey_number}) removed from lineup`, 'info');
                           setLineupChanged(true);
                         } : undefined}
-                        onMovePlayer={inning === currentInning ? handleMovePlayer : undefined}
+                        onMovePlayer={inning === currentInning ? (player: Player, direction: 'up' | 'down') => {
+                          handleMovePlayer(player, direction);
+                          showToast(`Player ${player.name} moved ${direction}`, 'info');
+                        } : undefined}
                         isReadOnly={inning !== currentInning}
                         emptyMessage={`No players for inning ${inning}`}
                         inningNumber={inning}
@@ -1130,24 +1288,6 @@ export default function GameLineup() {
           })()}
         </div>
       </div>
-      
-      {/* Legend for color coding */}
-      {currentInning > 1 && (
-        <div className="text-xs text-gray-600 mt-4 bg-white p-2 rounded-md border border-gray-200 flex flex-wrap gap-3">
-          <div className="flex items-center">
-            <div className="w-3 h-3 bg-green-50 border border-green-200 mr-1"></div>
-            <span className="text-green-700 font-medium">New player</span> - added in current inning
-          </div>
-          <div className="flex items-center">
-            <div className="w-3 h-3 bg-yellow-50 border border-yellow-200 mr-1"></div>
-            <span className="text-amber-700 font-medium">Moved</span> - position changed from previous inning
-          </div>
-          <div className="flex items-center">
-            <div className="w-3 h-3 bg-red-50 border border-red-200 mr-1"></div>
-            <span className="text-red-600 font-medium">Removed</span> - not in current inning lineup
-          </div>
-        </div>
-      )}
     </div>
   );
 } 

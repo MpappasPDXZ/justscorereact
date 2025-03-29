@@ -1239,42 +1239,50 @@ export default function ScoreGame() {
   if (!boxScore) return <div className="p-4">No box score data available.</div>;
 
   return (
-    <div className="container mx-auto px-1.5 py-4">
-      <div className="flex justify-between items-center mb-4">
-        <div>
-          <h1 className="text-2xl font-bold">Box Score</h1>
-          {boxScore && (
-            <div className="text-xs text-gray-500 mt-1">
-              {boxScore.game_header.event_date} {boxScore.game_header.event_hour}:{boxScore.game_header.event_minute < 10 ? '0' + boxScore.game_header.event_minute : boxScore.game_header.event_minute}
-              {boxScore.game_header.field_name && (
-                <span className="ml-2">| {boxScore.game_header.field_name}, {boxScore.game_header.field_location}</span>
-              )}
-              {boxScore.game_header.field_temperature && (
-                <span className="ml-2">| {boxScore.game_header.field_temperature}°F</span>
-              )}
-            </div>
-          )}
-        </div>
-        
-        <div className="flex space-x-3">
-          <button
-            onClick={() => router.push(`/score-game/${teamId}/lineup/${gameId}`)}
-            className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded transition-colors"
-          >
-            Back to Lineup
-          </button>
+    <div className="container mx-auto px-1.5 py-0">
+      <div className="mb-0 mt-[-10px]">
+        <div className="flex justify-between items-center mb-1">
+          <div className="flex flex-col">
+            <h1 className="text-2xl font-bold">Box Score</h1>
+            {boxScore && (
+              <div className="text-xs text-gray-500 mt-1">
+                {boxScore.game_header.event_date} {boxScore.game_header.event_hour}:{boxScore.game_header.event_minute < 10 ? '0' + boxScore.game_header.event_minute : boxScore.game_header.event_minute}
+                {boxScore.game_header.field_name && (
+                  <span className="ml-2">| {boxScore.game_header.field_name}, {boxScore.game_header.field_location}</span>
+                )}
+                {boxScore.game_header.field_temperature && (
+                  <span className="ml-2">| {boxScore.game_header.field_temperature}°F</span>
+                )}
+              </div>
+            )}
+          </div>
           
-          <button
-            onClick={() => fetchBoxScore()}
-            className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 transition-colors"
-          >
-            Refresh
-          </button>
+          <div className="flex space-x-2">
+            <button
+              onClick={() => router.push(`/score-game/${teamId}/lineup/${gameId}`)}
+              className="flex items-center justify-center h-7 px-1.5 rounded-lg text-xs font-medium text-gray-600 border border-gray-300 hover:bg-gray-50 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Back to Lineup
+            </button>
+            
+            <button
+              onClick={() => fetchBoxScore()}
+              className="flex items-center justify-center h-7 px-1.5 rounded-lg text-xs font-medium border bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Refresh
+            </button>
+          </div>
         </div>
       </div>
       
       {/* Box Score Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden mb-6 w-auto" style={{ width: 'auto', maxWidth: '920px' }}>
+      <div className="bg-white rounded-lg shadow overflow-hidden mb-4 mt-2 w-auto" style={{ width: 'auto', maxWidth: '920px' }}>
         <div className="overflow-x-auto">
           <div style={{ width: 'fit-content', margin: '0' }}>
             <table className="border-collapse" cellSpacing="0" cellPadding="0" style={{ borderCollapse: 'collapse', borderSpacing: 0 }}>
@@ -1477,30 +1485,26 @@ export default function ScoreGame() {
           {/* Team Tabs - Styled as true tabs */}
           <div className="flex h-full">
             <button
-              onClick={() => fetchInningDetail(selectedInning, 'away')}
-              className={`px-8 py-4 text-sm font-medium h-full flex items-center justify-center ${
-                selectedTeam === 'away'
-                  ? 'bg-white text-indigo-700 border-t-2 border-indigo-500 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+              onClick={() => setSelectedTeam('home')}
+              className={`relative py-3.5 px-6 font-medium text-sm transition-all duration-200 focus:outline-none ${
+                selectedTeam === 'home'
+                  ? 'bg-white border-t border-l border-r border-gray-200 text-indigo-600 font-semibold -mb-px rounded-t-lg shadow-sm'
+                  : 'text-gray-500 hover:text-indigo-500 hover:bg-gray-50 rounded-t-lg'
               }`}
             >
-              <span className="flex flex-col items-center">
-                <span className="text-xs font-normal text-gray-500 mb-1">Away</span>
-                <span>{boxScore.game_header.my_team_ha === 'away' ? 'My Team' : boxScore.game_header.opponent_name}</span>
-              </span>
+              {boxScore?.game_header?.my_team_ha === 'home' ? 'My Team (Home)' : 'Home Team'}
+              <div className={`absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-t transform transition-transform duration-200 ${selectedTeam === 'home' ? 'scale-x-100' : 'scale-x-0'}`}></div>
             </button>
             <button
-              onClick={() => fetchInningDetail(selectedInning, 'home')}
-              className={`px-8 py-4 text-sm font-medium h-full flex items-center justify-center ${
-                selectedTeam === 'home'
-                  ? 'bg-white text-indigo-700 border-t-2 border-indigo-500 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+              onClick={() => setSelectedTeam('away')}
+              className={`relative py-3.5 px-6 font-medium text-sm transition-all duration-200 focus:outline-none ${
+                selectedTeam === 'away'
+                  ? 'bg-white border-t border-l border-r border-gray-200 text-indigo-600 font-semibold -mb-px rounded-t-lg shadow-sm'
+                  : 'text-gray-500 hover:text-indigo-500 hover:bg-gray-50 rounded-t-lg'
               }`}
             >
-              <span className="flex flex-col items-center">
-                <span className="text-xs font-normal text-gray-500 mb-1">Home</span>
-                <span>{boxScore.game_header.my_team_ha === 'home' ? 'My Team' : boxScore.game_header.opponent_name}</span>
-              </span>
+              {boxScore?.game_header?.my_team_ha === 'away' ? 'My Team (Away)' : 'Away Team'}
+              <div className={`absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-t transform transition-transform duration-200 ${selectedTeam === 'away' ? 'scale-x-100' : 'scale-x-0'}`}></div>
             </button>
           </div>
           
