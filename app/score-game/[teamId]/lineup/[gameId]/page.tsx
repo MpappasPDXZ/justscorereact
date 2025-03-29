@@ -145,7 +145,7 @@ export default function GameLineup() {
         return;
       }
       
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/games/${params.teamId}/${params.gameId}/my_team_ha`);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/games/${params.teamId}/${params.gameId}/my_team_ha`);
       
       if (response.ok) {
         // Get the raw response text
@@ -302,8 +302,8 @@ export default function GameLineup() {
       }
       
       // Log the URLs we're fetching for debugging purposes
-      const homeEndpoint = `${process.env.NEXT_PUBLIC_API_URL}/lineup/${params.teamId}/${params.gameId}/home`;
-      const awayEndpoint = `${process.env.NEXT_PUBLIC_API_URL}/lineup/${params.teamId}/${params.gameId}/away`;
+      const homeEndpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL}/lineup/${params.teamId}/${params.gameId}/home`;
+      const awayEndpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL}/lineup/${params.teamId}/${params.gameId}/away`;
       
       // First check if lineup is available by fetching away lineup (it contains the lineup_available flag)
       const awayResponse = await fetch(awayEndpoint);
@@ -383,7 +383,7 @@ export default function GameLineup() {
       }
       
       // Use the active_players endpoint for my team's data
-      const teamActivePlayersEndpoint = `${process.env.NEXT_PUBLIC_API_URL}/teams/${params.teamId}/active_players`;
+      const teamActivePlayersEndpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL}/teams/${params.teamId}/active_players`;
       let endpoint;
       
       if (myTeamHa === activeTab) {
@@ -497,7 +497,7 @@ export default function GameLineup() {
       setLoading(true);
       
       // Only proceed with refresh if lineup data should be available
-      const endpoint = `${process.env.NEXT_PUBLIC_API_URL}/lineup/${params.teamId}/${params.gameId}/${teamChoice === 'home' ? 'home' : 'away'}`;
+      const endpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL}/lineup/${params.teamId}/${params.gameId}/${teamChoice === 'home' ? 'home' : 'away'}`;
       
       const response = await fetch(endpoint, {
         // Use cache: 'no-store' to ensure we're getting fresh data
@@ -568,7 +568,7 @@ export default function GameLineup() {
         }));
         
         // Updated endpoint with inning_number parameter
-        endpoint = `${process.env.NEXT_PUBLIC_API_URL}/lineup/${teamId}/${gameId}/home/${currentInning}`;
+        endpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL}/lineup/${teamId}/${gameId}/home/${currentInning}`;
       } else {
         // Format away lineup data according to the specified model
         lineupData = currentInningPlayers.map(player => ({
@@ -582,7 +582,7 @@ export default function GameLineup() {
         }));
         
         // Updated endpoint with inning_number parameter
-        endpoint = `${process.env.NEXT_PUBLIC_API_URL}/lineup/${teamId}/${gameId}/away/${currentInning}`;
+        endpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL}/lineup/${teamId}/${gameId}/away/${currentInning}`;
       }
       
       // Save lineup for active tab only
@@ -727,7 +727,7 @@ export default function GameLineup() {
       showToast(`Deleting ${activeTab} lineup for inning ${currentInning}...`, 'info');
       
       // Determine the endpoint based on active tab
-      const endpoint = `${process.env.NEXT_PUBLIC_API_URL}/lineup/${teamId}/${gameId}/${activeTab}/${currentInning}`;
+      const endpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL}/lineup/${teamId}/${gameId}/${activeTab}/${currentInning}`;
       
       // Make DELETE request to the API
       const response = await fetch(endpoint, {
@@ -772,7 +772,7 @@ export default function GameLineup() {
     try {
       // Fetch data for the current active tab team
       const teamChoice = activeTab; // 'home' or 'away'
-      const endpoint = `${process.env.NEXT_PUBLIC_API_URL}/lineup/${params.teamId}/${params.gameId}/${teamChoice}/${inningNumber - 1}/new_inning`;
+      const endpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL}/lineup/${params.teamId}/${params.gameId}/${teamChoice}/${inningNumber - 1}/new_inning`;
       
       const response = await fetch(endpoint);
       

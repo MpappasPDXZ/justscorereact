@@ -5,6 +5,7 @@ COPY package*.json ./
 RUN npm install
 COPY . .
 ENV NEXT_PUBLIC_API_BASE_URL=https://justscoreca.delightfulsky-cfea119e.centralus.azurecontainerapps.io
+ENV NEXT_PUBLIC_API_URL=https://justscoreca.delightfulsky-cfea119e.centralus.azurecontainerapps.io
 RUN npm run build
 
 # Production stage
@@ -16,5 +17,6 @@ COPY --from=builder /app/node_modules ./node_modules
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV NEXT_PUBLIC_API_BASE_URL=https://justscoreca.delightfulsky-cfea119e.centralus.azurecontainerapps.io
+ENV NEXT_PUBLIC_API_URL=https://justscoreca.delightfulsky-cfea119e.centralus.azurecontainerapps.io
 EXPOSE 3000
 CMD ["npm", "start"] 
