@@ -1,3 +1,5 @@
+// Score-related type definitions
+
 export interface ScoreBookEntry {
   // Identification and batting order
   order_number: number;
@@ -15,38 +17,38 @@ export interface ScoreBookEntry {
   my_team_ha?: string;
   
   // Result fields
-  bases_reached: string;
-  why_base_reached: string;
-  pa_why?: string;
-  pa_result?: number;
-  result_type: string;
-  detailed_result: string;
-  hit_to?: number;
+  bases_reached?: string;      // 0-4 for bases reached
+  why_base_reached?: string;   // H, HH, S, B, C, etc.
+  pa_result?: any;            // Result can be number or string
+  pa_why?: string;            // Legacy field - reason for result
+  result_type?: string;       // Type of result
+  detailed_result?: string;   // Fielder position
+  hit_to?: string | number;   // Position hit to
   
   // Base running
-  base_running: string;
-  br_result?: number;
+  base_running?: string;      // Base running details
+  br_result?: number;         // Final base reached
   br_error_on?: number[];
   br_stolen_bases?: number[];
   base_running_hit_around?: number[];
-  base_running_stolen_base: number;
+  base_running_stolen_base?: number;
   hit_around?: number;
   hit_around_bases?: number[];
   stolen_bases?: number[];
   
   // Out information
   out?: number;
-  out_at?: number;
+  out_at?: number;            // Base out at (if any)
   
   // Pitch count and details
   pitch_count: number;
-  balls_before_play: number;
-  strikes_before_play: number;
-  strikes_watching: number;
-  strikes_swinging: number;
-  strikes_unsure: number;
-  fouls_after_two_strikes: number;
-  fouls?: number;
+  balls_before_play?: number;
+  strikes_before_play?: number;
+  strikes_watching?: number;   
+  strikes_swinging?: number;   
+  strikes_unsure?: number;     // New field for strikes where type is unknown
+  fouls_after_two_strikes?: number;
+  fouls?: number;             // Total foul balls
   ball_swinging?: number;
   
   // Error information
@@ -56,10 +58,10 @@ export interface ScoreBookEntry {
   // Quality indicators and special stats
   qab?: number;
   hard_hit?: number;
-  slap?: number;
+  slap?: number;              // 1 if slap hit
   sac?: number;
   rbi?: number;
-  late_swings?: number;
+  late_swings?: number;       // Number of late swings
   wild_pitch?: number;
   passed_ball?: number;
   

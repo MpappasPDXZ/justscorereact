@@ -697,7 +697,21 @@ export default function GameLineup() {
       isMounted = false;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Empty dependency array - this effect runs only once on component mount
+  }, []); // Only run on initial mount
+
+  // Add an effect to check for the refreshRoster flag
+  useEffect(() => {
+    // Check for the refreshRoster flag in sessionStorage
+    const shouldRefreshRoster = sessionStorage.getItem('refreshRoster') === 'true';
+    
+    if (shouldRefreshRoster && !loading) {
+      // Clear the flag
+      sessionStorage.removeItem('refreshRoster');
+      
+      // Refresh roster players
+      fetchRosterPlayers();
+    }
+  }, [loading]); // Run this effect when loading state changes
 
   // Add an effect to update roster players when activeTab changes
   useEffect(() => {

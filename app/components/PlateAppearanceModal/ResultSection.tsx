@@ -197,7 +197,7 @@ const ResultSection = ({
       }
       
       // For BB (walk), set balls_before_play to 3 (maximum allowed value)
-      if (editedPA.pa_why === 'BB' && editedPA.balls_before_play < 3) {
+      if (editedPA.pa_why === 'BB' && typeof editedPA.balls_before_play === 'number' && editedPA.balls_before_play < 3) {
         handleInputChange('balls_before_play', 3);
       }
       
@@ -220,7 +220,7 @@ const ResultSection = ({
       }
     } else if (editedPA.pa_why === 'K' || editedPA.pa_why === 'KK') {
       // For strikeouts, update strikes_before_play only if not already set properly
-      if (editedPA.strikes_before_play < 2) {
+      if (typeof editedPA.strikes_before_play === 'number' && editedPA.strikes_before_play < 2) {
         handleInputChange('strikes_before_play', 2);
       }
       
@@ -422,7 +422,7 @@ const ResultSection = ({
                     handleInputChange('why_base_reached', option.value);
                     
                     // For BB (walk), set balls_before_play to 3 (maximum allowed value)
-                    if (option.value === 'BB') {
+                    if (option.value === 'BB' && typeof editedPA.balls_before_play === 'number' && editedPA.balls_before_play < 3) {
                       handleInputChange('balls_before_play', 3);
                     }
                     

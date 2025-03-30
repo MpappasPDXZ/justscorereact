@@ -115,7 +115,7 @@ const BoxScoreInningCell: React.FC<BoxScoreInningCellProps> = ({
       <div className="absolute top-0.5 left-0.5">
         <div className="flex items-baseline">
           <span className={`text-[10px] font-bold ${strikePercentTextColor}`}>{strikePercentFormatted}</span>
-          <span className="text-[8px] font-medium text-gray-500">S%</span>
+          <span className="text-[8px] font-medium text-gray-500">s%</span>
         </div>
       </div>
       

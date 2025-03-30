@@ -6,6 +6,8 @@ import BaseballDiamondCell from '@/app/components/BaseballDiamondCell';
 import PlateAppearanceModal from '@/app/components/PlateAppearanceModal';
 import PositionSelectOptions from '@/app/components/PositionSelectOptions';
 import BoxScoreInningCell from '@/app/components/BoxScoreInningCell';
+import ScoreCardGrid from '@/app/components/ScoreCardGrid';
+import { ScoreBookEntry as TypedScoreBookEntry } from '@/app/types/scoreTypes';
 
 // Define types
 interface Game {
@@ -113,27 +115,6 @@ interface InningDetail {
   scorebook_entries: ScoreBookEntry[];
 }
 
-interface SubstitutionModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSave: (substitution: PlayerSubstitution) => void;
-  inningNumber: string;
-  teamId: string;
-  gameId: string;
-  currentLineup: LineupEntry[];
-  orderNumber: number;
-}
-
-interface PlayerSubstitution {
-  team_id: string;
-  game_id: string;
-  inning_number: number;
-  order_number: number;
-  jersey_number: string;
-  name: string;
-  position: string;
-}
-
 interface PlateAppearanceModalProps {
   pa: ScoreBookEntry | null;
   isOpen: boolean;
@@ -155,167 +136,6 @@ interface PlateAppearanceModalProps {
   inningDetail: InningDetail | null;
 }
 
-const SubstitutionModal = ({ 
-  isOpen, 
-  onClose, 
-  onSave, 
-  inningNumber, 
-  teamId, 
-  gameId, 
-  currentLineup,
-  orderNumber
-}: SubstitutionModalProps) => {
-  const [availablePlayers, setAvailablePlayers] = useState<any[]>([]);
-  const [selectedPlayer, setSelectedPlayer] = useState<string>('');
-  const [position, setPosition] = useState<string>('');
-  const [loading, setLoading] = useState(false);
-  
-  // Get the current player in this lineup spot
-  const currentPlayer = currentLineup.find(player => player.order_number === orderNumber);
-  
-  useEffect(() => {
-    if (isOpen) {
-      fetchAvailablePlayers();
-    }
-  }, [isOpen]);
-  
-  const fetchAvailablePlayers = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/teams/${teamId}/players`);
-      if (!response.ok) throw new Error("Failed to fetch players");
-      const data = await response.json();
-      
-      if (data && data.players) {
-        setAvailablePlayers(data.players);
-      }
-    } catch (error) {
-      console.error("Error fetching players:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  const handleSave = () => {
-    if (!selectedPlayer) {
-      alert("Please select a player");
-      return;
-    }
-    
-    if (!position) {
-      alert("Please select a position");
-      return;
-    }
-    
-    const playerInfo = availablePlayers.find(p => p.jersey_number === selectedPlayer);
-    
-    if (!playerInfo) {
-      alert("Invalid player selection");
-      return;
-    }
-    
-    const substitution: PlayerSubstitution = {
-      team_id: teamId,
-      game_id: gameId,
-      inning_number: parseInt(inningNumber),
-      order_number: orderNumber,
-      jersey_number: selectedPlayer,
-      name: playerInfo.name,
-      position: position
-    };
-    
-    onSave(substitution);
-  };
-  
-  if (!isOpen) return null;
-  
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-lg max-w-md w-full">
-        <div className="p-4 border-b flex justify-between items-center">
-          <h2 className="text-xl font-semibold">
-            Player Substitution - Inning {inningNumber}
-          </h2>
-          <button 
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        
-        <div className="p-4">
-          <div className="mb-4">
-            <div className="text-sm font-medium text-gray-700 mb-2">Current Player:</div>
-            <div className="p-3 bg-gray-50 rounded">
-              {currentPlayer ? (
-                <div className="font-medium">
-                  #{currentPlayer.jersey_number} {currentPlayer.name} ({currentPlayer.position})
-                </div>
-              ) : (
-                <div className="text-gray-500">No player in this position</div>
-              )}
-            </div>
-          </div>
-          
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Substitute Player:
-            </label>
-            {loading ? (
-              <div className="text-center py-2">Loading players...</div>
-            ) : (
-              <select
-                className="w-full p-2 border rounded"
-                value={selectedPlayer}
-                onChange={(e) => setSelectedPlayer(e.target.value)}
-              >
-                <option value="">Select Player</option>
-                {availablePlayers.map((player) => (
-                  <option key={player.jersey_number} value={player.jersey_number}>
-                    #{player.jersey_number} {player.name}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-          
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Position:
-            </label>
-            <select
-              className="w-full p-2 border rounded"
-              value={position}
-              onChange={(e) => setPosition(e.target.value)}
-            >
-              <option value="">Select Position</option>
-              <PositionSelectOptions />
-            </select>
-          </div>
-          
-          <div className="flex justify-end space-x-3">
-            <button
-              onClick={onClose}
-              className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSave}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded transition-colors"
-            >
-              Save Substitution
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 export default function ScoreGame() {
   const params = useParams();
   const teamId = params.teamId as string;
@@ -330,11 +150,15 @@ export default function ScoreGame() {
   const [inningDetail, setInningDetail] = useState<InningDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingInningDetail, setLoadingInningDetail] = useState(false);
-  const [isSubstitutionModalOpen, setIsSubstitutionModalOpen] = useState(false);
-  const [substitutingOrderNumber, setSubstitutingOrderNumber] = useState<number | null>(null);
   const [selectedPA, setSelectedPA] = useState<ScoreBookEntry | null>(null);
   const [isPlateAppearanceModalOpen, setIsPlateAppearanceModalOpen] = useState(false);
-  const [debugMode, setDebugMode] = useState(false);
+  
+  // Handle navigation to back to lineup page
+  const handleBackToLineup = () => {
+    // Set sessionStorage flag to trigger player roster refresh
+    sessionStorage.setItem('refreshRoster', 'true');
+    router.push(`/score-game/${teamId}/lineup/${gameId}`);
+  };
   
   useEffect(() => {
     if (teamId && gameId && teamId !== 'undefined' && gameId !== 'undefined') {
@@ -886,33 +710,6 @@ export default function ScoreGame() {
     }
   };
 
-  // Update the handleSaveSubstitution function to remove the alert
-  const handleSaveSubstitution = async (substitution: PlayerSubstitution) => {
-    try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/scores/${teamId}/${gameId}/${selectedInning}/substitute`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(substitution),
-        }
-      );
-      
-      if (!response.ok) throw new Error("Failed to save substitution");
-      
-      // Refresh the inning data to show updated changes
-      await fetchInningDetail(selectedInning, selectedTeam);
-      
-      // Close the modal without an alert
-      setIsSubstitutionModalOpen(false);
-    } catch (error) {
-      // Only show alert for errors
-      alert("Failed to save substitution. Please try again.");
-    }
-  };
-
   // Helper function to update legacy fields
   const updateLegacyFields = (basesReached: string, whyBaseReached: string) => {
     // This function relies on handleInputChange which is not defined in this scope
@@ -965,12 +762,58 @@ export default function ScoreGame() {
     }
   }, [inningDetail]);
 
+  // Handle click on a plate appearance cell
+  const handlePlateAppearanceClick = (pa: any | null, orderNumber: number, columnIndex: number) => {
+    if (pa) {
+      setSelectedPA(pa);
+      setIsPlateAppearanceModalOpen(true);
+    } else {
+      // For a new PA, we'll use the round (column index + 1) to determine the sequence ID
+      const round = columnIndex + 1;
+      const lineupSize = inningDetail?.lineup_entries.length || 9;
+      
+      // The sequence ID is calculated as: (round - 1) * lineupSize + order_number
+      const newSeqId = (round - 1) * lineupSize + orderNumber;
+      
+      // Create a new PA with the required fields
+      const newPA = {
+        inning_number: selectedInning,
+        home_or_away: selectedTeam,
+        batting_order_position: orderNumber,
+        order_number: orderNumber,
+        batter_seq_id: newSeqId,
+        round: round,
+        team_id: teamId,
+        game_id: gameId,
+        batter_jersey_number: '',
+        batter_name: '',
+        bases_reached: '',
+        why_base_reached: '',
+        pa_result: '',
+        result_type: '',
+        detailed_result: '',
+        base_running: '',
+        balls_before_play: 0,
+        strikes_before_play: 0,
+        strikes_watching: 0,
+        strikes_swinging: 0,
+        strikes_unsure: 0,
+        fouls_after_two_strikes: 0,
+        base_running_stolen_base: 0,
+        pitch_count: 0 // Add this required field
+      } as ScoreBookEntry;
+      
+      setSelectedPA(newPA);
+      setIsPlateAppearanceModalOpen(true);
+    }
+  };
+
   if (loading) return <div className="p-4">Loading game data...</div>;
   if (!boxScore) return <div className="p-4">No box score data available.</div>;
 
   return (
-    <div className="container mx-auto px-1.5 py-0">
-      <div className="mb-0 mt-[-10px]">
+    <div className="container mx-auto px-0.75 py-0">
+      <div className="mb-0 mt-[-18px]">
         <div className="flex justify-between items-center mb-1">
           <div className="flex flex-col">
             <h1 className="text-2xl font-bold">Box Score</h1>
@@ -989,7 +832,7 @@ export default function ScoreGame() {
           
           <div className="flex space-x-2">
             <button
-              onClick={() => router.push(`/score-game/${teamId}/lineup/${gameId}`)}
+              onClick={handleBackToLineup}
               className="flex items-center justify-center h-7 px-1.5 rounded-lg text-xs font-medium text-gray-600 border border-gray-300 hover:bg-gray-50 transition-colors"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -997,24 +840,14 @@ export default function ScoreGame() {
               </svg>
               Back to Lineup
             </button>
-            
-            <button
-              onClick={() => fetchBoxScore()}
-              className="flex items-center justify-center h-7 px-1.5 rounded-lg text-xs font-medium border bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 transition-colors"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              Refresh
-            </button>
           </div>
         </div>
       </div>
       
       {/* Box Score Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden mb-4 mt-2 w-auto" style={{ width: 'auto', maxWidth: '920px' }}>
-        <div className="overflow-x-auto">
-          <div style={{ width: 'fit-content', margin: '0' }}>
+      <div className="bg-white rounded-lg shadow overflow-hidden mb-2 mt-1 w-auto" style={{ width: 'auto', maxWidth: '920px' }}>
+        <div className="overflow-x-auto" style={{ textAlign: 'left' }}>
+          <div style={{ width: 'fit-content', margin: '0', marginLeft: '0' }}>
             <table className="border-collapse" cellSpacing="0" cellPadding="0" style={{ borderCollapse: 'collapse', borderSpacing: 0 }}>
               <thead className="bg-gray-50">
                 <tr>
@@ -1081,7 +914,7 @@ export default function ScoreGame() {
                     return (
                       <td 
                         key={`away-inning-${i}`}
-                        className="p-0 align-top"
+                        className={`p-0 align-top ${selectedInning === inningKey && selectedTeam === 'away' ? 'bg-indigo-50' : ''}`}
                         style={{ padding: 0, borderSpacing: 0, width: '4.4rem' }}
                       >
                         <BoxScoreInningCell 
@@ -1157,7 +990,7 @@ export default function ScoreGame() {
                     return (
                       <td 
                         key={`home-inning-${i}`}
-                        className="p-0 align-top"
+                        className={`p-0 align-top ${selectedInning === inningKey && selectedTeam === 'home' ? 'bg-indigo-50' : ''}`}
                         style={{ padding: 0, borderSpacing: 0, width: '4.4rem' }}
                       >
                         <BoxScoreInningCell 
@@ -1211,12 +1044,12 @@ export default function ScoreGame() {
       
       {/* Inning Details Section */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="p-0 bg-gray-50 border-b flex items-center" style={{ height: '56px' }}>
+        <div className="p-0 bg-gray-50 border-b flex items-center">
           {/* Team Tabs - Styled as true tabs */}
           <div className="flex h-full">
             <button
               onClick={() => setSelectedTeam('home')}
-              className={`relative py-3.5 px-6 font-medium text-sm transition-all duration-200 focus:outline-none ${
+              className={`relative py-3 px-3 font-medium text-xs transition-all duration-200 focus:outline-none ${
                 selectedTeam === 'home'
                   ? 'bg-white border-t border-l border-r border-gray-200 text-indigo-600 font-semibold -mb-px rounded-t-lg shadow-sm'
                   : 'text-gray-500 hover:text-indigo-500 hover:bg-gray-50 rounded-t-lg'
@@ -1227,7 +1060,7 @@ export default function ScoreGame() {
             </button>
             <button
               onClick={() => setSelectedTeam('away')}
-              className={`relative py-3.5 px-6 font-medium text-sm transition-all duration-200 focus:outline-none ${
+              className={`relative py-3 px-3 font-medium text-xs transition-all duration-200 focus:outline-none ${
                 selectedTeam === 'away'
                   ? 'bg-white border-t border-l border-r border-gray-200 text-indigo-600 font-semibold -mb-px rounded-t-lg shadow-sm'
                   : 'text-gray-500 hover:text-indigo-500 hover:bg-gray-50 rounded-t-lg'
@@ -1237,25 +1070,9 @@ export default function ScoreGame() {
               <div className={`absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-t transform transition-transform duration-200 ${selectedTeam === 'away' ? 'scale-x-100' : 'scale-x-0'}`}></div>
             </button>
           </div>
-          
-          {/* Inning selector - Moved to the right */}
-          <div className="flex items-center ml-auto mr-4">
-            <span className="text-sm font-medium text-gray-700 mr-2">Inning:</span>
-            <select 
-              className="border rounded px-2 py-1 text-sm"
-              value={selectedInning}
-              onChange={(e) => fetchInningDetail(e.target.value, selectedTeam)}
-            >
-              {Array.from({ length: 7 }).map((_, i) => (
-                <option key={`inning-option-${i+1}`} value={(i+1).toString()}>
-                  {i+1}
-                </option>
-              ))}
-            </select>
-          </div>
         </div>
         
-        <div className="p-4">
+        <div className="p-3">
           {loadingInningDetail ? (
             <div className="flex justify-center items-center h-40">
               <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
@@ -1263,100 +1080,14 @@ export default function ScoreGame() {
           ) : inningDetail ? (
             <div>
               {inningDetail.lineup_entries && inningDetail.lineup_entries.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="border border-gray-200" style={{ width: 'auto' }}>
-                    <thead className="bg-gray-50">
-                      {/* Add a new row for inning groupings */}
-                      <tr>
-                        <th className="border p-1 text-center text-xs font-medium text-gray-500 uppercase tracking-wider" style={{ width: '30px' }} rowSpan={2}>
-                          #
-                        </th>
-                        <th className="border p-1 text-center text-xs font-medium text-gray-500 uppercase tracking-wider" style={{ width: '150px' }} rowSpan={2}>
-                          Player
-                        </th>
-                        
-                        {/* Create inning groupings */}
-                        {Array.from(new Set(Array.from({ length: getNumberOfPAColumns() }).map((_, i) => {
-                          // Calculate which inning this column belongs to
-                          // Assuming 9 batters per inning
-                          const lineupSize = inningDetail?.lineup_entries.length || 9;
-                          const inningNumber = Math.floor(i / lineupSize) + 1;
-                          return inningNumber;
-                        }))).map((inningNumber) => {
-                          // Count how many columns belong to this inning
-                          const lineupSize = inningDetail?.lineup_entries.length || 9;
-                          const columnsInInning = Math.min(
-                            lineupSize,
-                            getNumberOfPAColumns() - (inningNumber - 1) * lineupSize
-                          );
-                          
-                          return (
-                            <th 
-                              key={`inning-header-${inningNumber}`}
-                              className="border p-1 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
-                              colSpan={columnsInInning}
-                            >
-                              Inning {inningNumber}
-                            </th>
-                          );
-                        })}
-                      </tr>
-                      
-                      <tr>
-                        {/* Create column headers for each PA */}
-                        {Array.from({ length: getNumberOfPAColumns() }).map((_, i) => (
-                          <th 
-                            key={`pa-header-${i+1}`}
-                            className="border p-1 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
-                            style={{ width: '60px' }}
-                          >
-                            PA {i+1}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {inningDetail.lineup_entries.map((player, index) => {
-                        // Get all PAs for this player, sorted by batter_seq_id
-                        const playerPAs = getPlayerPAs(player.order_number);
-                        const displayName = player.name.includes(player.jersey_number) 
-                          ? player.name 
-                          : `${player.jersey_number} ${player.name}`;
-                        
-                        return (
-                          <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                            <td className="border p-1 text-xs text-gray-500 truncate text-center">
-                              {player.order_number}
-                            </td>
-                            <td className="border p-1 text-xs font-medium text-gray-900 truncate text-center">
-                              <div className="flex justify-center items-center">
-                                <span>{displayName}</span>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSubstitutingOrderNumber(player.order_number);
-                                    setIsSubstitutionModalOpen(true);
-                                  }}
-                                  className="ml-2 text-xs text-indigo-600 hover:text-indigo-800"
-                                  title="Substitute Player"
-                                >
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m-8 6H4m0 0l4 4m-4-4l4-4" />
-                                  </svg>
-                                </button>
-                              </div>
-                            </td>
-                            
-                            {/* Render PA cells for this player by column index */}
-                            {Array.from({ length: getNumberOfPAColumns() }).map((_, i) => {
-                              return renderPACell(playerPAs, i, player.order_number);
-                            })}
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                <ScoreCardGrid
+                  teamId={teamId}
+                  gameId={gameId}
+                  inningNumber={selectedInning}
+                  teamChoice={selectedTeam}
+                  scorebookEntries={inningDetail.scorebook_entries as any[]}
+                  onPlateAppearanceClick={handlePlateAppearanceClick}
+                />
               ) : (
                 <div className="text-center py-8 text-gray-500 bg-gray-50 rounded">
                   No lineup available for this inning.
@@ -1370,21 +1101,6 @@ export default function ScoreGame() {
           )}
         </div>
       </div>
-      
-      {/* Substitution Modal */}
-      <SubstitutionModal
-        isOpen={isSubstitutionModalOpen}
-        onClose={() => {
-          setIsSubstitutionModalOpen(false);
-          setSubstitutingOrderNumber(null);
-        }}
-        onSave={handleSaveSubstitution}
-        inningNumber={selectedInning}
-        teamId={teamId}
-        gameId={gameId}
-        currentLineup={inningDetail?.lineup_entries || []}
-        orderNumber={substitutingOrderNumber || 0}
-      />
       
       {/* Plate Appearance Modal */}
       <PlateAppearanceModal
@@ -1408,14 +1124,6 @@ export default function ScoreGame() {
         myTeamHomeOrAway={boxScore?.game_header?.my_team_ha || 'home'}
         inningDetail={inningDetail as any}
       />
-      
-      {/* Debug Toggle Button */}
-      <button 
-        onClick={() => setDebugMode(!debugMode)} 
-        className="text-xs bg-gray-200 px-2 py-1 rounded text-gray-700"
-      >
-        {debugMode ? 'Disable Debug' : 'Enable Debug'}
-      </button>
     </div>
   );
 } 

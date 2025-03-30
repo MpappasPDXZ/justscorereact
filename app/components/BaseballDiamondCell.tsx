@@ -15,7 +15,7 @@ const BaseballDiamondCell = ({ pa, onClick, isInteractive = true }: BaseballDiam
   if (!pa) {
     // Return an empty cell that's clickable
     return (
-      <div className="w-full h-full" style={{ maxHeight: '48px' }}>
+      <div className="w-full h-full flex items-center justify-center" style={{ height: '60px' }}>
         <BaseballField 
           onClick={onClick}
           isInteractive={isInteractive}
@@ -26,7 +26,7 @@ const BaseballDiamondCell = ({ pa, onClick, isInteractive = true }: BaseballDiam
 
   // For cells with data, pass the PA data to BaseballField
   return (
-    <div className="w-full h-full" style={{ maxHeight: '60px' }}>
+    <div className="w-full h-full flex items-center justify-center" style={{ height: '60px' }}>
       <BaseballField 
         pa={pa}
         onClick={onClick}
