@@ -1,6 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+
+// Create a global request tracker to deduplicate API calls across instances
+const inProgressRequests = new Map<string, boolean>();
 
 interface BatterInfo {
   jersey_number: string;
@@ -26,14 +29,52 @@ interface BattingOrderTableProps {
   teamId: string;
   gameId: string;
   teamChoice: 'home' | 'away';
+  inningNumber?: string;
+  entriesWithRounds?: any[];
+  lineupsPreloaded?: {
+    awayLineupLoaded: boolean;
+    homeLineupLoaded: boolean;
+  };
+  onLineupSizeUpdate?: (size: number) => void;
 }
 
-const BattingOrderTable = ({ teamId, gameId, teamChoice }: BattingOrderTableProps) => {
+const BattingOrderTable = ({ 
+  teamId, 
+  gameId, 
+  teamChoice,
+  inningNumber,
+  entriesWithRounds,
+  lineupsPreloaded,
+  onLineupSizeUpdate
+}: BattingOrderTableProps) => {
   const [battingOrderData, setBattingOrderData] = useState<BattingOrderData | null>(null);
   const [loading, setLoading] = useState(true);
+  const componentMountedRef = useRef(true);
+
+  // Create a unique request ID for this specific request
+  const getRequestId = (teamId: string, gameId: string, teamChoice: string) => {
+    return `lineup_${teamId}_${gameId}_${teamChoice}`;
+  };
 
   useEffect(() => {
-    fetchBattingOrder();
+    // Component mounted
+    componentMountedRef.current = true;
+    
+    return () => {
+      // Component unmounted
+      componentMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    // Reset state when key props change
+    setBattingOrderData(null);
+    setLoading(true);
+    
+    // Only fetch if we have valid parameters
+    if (teamId && gameId && teamChoice) {
+      fetchBattingOrder();
+    }
   }, [teamId, gameId, teamChoice]);
 
   const fetchBattingOrder = async () => {
@@ -44,10 +85,35 @@ const BattingOrderTable = ({ teamId, gameId, teamChoice }: BattingOrderTableProp
         return;
       }
 
+      // Create a unique request ID for this API call
+      const requestId = getRequestId(teamId, gameId, teamChoice);
+      
+      // Check global map to see if this request is already in progress
+      if (inProgressRequests.get(requestId)) {
+        console.log(`Skipping duplicate request for ${requestId}`);
+        return;
+      }
+      
+      // Mark this request as in progress globally
+      inProgressRequests.set(requestId, true);
+      setLoading(true);
+      
       const apiUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/lineup/games/${teamId}/${gameId}/${teamChoice}/order_by_batter`;
       console.log("Fetching batting order from:", apiUrl);
       
-      const response = await fetch(apiUrl);
+      const response = await fetch(apiUrl, {
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      });
+      
+      // Clear the in-progress flag regardless of outcome
+      inProgressRequests.set(requestId, false);
+      
+      // Check if component is still mounted
+      if (!componentMountedRef.current) return;
       
       if (!response.ok) {
         console.error(`Failed to fetch batting order: ${response.status} ${response.statusText}`);
@@ -56,12 +122,27 @@ const BattingOrderTable = ({ teamId, gameId, teamChoice }: BattingOrderTableProp
       }
       
       const data = await response.json();
-      console.log("Batting order data:", data);
       setBattingOrderData(data);
       setLoading(false);
+      
+      // Call the callback with the lineup size if available
+      if (data && data.batting_order && onLineupSizeUpdate) {
+        const orderNumbers = Object.keys(data.batting_order);
+        if (orderNumbers.length > 0) {
+          const maxOrder = Math.max(...orderNumbers.map(n => parseInt(n)));
+          onLineupSizeUpdate(maxOrder);
+        }
+      }
     } catch (error) {
       console.error("Error fetching batting order:", error);
-      setLoading(false);
+      
+      // Get request ID to clear the flag
+      const requestId = getRequestId(teamId, gameId, teamChoice);
+      inProgressRequests.set(requestId, false);
+      
+      if (componentMountedRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -165,7 +246,7 @@ const BattingOrderTable = ({ teamId, gameId, teamChoice }: BattingOrderTableProp
             <th 
               className="border p-1 text-center text-xs font-medium text-gray-500 normal-case tracking-wider" 
               style={{ 
-                width: '120px', 
+                width: '72px',
                 height: '50px',
                 verticalAlign: 'bottom', 
                 textAlign: 'center'

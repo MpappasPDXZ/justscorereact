@@ -413,6 +413,11 @@ const CountSection = ({ editedPA, incrementCounter, decrementCounter, handleInpu
                     onClick={() => {
                       // Toggle between 0 and 1
                       const newValue = isActive ? 0 : 1;
+                      console.log(`📊 ${indicator.label} toggled from ${isActive ? 1 : 0} to ${newValue}`, {
+                        fieldName: indicator.id,
+                        currentValue,
+                        newValue
+                      });
                       
                       if (handleInputChange) {
                         handleInputChange(indicator.id, newValue);

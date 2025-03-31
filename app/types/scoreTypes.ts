@@ -41,7 +41,7 @@ export interface ScoreBookEntry {
   out_at?: number;            // Base out at (if any)
   
   // Pitch count and details
-  pitch_count: number;
+  pitch_count?: number;       // Make pitch_count optional
   balls_before_play?: number;
   strikes_before_play?: number;
   strikes_watching?: number;   

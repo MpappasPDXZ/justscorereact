@@ -27,14 +27,18 @@ const BaseballField = ({
   // If we have the full PA object, use it to determine the result
   const result = pa ? determineResult(pa) : paResult || '';
   const baseRunningValue = pa ? pa.base_running : baseRunning || '';
-  const ballsValue = pa ? Number(pa.balls_before_play) : balls;
-  const strikesValue = pa ? Number(pa.strikes_before_play) : strikes;
-  const foulsValue = pa ? Number(pa.fouls) : fouls;
+  const ballsValue = pa ? Number(pa.balls_before_play || 0) : balls;
+  const strikesValue = pa ? Number(pa.strikes_before_play || 0) : strikes;
+  const foulsValue = pa ? Number(pa.fouls || 0) : fouls;
   
   // Define the getHitDirection function first
   const getHitDirection = () => {
-    if (!pa) return '';
-    return pa.hit_to || '';
+    if (!pa) return null;
+    // Convert hit_to to number if it's a string
+    const hitTo = pa.detailed_result || pa.hit_to;
+    // Return null instead of empty string for falsy values
+    if (!hitTo && hitTo !== 0) return null;
+    return typeof hitTo === 'string' ? parseInt(hitTo) : hitTo;
   };
   
   // Now use the function
@@ -42,15 +46,34 @@ const BaseballField = ({
 
   // Function to determine the result from the PA object
   function determineResult(pa: ScoreBookEntry): string {
+    // Special cases for walks and strikeouts - check these first
+    const paWhy = pa.pa_why || pa.why_base_reached;
+    if (paWhy === 'BB' || paWhy === 'B' || paWhy === 'HBP') {
+      return 'BB'; // Always show BB for walks
+    }
+    if (paWhy === 'K') {
+      return 'K'; // Always show K for strikeouts
+    }
+    if (paWhy === 'KK') {
+      return 'KK'; // Always show KK for strikeouts
+    }
+
     // If pa_result is already set and not just a numeric value, use it as a string
-    if (pa.pa_result !== undefined && ![0, 1, 2, 3, 4].includes(pa.pa_result)) {
-      return String(pa.pa_result);
+    if (pa.pa_result !== undefined) {
+      // Convert pa_result to number if possible
+      const paResult = typeof pa.pa_result === 'string' ? parseInt(pa.pa_result) : pa.pa_result;
+      
+      if (![0, 1, 2, 3, 4].includes(paResult)) {
+        return String(pa.pa_result);
+      }
     }
     
     // Otherwise, determine from pa_result and pa_why
-    const pa_resultb = pa.pa_result !== undefined ? pa.pa_result : 0;
-    const pa_whyb = pa.pa_why || '';
-    
+    const pa_resultVal = pa.pa_result !== undefined 
+      ? (typeof pa.pa_result === 'string' ? parseInt(pa.pa_result) : pa.pa_result) 
+      : 0;
+    const pa_whyb = pa.why_base_reached || pa.pa_why || '';
+
     // Return BB, HBP, FC directly if that's the pa_why
     if (pa_whyb === 'BB' || pa_whyb === 'HBP' || pa_whyb === 'FC') {
       return pa_whyb;
@@ -58,15 +81,15 @@ const BaseballField = ({
     
     // Special case for 'B' to return base number + 'B' for bunts
     if (pa_whyb === 'B') {
-      if (pa_resultb === 1) return '1B';
-      if (pa_resultb === 2) return '2B';
-      if (pa_resultb === 3) return '3B';
-      if (pa_resultb === 4) return '4B';
+      if (pa_resultVal === 1) return '1B';
+      if (pa_resultVal === 2) return '2B';
+      if (pa_resultVal === 3) return '3B';
+      if (pa_resultVal === 4) return '4B';
       return 'BB'; // Default to BB if no base specified (walk)
     }
     
     // For outs
-    if (pa_resultb === 0) {
+    if (pa_resultVal === 0) {
       if (pa_whyb === 'K') return 'K';
       if (pa_whyb === 'KK') return 'KK';
       if (pa_whyb === 'GO') return 'GO';
@@ -80,18 +103,18 @@ const BaseballField = ({
     
     // For errors, show the base number with E
     if (pa_whyb === 'E') {
-      return `${pa_resultb}E`;
+      return `${pa_resultVal}E`;
     }
     
     // For hits and other ways to reach base
-    if (pa_resultb === 1) {
+    if (pa_resultVal === 1) {
       if (pa_whyb === 'H') return '1B';
       if (pa_whyb === 'S') return '1B';
       return '1B';
     }
-    if (pa_resultb === 2) return '2B';
-    if (pa_resultb === 3) return '3B';
-    if (pa_resultb === 4) {
+    if (pa_resultVal === 2) return '2B';
+    if (pa_resultVal === 3) return '3B';
+    if (pa_resultVal === 4) {
       if (pa_whyb === 'GS') return 'GS';
       return 'HR';
     }
@@ -147,7 +170,7 @@ const BaseballField = ({
     let position = { top: '40%', left: '50%' };
     
     // If no hit direction, return default
-    if (!hitDirection) return position;
+    if (hitDirection === null || hitDirection === undefined) return position;
     
     // Try to parse the hit direction
     const direction = hitDirection.toString().trim();
@@ -164,22 +187,22 @@ const BaseballField = ({
         position = { top: '65%', left: '62%' };
         break;
       case '4': // Second Base
-        position = { top: '40%', left: '60%' };
+        position = { top: '39%', left: '63%' };
         break;
       case '5': // Third Base
         position = { top: '65%', left: '38%' };
         break;
       case '6': // Shortstop
-        position = { top: '40%', left: '40%' };
+        position = { top: '39%', left: '38%' };
         break;
       case '7': // Left Field
-        position = { top: '22%', left: '28%' };
+        position = { top: '18%', left: '28%' };
         break;
       case '8': // Center Field
-        position = { top: '14%', left: '50%' }; // Adjusted to be just below top middle
+        position = { top: '10%', left: '50%' }; // Adjusted to be just below top middle
         break;
       case '9': // Right Field
-        position = { top: '22%', left: '72%' };
+        position = { top: '18%', left: '72%' };
         break;
       default:
         // Try to handle other formats
@@ -204,11 +227,24 @@ const BaseballField = ({
   const getInitialBaseReached = (): number => {
     if (!pa) return 0;
     
+    // Special handling for walks and strikeouts - they should never return 0 
+    // even if pa_result is 0
+    if (isWalk()) {
+      return 1; // Walks always reach first base
+    }
+    
+    if (isStrikeout()) {
+      return 0; // Return a special value that we'll handle differently
+    }
+    
     // Get base from pa_result - handle numeric values
     if (pa.pa_result !== undefined) {
+      // Convert pa_result to number if it's a string
+      const paResult = typeof pa.pa_result === 'string' ? parseInt(pa.pa_result) : pa.pa_result;
+      
       // If pa_result is a number between 0-4, use it directly
-      if ([0, 1, 2, 3, 4].includes(pa.pa_result)) {
-        return pa.pa_result;
+      if ([0, 1, 2, 3, 4].includes(paResult)) {
+        return paResult;
       }
       
       // Otherwise check for text descriptions in String(pa_result)
@@ -219,8 +255,9 @@ const BaseballField = ({
       if (paResultStr.includes('HR') || paResultStr.includes('4B')) return 4;
     }
     
-    // Check pa_why for BB and HBP
-    if (pa.pa_why === 'BB' || pa.pa_why === 'B' || pa.pa_why === 'HBP') {
+    // Check pa_why for BB and HBP (also check why_base_reached for local ScoreBookEntry)
+    const paWhy = pa.pa_why || pa.why_base_reached;
+    if (paWhy === 'BB' || paWhy === 'B' || paWhy === 'HBP') {
       return 1;
     }
     
@@ -230,36 +267,94 @@ const BaseballField = ({
   // Get the final base reached (br_result)
   const getFinalBaseReached = (): number => {
     if (!pa) return 0;
-    return pa.br_result !== undefined ? pa.br_result : 0;
+    
+    // Check if br_result exists and isn't null/undefined
+    if (pa.br_result !== undefined && pa.br_result !== null) {
+      // Always convert br_result to number for comparisons
+      const brResultNum = Number(pa.br_result);
+      
+      // If br_result is 0, special handling
+      if (brResultNum === 0) {
+        // If pa_result exists and isn't 0, return that instead (player must have reached at least pa_result)
+        const paResult = pa.pa_result !== undefined ? 
+                      (typeof pa.pa_result === 'string' ? parseInt(pa.pa_result) : pa.pa_result) : 0;
+        if (paResult > 0) {
+          return paResult;
+        }
+        return 0;
+      }
+      
+      // If it's a valid number (not NaN) and greater than 0, use it
+      if (!isNaN(brResultNum) && brResultNum > 0) {
+        return brResultNum;
+      }
+    }
+    
+    // If br_result isn't valid, use pa_result as a fallback (player must have reached at least pa_result)
+    const paResult = pa.pa_result !== undefined ? 
+                  (typeof pa.pa_result === 'string' ? parseInt(pa.pa_result) : pa.pa_result) : 0;
+    
+    if (paResult > 0) {
+      return paResult;
+    }
+    
+    return 0;
   };
 
   // Update the playerReachedBase function
   const playerReachedBase = () => {
     if (!pa) return false;
+    
     // Check pa_result
     if (pa.pa_result !== undefined) {
+      // Convert pa_result to number if it's a string
+      const paResult = typeof pa.pa_result === 'string' ? parseInt(pa.pa_result) : pa.pa_result;
+      
       // If pa_result is a number between 1-4, player reached base
-      if ([1, 2, 3, 4].includes(pa.pa_result)) {
+      if ([1, 2, 3, 4].includes(paResult)) {
         return true;
       }
     }
-    // Check pa_why for BB and HBP
-    if (pa.pa_why === 'BB' || pa.pa_why === 'B' || pa.pa_why === 'HBP') {
-      return true;
-    }   
-    return false;
-  };
-
-  // Add a new function to check if player was out
-  const playerWasOut = () => {
-    if (!pa) return false;
-    // Check if player was out at a base
-    if (pa.out_at && pa.out_at > 0) {
+    
+    // Check bases_reached as a fallback
+    if (pa.bases_reached) {
+      const basesReached = typeof pa.bases_reached === 'string' ? parseInt(pa.bases_reached) : pa.bases_reached;
+      if ([1, 2, 3, 4].includes(basesReached)) {
+        return true;
+      }
+    }
+    
+    // Check pa_why for BB and HBP (also check why_base_reached for local ScoreBookEntry)
+    const paWhy = pa.pa_why || pa.why_base_reached;
+    if (paWhy === 'BB' || paWhy === 'B' || paWhy === 'HBP') {
       return true;
     }
     
-    // Check if player didn't reach base at all
-    if (!playerReachedBase()) {
+    return false;
+  };
+
+  // Determine if the player was out
+  const playerWasOut = (): boolean => {
+    if (!pa) return false;
+    
+    // Check direct out flag
+    if (pa.out !== undefined && pa.out > 0) {
+      return true;
+    }
+    
+    // Check result fields
+    const paResult = pa.pa_result !== undefined 
+      ? (typeof pa.pa_result === 'string' ? parseInt(pa.pa_result) : pa.pa_result) 
+      : null;
+    
+    // If pa_result is 0, it's an out
+    if (paResult === 0) {
+      return true;
+    }
+    
+    // Check for out-specific why codes
+    const paWhy = pa.pa_why || pa.why_base_reached || '';
+    if (['K', 'KK', 'GO', 'FO', 'LO', 'O'].includes(paWhy)) {
       return true;
     }
     
@@ -315,162 +410,173 @@ const BaseballField = ({
     return false;
   };
 
+  // Function to check if it's a walk
+  const isWalk = () => {
+    if (!pa) return false;
+    const paWhy = pa.pa_why || pa.why_base_reached;
+    return paWhy === 'BB' || paWhy === 'B' || paWhy === 'HBP';
+  };
+
+  // Function to check if it's a strikeout
+  const isStrikeout = () => {
+    if (!pa) return false;
+    const paWhy = pa.pa_why || pa.why_base_reached;
+    return paWhy === 'K' || paWhy === 'KK';
+  };
+
   // Create a comprehensive function to handle all styling and text display logic
   const getDisplayConfig = () => {
     if (!pa) {
       return {
         circleStyle: 'text-gray-700 border border-gray-500',
-        textColor: 'text-black',
         displayText: result,
         pathColor: '#000000',
         hitMarkerColor: 'text-black'
       };
     }
 
+    // Check for error
+    const isError = pa.pa_why === 'E' || pa.why_base_reached === 'E';
+    
     // Special case for walks with pa_why = 'B'
     const isWalkWithB = pa.pa_why === 'B' && pa.pa_result === 1;
     
     // Determine the result type
     const isHit = playerGotHit();
-    const isOut = playerWasOut();
-    const isError = pa.pa_why === 'E';
-    const isWalk = ['BB', 'HBP'].includes(pa.pa_why || '') || isWalkWithB;
+    const isOut = playerWasOut(); // This checks if the player was out
+    const walkStatus = isWalk();
+    const strikeoutStatus = isStrikeout();
     const isFC = pa.pa_why === 'FC';
     const isBunt = pa.pa_why === 'B' && pa.pa_result !== undefined && [1, 2, 3, 4].includes(pa.pa_result);
 
-    // Get the display text
+    // Get initial base reached and final base reached using the same functions
+    // that control the base path visualization
+    const initialBase = getInitialBaseReached();
+    const finalBase = getFinalBaseReached();
+
+    // Get the display text - align with base path logic
     let displayText = '';
     
-    // Special case for bunts with pa_why = 'B'
-    if (isBunt && pa.pa_result !== undefined) {
-      displayText = `${pa.pa_result}B`; // Return base number + B for bunts
-    }
-    // Special case for walks with pa_why = 'B'
-    else if (isWalkWithB) {
+    // Handle walks (BB) first - they always reach first base
+    if (walkStatus) {
       displayText = 'BB';
     }
-    // For errors, show the base number with E
-    else if (isError && pa.pa_result !== undefined) {
-      displayText = `${pa.pa_result}E`;
+    // Handle strikeouts (K) next
+    else if (strikeoutStatus) {
+      const paWhy = (pa.pa_why || pa.why_base_reached || 'K').toString();
+      displayText = paWhy; // Will be either 'K' or 'KK'
     }
-    // For hits, show the base number
+    // For errors, show the base with E
+    else if (isError && initialBase > 0) {
+      displayText = `${initialBase}E`;
+    }
+    // For bunts, show the base with B
+    else if (isBunt && initialBase > 0) {
+      displayText = `${initialBase}B`; // Return base number + B for bunts
+    }
+    // For fielder's choice
+    else if (isFC) {
+      displayText = 'FC';
+    }
+    // For standard hits based on initial base reached (same as base path)
     else if (isHit) {
-      const pa_resultb = pa.pa_result !== undefined ? pa.pa_result : 1; // Default to 1 if not specified
+      // Special case for home runs
+      if (initialBase === 4) {
+        if (pa.pa_why === 'GS') {
+          displayText = 'GS';
+        } else {
+          displayText = 'HR';
+        }
+      } 
+      // Special case for "hard hit"
+      else if (pa.pa_why === 'HH') {
+        displayText = 'HH';
+      }
+      // Regular base hits
+      else if (initialBase === 1) {
+        displayText = '1B';
+      } else if (initialBase === 2) {
+        displayText = '2B';
+      } else if (initialBase === 3) {
+        displayText = '3B';
+      }
+    } 
+    // For outs
+    else if (isOut || initialBase === 0) {
+      const paWhy = pa.pa_why || pa.why_base_reached || '';
       
-      // Special cases
-      if (pa.pa_why === 'HR' || pa.pa_why === 'GS') {
-        displayText = pa.pa_why; // Keep HR and GS as is
-      } else if (pa.pa_why === 'HH') {
-        displayText = 'HH'; // Keep HH as is
-      } else {
-        // For other hits, show the base number
-        if (pa_resultb === 1) displayText = '1B';
-        else if (pa_resultb === 2) displayText = '2B';
-        else if (pa_resultb === 3) displayText = '3B';
-        else if (pa_resultb === 4) displayText = 'HR';
-      }
+      if (paWhy === 'GO') displayText = 'GO';
+      else if (paWhy === 'FO') displayText = 'FO';
+      else if (paWhy === 'LO') displayText = 'LO';
+      else if (paWhy === 'FB') displayText = 'FB';
+      else if (paWhy === 'SF') displayText = 'SF';
+      else if (paWhy === 'SB') displayText = 'SB';
+      else displayText = 'OUT';
     }
-    // For walks and other results, use pa_why
-    else if (pa.pa_why) {
-      // Special case for pa_why = 'B'
-      if (pa.pa_why === 'B') {
-        displayText = 'BB';
-      } else {
-        displayText = pa.pa_why;
-      }
+    // If nothing else matched but we have pa_result
+    else if (initialBase > 0) {
+      // For standard hits based on initial base reached
+      if (initialBase === 1) displayText = '1B';
+      else if (initialBase === 2) displayText = '2B';
+      else if (initialBase === 3) displayText = '3B';
+      else if (initialBase === 4) displayText = 'HR';
     }
-    // If we have a pa_result, convert it to a more descriptive text
-    else if (pa.pa_result !== undefined) {
-      // Handle numeric pa_result values
-      if (pa.pa_result === 0) displayText = 'OUT';
-      else if (pa.pa_result === 1) {
-        // For base 1, check pa_why to determine if it's a hit, walk, etc.
-        const pa_whyb = pa.pa_why || '';
-        if (pa_whyb === 'BB' || pa_whyb === 'B') displayText = 'BB';
-        else if (pa_whyb === 'HBP') displayText = 'HBP';
-        else if (pa_whyb === 'E') displayText = '1E';
-        else if (pa_whyb === 'FC') displayText = 'FC';
-        else if (pa_whyb === 'HH') displayText = 'HH';
-        else displayText = '1B'; // Default to 1B for base 1
-      }
-      else if (pa.pa_result === 2) {
-        // Check if it was an error
-        const pa_whyb = pa.pa_why || '';
-        if (pa_whyb === 'E') displayText = '2E';
-        else displayText = '2B';
-      }
-      else if (pa.pa_result === 3) {
-        // Check if it was an error
-        const pa_whyb = pa.pa_why || '';
-        if (pa_whyb === 'E') displayText = '3E';
-        else displayText = '3B';
-      }
-      else if (pa.pa_result === 4) {
-        // Check if it was an error
-        const pa_whyb = pa.pa_why || '';
-        if (pa_whyb === 'E') displayText = '4E';
-        else displayText = 'HR';
-      }
-      // Handle non-numeric pa_result values
-      else {
-        const paResultStr = String(pa.pa_result);
-        if (paResultStr.includes('1B') || paResultStr.includes('2B') || 
-            paResultStr.includes('3B') || paResultStr.includes('HR') ||
-            paResultStr.includes('BB') || paResultStr.includes('HBP') ||
-            paResultStr.includes('K') || paResultStr.includes('OUT') ||
-            paResultStr.includes('FC') || paResultStr.includes('E')) {
-          // Use the pa_result directly if it's already a descriptive value
-          displayText = paResultStr;
-        }
-        else {
-          displayText = String(pa.pa_result);
-        }
-      }
-    }
+    // Fallback to empty string if no other condition matched
     else {
-      displayText = result;
+      displayText = result || '';
+    }
+    
+    // Final check - never display just "0" as the result
+    if (displayText === '0') {
+      displayText = 'OUT';
     }
 
     // Determine the circle style
     let circleStyle = '';
-    if (isOut) {
-      circleStyle = 'text-red-600 border-2 border-red-300';
+    const outValue = pa.out !== undefined ? pa.out : 0;
+    const isPlayerOut = isOut || outValue > 0;
+    
+    // For batter_seq_id circle: out > 0 then red, out = 0 then gray with light border
+    if (isPlayerOut) {
+      circleStyle = 'text-red-600 border-2 border-red-300'; // Red for outs
+    } else {
+      circleStyle = 'text-gray-700 border border-gray-500'; // Gray with light border for non-outs
+    }
+
+    // Determine path color - this will be used for both the text and the paths
+    let pathColor = '';
+    
+    if (isOut || outValue > 0 || strikeoutStatus) {
+      // Red for outs and strikeouts
+      pathColor = '#DC2626';
     } else if (isError) {
-      circleStyle = 'text-gray-700 border-2 border-gray-300'; // Changed to gray for errors
+      // Red for errors
+      pathColor = '#DC2626';
+    } else if (walkStatus || pa.pa_why === 'HBP' || isFC) {
+      // Black for walks, HBP, fielder's choice
+      pathColor = '#333333';
     } else if (isHit || isBunt) {
-      circleStyle = 'text-purple-600 border-2 border-purple-500';
-    } else if (isWalk || isFC) {
-      circleStyle = 'text-gray-700 border-2 border-gray-300';
+      // Purple for hits and bunts
+      pathColor = '#9333EA';
     } else {
-      circleStyle = 'text-gray-700 border border-gray-500';
+      // Default color
+      pathColor = '#333333';
     }
 
-    // Determine the text color
-    let textColor = '';
-    if (isHit || isBunt || isWalk) {
-      textColor = 'text-purple-600';
-    } else if (isOut || isError) {
-      textColor = 'text-red-600';
-    } else if (isFC) {
-      textColor = 'text-black';
-    } else {
-      textColor = 'text-black';
-    }
-
-    // Determine the path color
-    const pathColor = (isHit || isBunt || isWalk) ? '#9333EA' : '#000000';
-
-    // Handle special cases for hit marker color
-    let hitMarkerColor = textColor;
+    // Handle special cases for hit marker color - keep this separate
+    let hitMarkerColor = '';
     if (isError) {
-      hitMarkerColor = 'text-red-600';
-    } else if (!playerReachedBase()) {
-      hitMarkerColor = 'text-red-600';
+      hitMarkerColor = 'text-red-600'; // Red X for errors
+    } else if (outValue > 0 || isOut) {
+      hitMarkerColor = 'text-red-600'; // Red X for outs
+    } else if (walkStatus || pa.pa_why === 'HBP') {
+      hitMarkerColor = 'text-black'; // Black X for walks and HBP
+    } else {
+      hitMarkerColor = 'text-purple-600'; // Purple X for hits and other cases
     }
 
     return {
       circleStyle,
-      textColor,
       displayText,
       pathColor,
       hitMarkerColor
@@ -478,7 +584,7 @@ const BaseballField = ({
   };
 
   // Use the function to get all styling and display information
-  const { circleStyle, textColor, displayText, pathColor, hitMarkerColor } = getDisplayConfig();
+  const { circleStyle, displayText, pathColor, hitMarkerColor } = getDisplayConfig();
 
   return (
     <div 
@@ -497,6 +603,7 @@ const BaseballField = ({
           onClick();
         }
       }}
+      data-component="BaseballField"
     >
       {/* Batter Sequence ID in top left - with conditional styling based on outcome */}
       {pa && (
@@ -514,17 +621,15 @@ const BaseballField = ({
         </div>
       )}
       
-      {/* Diamond shape - only show if player did not reach base */}
-      {(!pa || !playerReachedBase()) && (
-        <div className="absolute transform rotate-45 w-6 h-6 border border-gray-400 bottom-1"></div>
-      )}
+      {/* Diamond shape - always show */}
+      <div className="absolute transform rotate-45 w-6 h-6 border border-gray-400 bottom-1"></div>
       
       {/* Base path visualization - smaller size */}
       {pa && (
         <svg 
-          className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-9 h-9 z-10" 
-          viewBox="0 0 40 40" 
-          style={{ marginLeft: '-1px' }}
+          className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-9 h-9 z-11" 
+          viewBox="-1 -1 40 40" 
+          style={{ marginLeft: '-1px', marginBottom: '-1px' }}
         >
           {(() => {
             // Get initial base reached (from pa_result or bases_reached)
@@ -533,78 +638,96 @@ const BaseballField = ({
             // Get final base reached (from br_result)
             const finalBase = getFinalBaseReached();
             
+            // Convert to numbers for proper comparison
+            const initialBaseNum = Number(initialBase);
+            const finalBaseNum = Number(finalBase);
+            
+            // Only hide paths for strikeouts - walks should show a path to first base
+            if (isStrikeout()) {
+              return null;
+            }
+            
+            // Check for error
+            const isError = pa.pa_why === 'E' || pa.why_base_reached === 'E';
+            
+            // Set colors for initial paths and advancement paths
+            let initialPathColor = '#9333EA'; // Purple for initial pa_result > 0
+            if (isError) {
+              initialPathColor = '#DC2626'; // Red for errors
+            }
+            
+            // Always use black for br_result (advancement paths)
+            const advancementPathColor = '#333333'; // Black for base advancement (br_result)
+            
             return (
               <>
-                {/* Initial base paths in purple - on the perimeter */}
-                {/* Home to first */}
-                {initialBase >= 1 && (
+                {/* Home to first - Always show for any initial base */}
+                {initialBaseNum >= 1 && (
                   <path 
                     d="M20,40 L40,20" 
-                    stroke={pathColor} 
+                    stroke={initialPathColor} 
                     strokeWidth="2.5" 
                     fill="none"
                   />
                 )}
                 
-                {/* First to second */}
-                {initialBase >= 2 && (
+                {/* First to second - Only for pa_result >= 2 */}
+                {initialBaseNum >= 2 && (
                   <path 
                     d="M40,20 L20,0" 
-                    stroke={pathColor} 
+                    stroke={initialPathColor} 
                     strokeWidth="2.5" 
                     fill="none"
                   />
                 )}
                 
-                {/* Second to third */}
-                {initialBase >= 3 && (
+                {/* Second to third - Only for pa_result >= 3 */}
+                {initialBaseNum >= 3 && (
                   <path 
                     d="M20,0 L0,20" 
-                    stroke={pathColor} 
+                    stroke={initialPathColor} 
                     strokeWidth="2.5" 
                     fill="none"
                   />
                 )}
                 
-                {/* Third to home */}
-                {initialBase >= 4 && (
+                {/* Third to home - Only for pa_result = 4 */}
+                {initialBaseNum >= 4 && (
                   <path 
                     d="M0,20 L20,40" 
-                    stroke={pathColor} 
+                    stroke={initialPathColor} 
                     strokeWidth="2.5" 
                     fill="none"
                   />
                 )}
                 
-                {/* Additional advancement paths in black - on the perimeter */}
-                {/* First to second (if advanced) */}
-                {initialBase === 1 && finalBase >= 2 && (
-                  <path 
-                    d="M40,20 L20,0" 
-                    stroke="#000000" 
-                    strokeWidth="1.5" 
-                    fill="none"
-                  />
-                )}
-                
-                {/* Second to third (if advanced) */}
-                {initialBase <= 2 && finalBase >= 3 && finalBase > initialBase && (
-                  <path 
-                    d="M20,0 L0,20" 
-                    stroke="#000000" 
-                    strokeWidth="1.5" 
-                    fill="none"
-                  />
-                )}
-                
-                {/* Third to home (if advanced) */}
-                {initialBase <= 3 && finalBase >= 4 && finalBase > initialBase && (
-                  <path 
-                    d="M0,20 L20,40" 
-                    stroke="#000000" 
-                    strokeWidth="1.5" 
-                    fill="none"
-                  />
+                {/* Base advancement paths - only show if finalBase > initialBase */}
+                {finalBaseNum > initialBaseNum && initialBaseNum > 0 && (
+                  <>
+                    <path 
+                      d="M40,20 L20,0" 
+                      stroke={advancementPathColor} 
+                      strokeWidth="2" 
+                      fill="none"
+                      style={{ display: initialBaseNum === 1 && finalBaseNum >= 2 ? 'block' : 'none' }}
+                    />
+                    
+                    <path 
+                      d="M20,0 L0,20" 
+                      stroke={advancementPathColor} 
+                      strokeWidth="2" 
+                      fill="none"
+                      style={{ display: initialBaseNum <= 2 && finalBaseNum >= 3 ? 'block' : 'none' }}
+                    />
+                    
+                    <path 
+                      d="M0,20 L20,40" 
+                      stroke={advancementPathColor} 
+                      strokeWidth="2" 
+                      fill="none"
+                      style={{ display: initialBaseNum <= 3 && finalBaseNum >= 4 ? 'block' : 'none' }}
+                    />
+                  </>
                 )}
               </>
             );
@@ -612,8 +735,10 @@ const BaseballField = ({
         </svg>
       )}
       
-      {/* Hit marker - small X with color based on whether player reached base or if there was an error */}
-      {hitDirection && hitDirection !== 0 && (
+      {/* Hit marker - small X with color based on whether player reached base or if there was an error 
+         Only show if we have a valid hitDirection that's not 0 */}
+      {hitDirection !== null && hitDirection !== undefined && hitDirection !== 0 && 
+       !isWalk() && !isStrikeout() && (
         <div 
           className={`absolute z-40 font-bold text-[10px] ${hitMarkerColor} flex items-center justify-center`}
           style={{ 
@@ -628,11 +753,12 @@ const BaseballField = ({
       
       {/* Result text - positioned based on whether player reached base */}
       <div 
-        className={`absolute z-20 font-bold ${textColor}`}
+        className={`absolute z-20 font-bold`}
         style={{
           top: playerReachedBase() ? '60%' : '65%',
           left: '50%',
-          transform: 'translate(-50%, -50%)'
+          transform: 'translate(-50%, -50%)',
+          color: pathColor // Use the exact same color as the base path
         }}
       >
         {/* Use a smaller font size for all results (15% smaller) */}
@@ -693,7 +819,7 @@ const BaseballField = ({
       {/* Add plate appearance indicator (only shown when interactive and empty) - adjusted position */}
       {isInteractive && !result && (
         <div className="absolute inset-0 flex items-center justify-center" style={{ paddingTop: '11px' }}>
-          <div className="text-green-400 text-2xl">+</div>
+          <div className="text-red-500 text-[10px] font-bold">NEW</div>
         </div>
       )}
     </div>
