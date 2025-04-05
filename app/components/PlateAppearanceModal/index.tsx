@@ -1036,14 +1036,52 @@ const PlateAppearanceModal = ({
       return;
     }
     
-    // Confirm deletion with the user
-    if (!confirm('Are you sure you want to delete this plate appearance? This action cannot be undone.')) {
-      return;
-    }
+    // Create a custom confirmation dialog that's more mobile-friendly
+    const confirmDelete = () => {
+      return new Promise((resolve) => {
+        const dialog = document.createElement('div');
+        dialog.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50';
+        dialog.innerHTML = `
+          <div class="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full mx-4">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Delete Plate Appearance</h3>
+            <p class="text-sm text-gray-500 mb-6">Are you sure you want to delete this plate appearance? This action cannot be undone.</p>
+            <div class="flex justify-end space-x-3">
+              <button class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">
+                Cancel
+              </button>
+              <button class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                Delete
+              </button>
+            </div>
+          </div>
+        `;
+        
+        document.body.appendChild(dialog);
+        
+        const cancelBtn = dialog.querySelector('button:first-of-type');
+        const deleteBtn = dialog.querySelector('button:last-of-type');
+        
+        const cleanup = () => {
+          document.body.removeChild(dialog);
+        };
+        
+        cancelBtn?.addEventListener('click', () => {
+          cleanup();
+          resolve(false);
+        });
+        
+        deleteBtn?.addEventListener('click', () => {
+          cleanup();
+          resolve(true);
+        });
+      });
+    };
+    
+    const shouldDelete = await confirmDelete();
+    if (!shouldDelete) return;
     
     try {
       // Call the onDelete function passed from the parent with all required parameters
-      // Use empty strings as safe fallbacks for required string parameters
       await onDelete({
         team_id: pa.team_id || teamId || "",
         game_id: pa.game_id || gameId || "",
@@ -1188,10 +1226,13 @@ const PlateAppearanceModal = ({
               {pa && (
                 <button
                   type="button"
-                  className="inline-flex justify-center rounded-md border border-red-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-red-700 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:text-sm"
+                  className="w-full sm:w-auto inline-flex justify-center items-center rounded-md border border-red-300 shadow-sm px-6 py-3 bg-white text-base font-medium text-red-700 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:text-sm"
                   onClick={handleDelete}
                 >
-                  Delete
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  Delete Plate Appearance
                 </button>
               )}
             </div>

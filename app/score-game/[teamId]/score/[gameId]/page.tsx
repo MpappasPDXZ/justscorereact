@@ -289,7 +289,7 @@ export default function ScoreGame() {
         return;
       }
       
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/games/${teamId}/${gameId}`);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/games/${teamId}/${gameId}/get_one_game`);
       if (!response.ok) throw new Error("Failed to fetch game details");
       const data = await response.json();
       

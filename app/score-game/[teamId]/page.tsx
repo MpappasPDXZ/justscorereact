@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import EditGameModal from "../EditGameModal";
+import CreateGameModal from "../CreateGameModal";
 
 // Add TrashIcon component
 const TrashIcon = (props: React.SVGProps<SVGSVGElement>) => (
@@ -52,12 +53,12 @@ interface Game {
   event_minute: number;
   field_location: string;
   field_name: string;
-  field_temperature: string;
+  field_temperature: number;
   field_type: string;
   game_id: string;
   game_status: string;
   my_team_ha: string;
-  user_team: string;
+  user_team: number;
 }
 
 // Empty game template for creating new games
@@ -69,12 +70,12 @@ const emptyGame: Game = {
   event_minute: 0,
   field_location: "",
   field_name: "",
-  field_temperature: "70",
+  field_temperature: 70,
   field_type: "",
   game_id: "",
   game_status: "open",
   my_team_ha: "home",
-  user_team: ""
+  user_team: 0
 };
 
 export default function TeamGames() {
@@ -101,7 +102,7 @@ export default function TeamGames() {
   const fetchGames = async (teamId: string) => {
     try {
       setLoading(true);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/games/${teamId}`);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/games/${teamId}/gamelist`);
       if (!response.ok) throw new Error("Failed to fetch games");
       const data = await response.json();
       
@@ -111,7 +112,17 @@ export default function TeamGames() {
         const sortedGames = [...data.games].sort((a, b) => {
           return new Date(a.event_date).getTime() - new Date(b.event_date).getTime();
         });
-        setGames(sortedGames);
+        
+        // Ensure all games have the correct data types
+        const processedGames = sortedGames.map(game => ({
+          ...game,
+          user_team: parseInt(game.user_team) || 0,
+          event_hour: parseInt(game.event_hour) || 0,
+          event_minute: parseInt(game.event_minute) || 0,
+          field_temperature: parseInt(game.field_temperature) || 0
+        }));
+        
+        setGames(processedGames);
       } else {
         setGames([]);
       }
@@ -127,11 +138,10 @@ export default function TeamGames() {
     setSelectedGame(game);
     setIsCreating(false);
     setIsModalOpen(true);
-    fetchLineups(game);
   };
 
   const handleCreateGame = () => {
-    setSelectedGame({...emptyGame, user_team: teamId});
+    setSelectedGame({...emptyGame, user_team: parseInt(teamId) || 0});
     setIsCreating(true);
     setIsModalOpen(true);
   };
@@ -153,7 +163,7 @@ export default function TeamGames() {
   // Add delete handler
   const handleDeleteGame = async (game: Game) => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/games/${teamId}/${game.game_id}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/games/${teamId}/${game.game_id}/delete_game`, {
         method: 'DELETE',
       });
       
@@ -325,9 +335,6 @@ export default function TeamGames() {
                 <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 tracking-wider w-20">
                   Actions
                 </th>
-                <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 tracking-wider w-16">
-                  Game ID
-                </th>
                 <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 tracking-wider w-28">
                   Date & Time
                 </th>
@@ -348,6 +355,9 @@ export default function TeamGames() {
                 </th>
                 <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 tracking-wider w-16">
                   Status
+                </th>
+                <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 tracking-wider w-16">
+                  Game ID
                 </th>
               </tr>
             </thead>
@@ -393,9 +403,6 @@ export default function TeamGames() {
                       </button>
                     </div>
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-xs">
-                    <div className="text-xs text-gray-900">{game.game_id}</div>
-                  </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <div className="text-xs text-gray-900">{game.event_date}</div>
                     <div className="text-xs text-gray-500">{formatTime(game.event_hour, game.event_minute)}</div>
@@ -435,6 +442,9 @@ export default function TeamGames() {
                       {game.game_status}
                     </span>
                   </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-xs">
+                    <div className="text-xs text-gray-900">{game.game_id}</div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -444,15 +454,25 @@ export default function TeamGames() {
 
       {/* Modal for editing or creating game */}
       {isModalOpen && selectedGame && (
-        <EditGameModal 
-          isOpen={isModalOpen}
-          onClose={handleCloseModal}
-          onSave={handleGameSaved}
-          gameData={selectedGame}
-          teamId={teamId}
-          gameId={isCreating ? "" : selectedGame.game_id}
-          isCreating={isCreating}
-        />
+        isCreating ? (
+          <CreateGameModal 
+            isOpen={isModalOpen}
+            onClose={handleCloseModal}
+            onSave={handleGameSaved}
+            gameData={selectedGame}
+            teamId={teamId}
+          />
+        ) : (
+          <EditGameModal 
+            isOpen={isModalOpen}
+            onClose={handleCloseModal}
+            onSave={handleGameSaved}
+            gameData={selectedGame}
+            teamId={teamId}
+            gameId={selectedGame.game_id}
+            isCreating={false}
+          />
+        )
       )}
     </div>
   );

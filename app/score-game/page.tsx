@@ -135,8 +135,8 @@ export default function ScoreGame() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 w-28 tracking-wider">
-                  Team ID
+                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 tracking-wider">
+                  Action
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 w-24 tracking-wider">
                   Team Name
@@ -147,8 +147,8 @@ export default function ScoreGame() {
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 w-24 tracking-wider">
                   Head Coach
                 </th>
-                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 tracking-wider">
-                  Action
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 w-28 tracking-wider">
+                  Team ID
                 </th>
               </tr>
             </thead>
@@ -158,8 +158,17 @@ export default function ScoreGame() {
                   key={team.team_id}
                   className="hover:bg-gray-50 transition-colors duration-150"
                 >
-                  <td className="px-6 py-4 whitespace-nowrap w-28">
-                    <div className="text-sm text-gray-500">{team.team_id}</div>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <button
+                      onClick={() => handleTeamSelect(team.team_id)}
+                      className="flex items-center justify-center py-2 px-3 rounded-md shadow-sm text-xs font-medium border bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700 transition-colors"
+                      title="Select team"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      <span>Select</span>
+                    </button>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap w-24 truncate">
                     <div className="text-sm font-medium text-gray-900">{team.team_name}</div>
@@ -170,17 +179,8 @@ export default function ScoreGame() {
                   <td className="px-6 py-4 whitespace-nowrap w-24 truncate">
                     <div className="text-sm text-gray-500">{team.head_coach || "-"}</div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
-                      onClick={() => handleTeamSelect(team.team_id)}
-                      className="flex items-center justify-center py-2 px-3 rounded-md shadow-sm text-xs font-medium border bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700 transition-colors ml-auto"
-                      title="Select team"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                      </svg>
-                      <span>Select</span>
-                    </button>
+                  <td className="px-6 py-4 whitespace-nowrap w-28">
+                    <div className="text-sm text-gray-500">{team.team_id}</div>
                   </td>
                 </tr>
               ))}
