@@ -222,6 +222,24 @@ const BaseballField = ({
   };
 
   const hitMarkerPosition = getHitMarkerPosition();
+  
+  // Function to check if it's a walk
+  const isWalk = () => {
+    if (!pa) return false;
+    const paWhy = pa.pa_why || pa.why_base_reached;
+    return paWhy === 'BB' || paWhy === 'B' || paWhy === 'HBP';
+  };
+
+  // Function to check if it's a strikeout
+  const isStrikeout = () => {
+    if (!pa) return false;
+    const paWhy = pa.pa_why || pa.why_base_reached;
+    return paWhy === 'K' || paWhy === 'KK';
+  };
+
+  // Determine key states at the component level
+  const walkStatus = pa ? isWalk() : false;
+  const strikeoutStatus = pa ? isStrikeout() : false;
 
   // Update the getInitialBaseReached function to handle numeric values correctly
   const getInitialBaseReached = (): number => {
@@ -229,11 +247,11 @@ const BaseballField = ({
     
     // Special handling for walks and strikeouts - they should never return 0 
     // even if pa_result is 0
-    if (isWalk()) {
+    if (walkStatus) {
       return 1; // Walks always reach first base
     }
     
-    if (isStrikeout()) {
+    if (strikeoutStatus) {
       return 0; // Return a special value that we'll handle differently
     }
     
@@ -410,20 +428,6 @@ const BaseballField = ({
     return false;
   };
 
-  // Function to check if it's a walk
-  const isWalk = () => {
-    if (!pa) return false;
-    const paWhy = pa.pa_why || pa.why_base_reached;
-    return paWhy === 'BB' || paWhy === 'B' || paWhy === 'HBP';
-  };
-
-  // Function to check if it's a strikeout
-  const isStrikeout = () => {
-    if (!pa) return false;
-    const paWhy = pa.pa_why || pa.why_base_reached;
-    return paWhy === 'K' || paWhy === 'KK';
-  };
-
   // Create a comprehensive function to handle all styling and text display logic
   const getDisplayConfig = () => {
     if (!pa) {
@@ -438,16 +442,13 @@ const BaseballField = ({
     // Check for error
     const isError = pa.pa_why === 'E' || pa.why_base_reached === 'E';
     
-    // Special case for walks with pa_why = 'B'
-    const isWalkWithB = pa.pa_why === 'B' && pa.pa_result === 1;
-    
     // Determine the result type
     const isHit = playerGotHit();
     const isOut = playerWasOut(); // This checks if the player was out
-    const walkStatus = isWalk();
-    const strikeoutStatus = isStrikeout();
     const isFC = pa.pa_why === 'FC';
-    const isBunt = pa.pa_why === 'B' && pa.pa_result !== undefined && [1, 2, 3, 4].includes(pa.pa_result);
+    // Bunts are represented as a quality indicator from a field called 'bunt' in the ScoreBookEntry object
+    // If the bunt field is true, then the player reached base on a bunt
+    const isBunt = pa.bunt === 1; // Check if the player bunted regardless of the result
 
     // Get initial base reached and final base reached using the same functions
     // that control the base path visualization
@@ -457,8 +458,9 @@ const BaseballField = ({
     // Get the display text - align with base path logic
     let displayText = '';
     
-    // Handle walks (BB) first - they always reach first base
-    if (walkStatus) {
+    // Handle walks (BB) first - they always reach first base. BB and HBP are both walks
+    // so we need to check for both
+    if (pa.pa_why === 'BB' || pa.pa_why === 'HBP') {
       displayText = 'BB';
     }
     // Handle strikeouts (K) next
@@ -643,7 +645,7 @@ const BaseballField = ({
             const finalBaseNum = Number(finalBase);
             
             // Only hide paths for strikeouts - walks should show a path to first base
-            if (isStrikeout()) {
+            if (strikeoutStatus) {
               return null;
             }
             
@@ -738,7 +740,7 @@ const BaseballField = ({
       {/* Hit marker - small X with color based on whether player reached base or if there was an error 
          Only show if we have a valid hitDirection that's not 0 */}
       {hitDirection !== null && hitDirection !== undefined && hitDirection !== 0 && 
-       !isWalk() && !isStrikeout() && (
+       !walkStatus && !strikeoutStatus && (
         <div 
           className={`absolute z-40 font-bold text-[10px] ${hitMarkerColor} flex items-center justify-center`}
           style={{ 

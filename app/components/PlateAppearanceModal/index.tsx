@@ -247,48 +247,52 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
       const endpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL}/lineup/games/${teamId}/${gameId}/${homeOrAway}/order_by_batter`;
       console.log(`Fetching player info from: ${endpoint}`);
       
-      const response = await fetch(endpoint);
-      
-      if (!response.ok) {
-        console.error(`Error fetching lineup data: ${response.status} ${response.statusText}`);
-        return null;
-      }
-      
-      const data = await response.json();
-      console.log('Lineup data:', data);
-      
-      // The data structure is:
-      // batting_order: {
-      //   order_number: inning_number: {
-      //     jersey_number, player_name, display
-      //   }
-      // }
-      
-      // Check if we have the batting_order data
-      if (data && data.batting_order) {
-        // Convert order number to string since the keys are strings
-        const orderNumberKey = String(orderNumber);
+      try {
+        const response = await fetch(endpoint);
         
-        // Check if the player exists for this order number
-        if (data.batting_order[orderNumberKey]) {
-          // Get the first inning number key (assuming it's the first one)
-          const inningKeys = Object.keys(data.batting_order[orderNumberKey]);
-          if (inningKeys.length > 0) {
-            const inningKey = inningKeys[0];
-            const player = data.batting_order[orderNumberKey][inningKey];
-            
-            console.log(`Found player: ${player.player_name} (#${player.jersey_number})`);
-            return {
-              jersey_number: player.jersey_number,
-              player_name: player.player_name || player.display?.split(' - ')[1] || ''
-            };
+        if (!response.ok) {
+          console.error(`Error fetching lineup data: ${response.status} ${response.statusText}`);
+          return null;
+        }
+        
+        const data = await response.json();
+        console.log('Lineup data:', data);
+        
+        // The data structure is:
+        // batting_order: {
+        //   order_number: inning_number: {
+        //     jersey_number, player_name, display
+        //   }
+        // }
+        
+        // Check if we have the batting_order data
+        if (data && data.batting_order) {
+          // Convert order number to string since the keys are strings
+          const orderNumberKey = String(orderNumber);
+          
+          // Check if the player exists for this order number
+          if (data.batting_order[orderNumberKey]) {
+            // Get the first inning number key (assuming it's the first one)
+            const inningKeys = Object.keys(data.batting_order[orderNumberKey]);
+            if (inningKeys.length > 0) {
+              const inningKey = inningKeys[0];
+              const player = data.batting_order[orderNumberKey][inningKey];
+              
+              console.log(`Found player: ${player.player_name} (#${player.jersey_number})`);
+              return {
+                jersey_number: player.jersey_number,
+                player_name: player.player_name || player.display?.split(' - ')[1] || ''
+              };
+            }
           }
         }
+        return null;
+      } catch (fetchError) {
+        console.error('Network error in fetchPlayerInfoFromLineup:', fetchError);
+        return null;
       }
-      
-      return null;
     } catch (error) {
-      console.error('Error fetching player info:', error);
+      console.error('Error in fetchPlayerInfoFromLineup:', error);
       return null;
     }
   };
@@ -320,18 +324,23 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
           dataFetchedRef.current[playerKey] = true;
           
           // Fetch player info from the lineup endpoint
-          fetchPlayerInfoFromLineup(pa.order_number).then(playerInfo => {
-            if (playerInfo) {
-              setEditedPA(prev => {
-                if (!prev) return null;
-                return {
-                  ...prev,
-                  batter_jersey_number: playerInfo.jersey_number || prev.batter_jersey_number || '',
-                  batter_name: playerInfo.player_name || prev.batter_name || ''
-                };
-              });
-            }
-          });
+          fetchPlayerInfoFromLineup(pa.order_number)
+            .then(playerInfo => {
+              if (playerInfo) {
+                setEditedPA(prev => {
+                  if (!prev) return null;
+                  return {
+                    ...prev,
+                    batter_jersey_number: playerInfo.jersey_number || prev.batter_jersey_number || '',
+                    batter_name: playerInfo.player_name || prev.batter_name || ''
+                  };
+                });
+              }
+            })
+            .catch(error => {
+              console.error("Error loading player info, continuing without it:", error);
+              // Continue with current data without player info
+            });
         }
       }
       
