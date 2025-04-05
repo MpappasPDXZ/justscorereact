@@ -148,7 +148,6 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
   // Add a function to fetch PA data from the custom endpoint
   const fetchPADataFromEndpoint = async (endpoint: string) => {
     try {
-      console.log(`Fetching data from endpoint: ${process.env.NEXT_PUBLIC_API_BASE_URL}${endpoint}`);
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}${endpoint}`);
       
       if (!response.ok) {
@@ -157,7 +156,6 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
       }
       
       const data = await response.json();
-      console.log('API Response:', data);
       return data;
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -245,7 +243,6 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
       }
       
       const endpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL}/lineup/games/${teamId}/${gameId}/${homeOrAway}/order_by_batter`;
-      console.log(`Fetching player info from: ${endpoint}`);
       
       try {
         const response = await fetch(endpoint);
@@ -256,15 +253,6 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
         }
         
         const data = await response.json();
-        console.log('Lineup data:', data);
-        
-        // The data structure is:
-        // batting_order: {
-        //   order_number: inning_number: {
-        //     jersey_number, player_name, display
-        //   }
-        // }
-        
         // Check if we have the batting_order data
         if (data && data.batting_order) {
           // Convert order number to string since the keys are strings
@@ -278,7 +266,6 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
               const inningKey = inningKeys[0];
               const player = data.batting_order[orderNumberKey][inningKey];
               
-              console.log(`Found player: ${player.player_name} (#${player.jersey_number})`);
               return {
                 jersey_number: player.jersey_number,
                 player_name: player.player_name || player.display?.split(' - ')[1] || ''
@@ -499,19 +486,9 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
       if (!dataFetchedRef.current[fetchKey]) {
         dataFetchedRef.current[fetchKey] = true;
         
-        // Special log for the specific endpoint
-        if (paEditEndpoint.includes('/scores/new/1/1/home/1/scorecardgrid_paonly_inningonly/2/pa_edit')) {
-          console.log('Fetching data for the specific endpoint:', paEditEndpoint);
-        }
-        
         // Fetch data from the provided endpoint
         fetchPADataFromEndpoint(paEditEndpoint).then(data => {
           if (data) {
-            // Special log for the specific endpoint
-            if (paEditEndpoint.includes('/scores/new/1/1/home/1/scorecardgrid_paonly_inningonly/2/pa_edit')) {
-              console.log('Response for the specific endpoint:', data);
-            }
-            
             // Extract the plate appearance data from the nested structure
             let fetchedPA = null;
             
@@ -520,48 +497,9 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
                 data.plate_appearances[1].rounds[2] && data.plate_appearances[1].rounds[2].details) {
               // Use the nested structure
               fetchedPA = data.plate_appearances[1].rounds[2].details;
-              console.log('Using nested structure for plate appearance data:', fetchedPA);
-              
-              // Log all fields in the nested structure for debugging
-              console.log('All fields in nested structure:', Object.keys(fetchedPA));
-              
-              // Log specific fields we're interested in
-              console.log('Quality indicators in nested structure:', {
-                qab: fetchedPA.qab,
-                hard_hit: fetchedPA.hard_hit,
-                slap: fetchedPA.slap,
-                bunt: fetchedPA.bunt,
-                sac: fetchedPA.sac
-              });
-              
-              console.log('Result fields in nested structure:', {
-                pa_result: fetchedPA.pa_result,
-                pa_why: fetchedPA.pa_why,
-                hit_to: fetchedPA.hit_to,
-                br_result: fetchedPA.br_result
-              });
-              
-              console.log('Count fields in nested structure:', {
-                balls_before_play: fetchedPA.balls_before_play,
-                strikes_before_play: fetchedPA.strikes_before_play,
-                strikes_watching: fetchedPA.strikes_watching,
-                strikes_swinging: fetchedPA.strikes_swinging,
-                strikes_unsure: fetchedPA.strikes_unsure,
-                fouls: fetchedPA.fouls,
-                ball_swinging: fetchedPA.ball_swinging,
-                pitch_count: fetchedPA.pitch_count
-              });
-              
-              console.log('Array fields in nested structure:', {
-                pa_error_on: fetchedPA.pa_error_on,
-                br_error_on: fetchedPA.br_error_on,
-                br_stolen_bases: fetchedPA.br_stolen_bases,
-                base_running_hit_around: fetchedPA.base_running_hit_around
-              });
             } else if (data.plate_appearance) {
               // Fall back to the direct structure
               fetchedPA = data.plate_appearance;
-              console.log('Using direct structure for plate appearance data:', fetchedPA);
             }
             
             if (fetchedPA) {
@@ -619,9 +557,6 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
                     updatedPA.br_result = undefined;
                   }
                   
-                  // Log the updated PA to see what fields are available
-                  console.log('Updated PA with all fields:', updatedPA);
-                  
                   return updatedPA;
                 });
               }
@@ -638,26 +573,6 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
   // Helper function to map API response to form state with better type safety
   const mapAPIResponseToFormState = (apiPA: Record<string, any>): Partial<ScoreBookEntry> | null => {
     if (!apiPA) return null;
-    
-    // Log the incoming apiPA to see what fields are available
-    console.log('Incoming apiPA in mapAPIResponseToFormState:', apiPA);
-    
-    // Log all quality indicators in the incoming apiPA
-    console.log('Quality indicators in incoming apiPA:', {
-      qab: apiPA.qab,
-      hard_hit: apiPA.hard_hit,
-      slap: apiPA.slap,
-      bunt: apiPA.bunt,
-      sac: apiPA.sac
-    });
-    
-    // Log all array fields in the incoming apiPA
-    console.log('Array fields in incoming apiPA:', {
-      pa_error_on: apiPA.pa_error_on,
-      br_error_on: apiPA.br_error_on,
-      br_stolen_bases: apiPA.br_stolen_bases,
-      base_running_hit_around: apiPA.base_running_hit_around
-    });
     
     // Make explicit conversions to ensure type safety
     const mappedData: Partial<ScoreBookEntry> = {
@@ -713,32 +628,12 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
       round: Number(apiPA.pa_round ?? 1),
     };
     
-    // Log the mapped data to see what fields are available
-    console.log('Mapped data in mapAPIResponseToFormState:', mappedData);
-    
-    // Log all quality indicators in the mapped data
-    console.log('Quality indicators in mapped data:', {
-      qab: mappedData.qab,
-      hard_hit: mappedData.hard_hit,
-      slap: mappedData.slap,
-      bunt: mappedData.bunt,
-      sac: mappedData.sac
-    });
-    
-    // Log all array fields in the mapped data
-    console.log('Array fields in mapped data:', {
-      pa_error_on: mappedData.pa_error_on,
-      br_error_on: mappedData.br_error_on,
-      br_stolen_bases: mappedData.br_stolen_bases,
-      base_running_hit_around: mappedData.base_running_hit_around
-    });
-    
     return mappedData;
   };
 
   // Remove useEffect logging statements
   useEffect(() => {
-    // Removed console.log
+    // Empty useEffect
   }, [editedPA]);
 
   const handleInputChange = (field: string, value: any) => {
@@ -977,9 +872,6 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
     // Also update the legacy field for backward compatibility
     updatedPA.hit_around_bases = [...updatedPA.base_running_hit_around];
     
-    // Log the arrays for debugging
-    console.log('After sync: br_stolen_bases =', updatedPA.br_stolen_bases);
-    console.log('After sync: base_running_hit_around =', updatedPA.base_running_hit_around);
   };
 
   // Helper function to hide base 2 in both br_stolen_bases and base_running_hit_around when pa_result is 2
@@ -1031,27 +923,7 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
   // Create a helper function to generate the API data structure
   const createApiData = (): ScoreBookEntryStructure | null => {
     if (!editedPA) return null;
-    
-    // Log the editedPA to see what fields are available
-    console.log('editedPA in createApiData:', editedPA);
-    
-    // Log all quality indicators in the editedPA
-    console.log('Quality indicators in editedPA:', {
-      qab: (editedPA as any).qab,
-      hard_hit: (editedPA as any).hard_hit,
-      slap: (editedPA as any).slap,
-      bunt: (editedPA as any).bunt,
-      sac: (editedPA as any).sac
-    });
-    
-    // Log all array fields in the editedPA
-    console.log('Array fields in editedPA:', {
-      pa_error_on: (editedPA as any).pa_error_on,
-      br_error_on: (editedPA as any).br_error_on,
-      br_stolen_bases: (editedPA as any).br_stolen_bases,
-      base_running_hit_around: (editedPA as any).base_running_hit_around
-    });
-    
+        
     // Create a copy of the edited data to ensure we don't modify the original
     const paData = { 
       ...editedPA,
@@ -1070,27 +942,7 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
       // Ensure pa_why is set
       pa_why: editedPA.pa_why || editedPA.why_base_reached || ''
     };
-    
-    // Log the paData to see what fields are available
-    console.log('paData in createApiData:', paData);
-    
-    // Log all quality indicators in the paData
-    console.log('Quality indicators in paData:', {
-      qab: paData.qab,
-      hard_hit: paData.hard_hit,
-      slap: paData.slap,
-      bunt: paData.bunt,
-      sac: paData.sac
-    });
-    
-    // Log all array fields in the paData
-    console.log('Array fields in paData:', {
-      pa_error_on: paData.pa_error_on,
-      br_error_on: paData.br_error_on,
-      br_stolen_bases: paData.br_stolen_bases,
-      base_running_hit_around: paData.base_running_hit_around
-    });
-    
+      
     // Helper function to safely parse array fields and convert to numbers
     const parseArrayField = (value: any, convertToNumbers: boolean = true): any[] => {
       if (!value) return [];
@@ -1209,26 +1061,6 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
       fouls: Number(paData.fouls || 0),
     };
     
-    // Log the apiData to see what fields are available
-    console.log('apiData in createApiData:', apiData);
-    
-    // Log all quality indicators in the apiData
-    console.log('Quality indicators in apiData:', {
-      qab: apiData.qab,
-      hard_hit: apiData.hard_hit,
-      slap: apiData.slap,
-      bunt: apiData.bunt,
-      sac: apiData.sac
-    });
-    
-    // Log all array fields in the apiData
-    console.log('Array fields in apiData:', {
-      pa_error_on: apiData.pa_error_on,
-      br_error_on: apiData.br_error_on,
-      br_stolen_bases: apiData.br_stolen_bases,
-      base_running_hit_around: apiData.base_running_hit_around
-    });
-    
     return apiData;
   };
 
@@ -1307,25 +1139,6 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
       rbi: Number(editedPA?.rbi || 0)
     };
     
-    // Log the data being displayed in the JSON view
-    console.log('Data being displayed in JSON view:', allFields);
-    
-    // Log all quality indicators in the JSON view
-    console.log('Quality indicators in JSON view:', {
-      qab: allFields.qab,
-      hard_hit: allFields.hard_hit,
-      slap: allFields.slap,
-      bunt: allFields.bunt,
-      sac: allFields.sac
-    });
-    
-    // Log all array fields in the JSON view
-    console.log('Array fields in JSON view:', {
-      pa_error_on: allFields.pa_error_on,
-      br_error_on: allFields.br_error_on,
-      br_stolen_bases: allFields.br_stolen_bases,
-      base_running_hit_around: allFields.base_running_hit_around
-    });
     
     // Convert the data to a formatted JSON string
     const jsonString = JSON.stringify(allFields, null, 2);
@@ -1338,7 +1151,7 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
   // Update the delete handler to safely handle undefined values
   const handleDelete = async () => {
     if (!pa || !pa.batter_seq_id) {
-      console.error("❌ Cannot delete: Missing required plate appearance data");
+      console.error("Cannot delete: Missing required plate appearance data");
       return;
     }
     
@@ -1399,7 +1212,7 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
       // Close the modal after successful deletion using our custom close handler
       handleClose();
     } catch (error) {
-      console.error("❌ Error in delete handler:", error);
+      console.error("Error in delete handler:", error);
       alert("Failed to delete plate appearance. Please try again.");
     }
   };
@@ -1470,14 +1283,7 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
         updatedPA.stolen_bases = currentArray;
       }
       
-      // Log the arrays for debugging
-      console.log('Before sync: br_stolen_bases =', updatedPA.br_stolen_bases);
-      console.log('Before sync: base_running_hit_around =', updatedPA.base_running_hit_around);
-      
-      // Ensure base_running_hit_around doesn't include any bases that are in br_stolen_bases
-      // This is a redundant check, but it ensures consistency
       syncBaseRunningHitAroundWithStolenBases(updatedPA);
-      
       // Hide base 2 in both arrays when pa_result is 2
       hideBase2WhenPaResultIs2(updatedPA);
       
