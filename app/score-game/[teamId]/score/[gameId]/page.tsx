@@ -460,10 +460,7 @@ export default function ScoreGame() {
       
       // Log the data showing the key parameters we're using
       console.log(`Plate Appearance Data - inning_number: ${inningNumber}, team_choice: ${teamChoice}, game_id: ${gameId}, team_id: ${teamId}`);
-      
-      // Log the full API response as formatted JSON
-      console.log(`API Response for ${teamChoice} team, inning ${inningNumber}:`, JSON.stringify(data, null, 2));
-      
+
       // Store the raw API data
       setRawApiData(data);
       
