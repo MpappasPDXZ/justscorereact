@@ -3,7 +3,7 @@ import PositionSelectOptions from '@/app/components/PositionSelectOptions';
 import { useState, useEffect } from 'react';
 
 // Define array fields that should always be handled as lists of numbers
-const ARRAY_FIELDS = ["hit_around_bases", "stolen_bases", "pa_error_on", "br_error_on"];
+const ARRAY_FIELDS = ["hit_around_bases", "stolen_bases", "pa_error_on", "br_error_on", "base_running_hit_around"];
 
 interface ResultSectionProps {
   editedPA: ScoreBookEntry;
@@ -21,7 +21,6 @@ const ResultSection = ({
   // Define the whyOptions array that was missing
   const whyOptions = [
     { value: 'H', label: 'Hit - Single (1B)', type: 'hit' },
-    { value: 'B', label: 'Bunt - Successful bunt hit', type: 'hit' },
     { value: 'BB', label: 'Base on Balls - Walk (4 balls)', type: 'hit' },
     { value: 'HBP', label: 'Hit By Pitch - Batter hit by pitch', type: 'hit' },
     { value: 'HR', label: 'Home Run - Ball hit over fence', type: 'hit' },
@@ -42,12 +41,40 @@ const ResultSection = ({
   const outOptions = whyOptions.filter(option => option.type === 'out');
   const otherOptions = whyOptions.filter(option => option.type === 'other');
 
+  // State for collapsible sections
+  const [finalBaseOpen, setFinalBaseOpen] = useState(true);
+  const [baseRunningOpen, setBaseRunningOpen] = useState(false);
+  const [outAtOpen, setOutAtOpen] = useState(false);
+  const [errorsOpen, setErrorsOpen] = useState(false);
+  const [hitToOpen, setHitToOpen] = useState(false);
+  const [paResultOpen, setPaResultOpen] = useState(true);
+
   // Determine which "Why Base Reached" options to show based on bases_reached
   const showOutOptions = editedPA.bases_reached === '0';
   const showReachedBaseOptions = editedPA.bases_reached !== '0' && editedPA.bases_reached !== '';
   
   // Get the current bases reached as a number
   const basesReached = parseInt(editedPA.bases_reached || '0');
+  
+  // Check for base running errors
+  const brErrorsExist = editedPA.br_error_on && editedPA.br_error_on.length > 0 && editedPA.br_error_on.some(err => err);
+  
+  // Update errorsOpen when relevant conditions change
+  useEffect(() => {
+    // Open errors section if PA Result is Error or there are base running errors
+    const shouldOpen = (editedPA.pa_why === 'E' || brErrorsExist) ? true : false;
+    setErrorsOpen(shouldOpen);
+  }, [editedPA.pa_why, brErrorsExist]);
+  
+  // Update hitToOpen based on PA Why value
+  useEffect(() => {
+    const excludedTypes = ['BB', 'HBP', 'K', 'KK'];
+    const paWhy = editedPA.pa_why || '';
+    
+    // Open hit to section if pa_why is set and is not in excludedTypes
+    const shouldOpen = paWhy !== '' && !excludedTypes.includes(paWhy);
+    setHitToOpen(shouldOpen);
+  }, [editedPA.pa_why]);
   
   // Add a helper function to check if a position is in the br_error_on field
   const isErrorOnPosition = (errorOn: any, position: string | number): boolean => {
@@ -208,8 +235,8 @@ const ResultSection = ({
         // Mark that we've counted this HBP in the pitch count
         handleInputChange('hbp_counted', true);
       }
-    } else if (editedPA.pa_why === 'H' || editedPA.pa_why === 'B') {
-      // For hits and bunts, set bases_reached to 1 if not already set
+    } else if (editedPA.pa_why === 'H') {
+      // For hits, set bases_reached to 1 if not already set
       if (editedPA.bases_reached !== '1') {
         handleInputChange('bases_reached', '1');
       }
@@ -283,6 +310,14 @@ const ResultSection = ({
     // Only run this effect if editedPA is properly loaded
     if (!editedPA) return;
     
+    // Initialize all array fields to ensure they're always arrays
+    ARRAY_FIELDS.forEach(field => {
+      if (!editedPA[field] || !Array.isArray(editedPA[field])) {
+        // Initialize as empty array if not already set
+        handleInputChange(field, []);
+      }
+    });
+    
     // If pa_why is set to Error
     if (editedPA.pa_why === 'E') {
       // Make sure br_error_on is initialized as an array
@@ -320,10 +355,16 @@ const ResultSection = ({
       // Safely get arrays
       const hitAround = safeArray(editedPA.hit_around_bases, 'hit_around_bases');
       const stolenBases = safeArray(editedPA.stolen_bases, 'stolen_bases');
+      const baseRunningHitAround = safeArray(editedPA.base_running_hit_around, 'base_running_hit_around');
       
       // Check if this base is already selected in stolen bases
       if (safeIncludes(stolenBases, base)) {
         return; // Don't allow toggling if already stolen
+      }
+      
+      // Check if the base should be disabled based on pa_result
+      if (editedPA.pa_result === 2 && base === 2) {
+        return; // Don't allow toggling if pa_result is 2 and base is 2
       }
       
       // Toggle selection
@@ -336,7 +377,9 @@ const ResultSection = ({
         newHitAround.push(base);
       }
       
+      // Update both hit_around_bases and base_running_hit_around for consistency
       handleInputChange('hit_around_bases', newHitAround);
+      handleInputChange('base_running_hit_around', newHitAround);
       
       // Update Final Base if this is now the maximum base
       const maxBase = newHitAround.length > 0 ? Math.max(...newHitAround) : 0;
@@ -351,6 +394,39 @@ const ResultSection = ({
     }
   };
   
+  // Collapsible section header component - copied from CountSection
+  const CollapsibleHeader = ({ 
+    title, 
+    isOpen, 
+    onToggle 
+  }: { 
+    title: string; 
+    isOpen: boolean; 
+    onToggle: () => void;
+  }) => (
+    <div 
+      className="flex items-center justify-between cursor-pointer py-2 px-2 rounded mb-1 bg-gray-50 hover:bg-gray-100 transition-colors duration-150 border border-gray-200"
+      onClick={onToggle}
+    >
+      <h5 className="text-sm font-semibold text-gray-700">{title}</h5>
+      <button 
+        type="button"
+        className="text-gray-500 hover:text-gray-700 transition-colors duration-150"
+        aria-label={isOpen ? "Collapse section" : "Expand section"}
+      >
+        <svg 
+          xmlns="http://www.w3.org/2000/svg" 
+          className={`h-4 w-4 transform transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} 
+          fill="none" 
+          viewBox="0 0 24 24" 
+          stroke="currentColor"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+    </div>
+  );
+  
   // Use only pa_why, not why_base_reached
   const selectedWhyBaseReached = editedPA?.pa_why || '';
   
@@ -360,661 +436,678 @@ const ResultSection = ({
   }
   
   return (
-    <div className="border rounded p-3">
-      <h4 className="font-medium text-sm mb-2">Result</h4>
+    <div className="border border-gray-300 rounded p-2 min-w-[180px] sm:min-w-0 shadow-sm bg-white">
+      <div className="flex items-center pb-2 mb-2 border-b border-gray-200">
+        <span className="text-base font-bold text-gray-800 tracking-tight">Result</span>
+      </div>
       
       {/* Plate Appearance Result Container */}
       <div className="mb-4">
-        {/* Bases Reached as diamonds */}
+        {/* PA Why buttons for selecting the result type (renamed from PA Result) */}
         <div className="mb-3">
-          <div className="flex items-center">
-            <span className="text-sm font-bold text-gray-700 mr-3">Bases Reached</span>
-            <div className="flex space-x-2">
-              {[0, 1, 2, 3, 4].map(base => {
-                // Determine if player was out (out_at has a value)
-                const isPlayerOut = editedPA.out_at && editedPA.out_at > 0;
-                
-                return (
-                  <div 
-                    key={`base-${base}`}
-                    onClick={() => {
-                      // Update both pa_result and bases_reached
-                      handleInputChange('pa_result', base);
-                      handleInputChange('bases_reached', base.toString());
-                    }}
-                    className={`transform rotate-45 w-6 h-6 flex items-center justify-center cursor-pointer ${
-                      (typeof editedPA.pa_result === 'number' && editedPA.pa_result === base) || 
-                      (typeof editedPA.pa_result === 'string' && editedPA.pa_result === base.toString()) ||
-                      editedPA.bases_reached === base.toString()
-                        ? isPlayerOut 
-                          ? 'bg-red-500 text-white' // Red if out
-                          : 'bg-indigo-600 text-white' // Same indigo as Why buttons if not out
-                        : 'bg-gray-200 hover:bg-gray-300'
-                    }`}
-                  >
-                    <span className="transform -rotate-45">{base}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-        
-        {/* Why as boxes with tooltips */}
-        <div className="mb-4 mt-2">
-          <h5 className="text-xs font-medium text-gray-600 mb-1 pt-1.5">Why Base Reached</h5>
-          
           {/* Hit options (top row) with purple outline */}
-          <div className="grid grid-cols-7 gap-1 mb-1">
-            {hitOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => {
-                  // Toggle selection - if already selected, clear it
-                  if (selectedWhyBaseReached === option.value) {
-                    // Clear both pa_why and why_base_reached
-                    handleInputChange('pa_why', '');
-                    handleInputChange('why_base_reached', '');
-                  } else {
-                    // Update both pa_why and why_base_reached for consistency
-                    handleInputChange('pa_why', option.value);
-                    handleInputChange('why_base_reached', option.value);
-                    
-                    // For BB (walk), set balls_before_play to 3 (maximum allowed value)
-                    if (option.value === 'BB' && typeof editedPA.balls_before_play === 'number' && editedPA.balls_before_play < 3) {
-                      handleInputChange('balls_before_play', 3);
+          <div className="flex items-center mb-1">
+            <span className="text-sm text-gray-700 mr-2 w-16">Hit:</span>
+            <div className="grid grid-cols-7 gap-1 flex-1">
+              {hitOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => {
+                    // Toggle selection - if already selected, clear it
+                    if (selectedWhyBaseReached === option.value) {
+                      // Clear both pa_why and why_base_reached
+                      handleInputChange('pa_why', '');
+                      handleInputChange('why_base_reached', '');
+                    } else {
+                      // Update both pa_why and why_base_reached for consistency
+                      handleInputChange('pa_why', option.value);
+                      handleInputChange('why_base_reached', option.value);
+                      
+                      // For BB (walk), set balls_before_play to 3 (maximum allowed value)
+                      if (option.value === 'BB' && typeof editedPA.balls_before_play === 'number' && editedPA.balls_before_play < 3) {
+                        handleInputChange('balls_before_play', 3);
+                      }
+                      
+                      // Set appropriate bases_reached based on the option
+                      if (option.value === 'HR' || option.value === 'GS') {
+                        // Home run or grand slam - set to 4
+                        handleInputChange('bases_reached', '4');
+                        handleInputChange('pa_result', 4);
+                      } else if (option.value === 'H' || option.value === 'BB' || option.value === 'HBP') {
+                        // Hit, walk, or hit by pitch - set to 1
+                        handleInputChange('bases_reached', '1');
+                        handleInputChange('pa_result', 1);
+                      }
                     }
-                    
-                    // Set appropriate bases_reached based on the option
-                    if (option.value === 'HR' || option.value === 'GS') {
-                      // Home run or grand slam - set to 4
-                      handleInputChange('bases_reached', '4');
-                      handleInputChange('pa_result', 4);
-                    } else if (option.value === 'H' || option.value === 'B' || option.value === 'BB' || option.value === 'HBP') {
-                      // Hit, bunt, walk, or hit by pitch - set to 1
-                      handleInputChange('bases_reached', '1');
-                      handleInputChange('pa_result', 1);
-                    }
-                  }
-                }}
-                className={`py-0.75 px-1.5 text-[0.66rem] font-normal rounded ${
-                  selectedWhyBaseReached === option.value
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-purple-300'
-                }`}
-                title={option.label}
-              >
-                {option.value}
-              </button>
-            ))}
+                  }}
+                  className={`px-2 flex items-center justify-center h-[27.27px] text-sm border rounded ${
+                    selectedWhyBaseReached === option.value
+                      ? 'bg-indigo-600 text-white border-indigo-700'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-purple-300'
+                  }`}
+                  title={option.label}
+                >
+                  {option.value}
+                </button>
+              ))}
+            </div>
           </div>
           
           {/* Other options (middle row) */}
-          <div className="grid grid-cols-7 gap-1 mb-1">
-            {otherOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => {
-                  // Toggle selection - if already selected, clear it
-                  if (selectedWhyBaseReached === option.value) {
-                    // Clear both pa_why and why_base_reached
-                    handleInputChange('pa_why', '');
-                    handleInputChange('why_base_reached', '');
-                  } else {
-                    // Update both pa_why and why_base_reached for consistency
-                    handleInputChange('pa_why', option.value);
-                    handleInputChange('why_base_reached', option.value);
-                    
-                    // Set appropriate bases_reached based on the option
-                    if (option.value === 'E' || option.value === 'C') {
-                      // Error or fielder's choice - set to 1
-                      handleInputChange('bases_reached', '1');
-                      handleInputChange('pa_result', 1);
+          <div className="flex items-center mb-1">
+            <span className="text-sm text-gray-700 mr-2 w-16">On Base:</span>
+            <div className="grid grid-cols-7 gap-1 flex-1">
+              {otherOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => {
+                    // Toggle selection - if already selected, clear it
+                    if (selectedWhyBaseReached === option.value) {
+                      // Clear both pa_why and why_base_reached
+                      handleInputChange('pa_why', '');
+                      handleInputChange('why_base_reached', '');
+                    } else {
+                      // Update both pa_why and why_base_reached for consistency
+                      handleInputChange('pa_why', option.value);
+                      handleInputChange('why_base_reached', option.value);
+                      
+                      // Set appropriate bases_reached based on the option
+                      if (option.value === 'E' || option.value === 'C') {
+                        // Error or fielder's choice - set to 1
+                        handleInputChange('bases_reached', '1');
+                        handleInputChange('pa_result', 1);
+                      }
                     }
-                  }
-                }}
-                className={`py-0.75 px-1.5 text-[0.66rem] font-normal rounded ${
-                  selectedWhyBaseReached === option.value
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
-                }`}
-                title={option.label}
-              >
-                {option.value}
-              </button>
-            ))}
+                  }}
+                  className={`px-2 flex items-center justify-center h-[27.27px] text-sm border rounded ${
+                    selectedWhyBaseReached === option.value
+                      ? 'bg-indigo-600 text-white border-indigo-700'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-gray-300'
+                  }`}
+                  title={option.label}
+                >
+                  {option.value}
+                </button>
+              ))}
+            </div>
           </div>
           
           {/* Out options (bottom row) with red outline */}
-          <div className="grid grid-cols-7 gap-1 mb-1">
-            {outOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => {
-                  // Toggle selection - if already selected, clear it
-                  if (selectedWhyBaseReached === option.value) {
-                    // Clear both pa_why and why_base_reached
-                    handleInputChange('pa_why', '');
-                    handleInputChange('why_base_reached', '');
-                  } else {
-                    // Update both pa_why and why_base_reached for consistency
-                    handleInputChange('pa_why', option.value);
-                    handleInputChange('why_base_reached', option.value);
-                    
-                    // Out options always set bases_reached to 0
-                    handleInputChange('bases_reached', '0');
-                    handleInputChange('pa_result', 0);
-                    
-                    // For strikeouts (K and KK)
-                    if (option.value === 'K' || option.value === 'KK') {
-                      // Set strikes_before_play to 2
-                      handleInputChange('strikes_before_play', 2);
+          <div className="flex items-center mb-1">
+            <span className="text-sm text-gray-700 mr-2 w-16">Out:</span>
+            <div className="grid grid-cols-7 gap-1 flex-1">
+              {outOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => {
+                    // Toggle selection - if already selected, clear it
+                    if (selectedWhyBaseReached === option.value) {
+                      // Clear both pa_why and why_base_reached
+                      handleInputChange('pa_why', '');
+                      handleInputChange('why_base_reached', '');
+                    } else {
+                      // Update both pa_why and why_base_reached for consistency
+                      handleInputChange('pa_why', option.value);
+                      handleInputChange('why_base_reached', option.value);
                       
-                      // If there were no strikes registered, add them to strikes_unsure
-                      const totalStrikes = (editedPA.strikes_watching || 0) + 
-                                          (editedPA.strikes_swinging || 0) + 
-                                          (editedPA.strikes_unsure || 0);
-                                          
-                      if (totalStrikes < 2) {
-                        // Calculate how many strikes are missing
-                        const missingStrikes = 2 - totalStrikes;
-                        // Add the missing strikes to strikes_unsure
-                        handleInputChange('strikes_unsure', (editedPA.strikes_unsure || 0) + missingStrikes);
-                      }
+                      // Out options always set bases_reached to 0
+                      handleInputChange('bases_reached', '0');
+                      handleInputChange('pa_result', 0);
                       
-                      // For KK (looking), ensure at least one strike is watching
-                      if (option.value === 'KK') {
-                        // Set at least one watching strike, preserving any existing value
-                        const currentWatching = editedPA.strikes_watching || 0;
-                        if (currentWatching === 0) {
-                          // Adjust strikes distribution: convert one unsure strike to watching
-                          const currentUnsure = editedPA.strikes_unsure || 0;
-                          if (currentUnsure > 0) {
-                            handleInputChange('strikes_watching', 1);
-                            handleInputChange('strikes_unsure', currentUnsure - 1);
-                          } else {
-                            // If no unsure strikes, just add a watching strike
-                            handleInputChange('strikes_watching', 1);
+                      // For strikeouts (K and KK)
+                      if (option.value === 'K' || option.value === 'KK') {
+                        // Set strikes_before_play to 2
+                        handleInputChange('strikes_before_play', 2);
+                        
+                        // If there were no strikes registered, add them to strikes_unsure
+                        const totalStrikes = (editedPA.strikes_watching || 0) + 
+                                            (editedPA.strikes_swinging || 0) + 
+                                            (editedPA.strikes_unsure || 0);
+                                            
+                        if (totalStrikes < 2) {
+                          // Calculate how many strikes are missing
+                          const missingStrikes = 2 - totalStrikes;
+                          // Add the missing strikes to strikes_unsure
+                          handleInputChange('strikes_unsure', (editedPA.strikes_unsure || 0) + missingStrikes);
+                        }
+                        
+                        // For KK (looking), ensure at least one strike is watching
+                        if (option.value === 'KK') {
+                          // Set at least one watching strike, preserving any existing value
+                          const currentWatching = editedPA.strikes_watching || 0;
+                          if (currentWatching === 0) {
+                            // Adjust strikes distribution: convert one unsure strike to watching
+                            const currentUnsure = editedPA.strikes_unsure || 0;
+                            if (currentUnsure > 0) {
+                              handleInputChange('strikes_watching', 1);
+                              handleInputChange('strikes_unsure', currentUnsure - 1);
+                            } else {
+                              // If no unsure strikes, just add a watching strike
+                              handleInputChange('strikes_watching', 1);
+                            }
                           }
                         }
                       }
                     }
-                  }
-                }}
-                className={`py-0.75 px-1.5 text-[0.66rem] font-normal rounded ${
-                  selectedWhyBaseReached === option.value
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-red-300'
-                }`}
-                title={option.label}
-              >
-                {option.value}
-              </button>
-            ))}
+                  }}
+                  className={`px-2 flex items-center justify-center h-[27.27px] text-sm border rounded ${
+                    selectedWhyBaseReached === option.value
+                      ? 'bg-indigo-600 text-white border-indigo-700'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-red-300'
+                  }`}
+                  title={option.label}
+                >
+                  {option.value}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
         
-        {/* Second row: Hit To and Error On */}
+        {/* PA Result collapsible section (containing Hit To and Bases Reached) */}
         <div className="mb-3">
-          {/* Container for all position-based selections */}
-          <div className="mt-3 grid grid-cols-1 gap-3">
-            {/* Only show Hit To if not a strikeout, walk, or hit by pitch */}
-            {selectedWhyBaseReached !== 'K' && 
-             selectedWhyBaseReached !== 'KK' && 
-             selectedWhyBaseReached !== 'BB' && 
-             selectedWhyBaseReached !== 'HBP' && (
-              <div className="flex items-start">
-                <span className="text-xs text-gray-600 mr-2 pt-1 w-12">Hit To:</span>
-                <div className="flex flex-col gap-1">
-                  {/* Outfield row (7-9) */}
-                  <div className="flex gap-1 pl-9">
-                    {[7, 8, 9].map(pos => (
-                      <div 
-                        key={`hit-to-${pos}`}
-                        onClick={() => {
-                          // Toggle selection - if already selected, clear it
-                          if (editedPA.detailed_result === pos.toString()) {
-                            handleInputChange('detailed_result', '');
-                            handleInputChange('hit_to', '');
-                          } else {
-                            handleInputChange('detailed_result', pos.toString());
-                            // Also update hit_to as a string
-                            handleInputChange('hit_to', pos.toString());
-                          }
-                        }}
-                        className={`w-6 h-6 flex items-center justify-center cursor-pointer text-xs ${
-                          editedPA.detailed_result === pos.toString() 
-                            ? 'bg-white text-indigo-600 border border-indigo-600' 
-                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                        }`}
-                        title={`Ball hit to ${pos} - ${
-                          pos === 1 ? 'Pitcher - P' : 
-                          pos === 2 ? 'Catcher - C' : 
-                          pos === 3 ? 'First Base - 1B' : 
-                          pos === 4 ? 'Second Base - 2B' : 
-                          pos === 5 ? 'Third Base - 3B' : 
-                          pos === 6 ? 'Shortstop - SS' :
-                          pos === 7 ? 'Left Field - LF' : 
-                          pos === 8 ? 'Center Field - CF' : 
-                          'Right Field - RF'
-                        }`}
-                      >
-                        {pos}
-                      </div>
-                    ))}
-                  </div>
-                  
-                  {/* Infield row (1-6) */}
-                  <div className="flex gap-1">
-                    {[1, 2, 3, 4, 5, 6].map(pos => (
-                      <div 
-                        key={`hit-to-${pos}`}
-                        onClick={() => {
-                          // Toggle selection - if already selected, clear it
-                          if (editedPA.detailed_result === pos.toString()) {
-                            handleInputChange('detailed_result', '');
-                            handleInputChange('hit_to', '');
-                          } else {
-                            handleInputChange('detailed_result', pos.toString());
-                            // Also update hit_to as a string
-                            handleInputChange('hit_to', pos.toString());
-                          }
-                        }}
-                        className={`w-6 h-6 flex items-center justify-center cursor-pointer text-xs ${
-                          editedPA.detailed_result === pos.toString() 
-                            ? 'bg-white text-indigo-600 border border-indigo-600' 
-                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                        }`}
-                        title={`Ball hit to ${pos} - ${
-                          pos === 1 ? 'Pitcher - P' : 
-                          pos === 2 ? 'Catcher - C' : 
-                          pos === 3 ? 'First Base - 1B' : 
-                          pos === 4 ? 'Second Base - 2B' : 
-                          pos === 5 ? 'Third Base - 3B' : 
-                          pos === 6 ? 'Shortstop - SS' :
-                          pos === 7 ? 'Left Field - LF' : 
-                          pos === 8 ? 'Center Field - CF' : 
-                          'Right Field - RF'
-                        }`}
-                      >
-                        {pos}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            {/* Error On - Only show if Error is selected */}
-            {selectedWhyBaseReached === 'E' && (
-              <div className="flex items-start">
-                <span className="text-xs text-gray-600 mr-2 pt-1">PA Error:</span>
-                <div className="flex flex-col gap-1">
-                  {/* Outfield row (7-9) */}
-                  <div className="flex gap-1 pl-9">
-                    {[7, 8, 9].map(pos => (
-                      <div 
-                        key={`error-on-${pos}`}
-                        onClick={() => {
-                          try {
-                            // Safely get arrays
-                            const paErrorOn = safeArray(editedPA.pa_error_on, 'pa_error_on');
-                            const isSelected = safeIncludes(paErrorOn, pos);
-                            
-                            // Toggle selection
-                            let newPaErrorOn = [...paErrorOn];
-                            if (isSelected) {
-                              // If already selected, remove it
-                              newPaErrorOn = newPaErrorOn.filter(p => p !== pos);
-                            } else {
-                              // If not selected, add it
-                              newPaErrorOn.push(pos);
-                            }
-                            // Update pa_error_on field
-                            handleInputChange('pa_error_on', newPaErrorOn);
-                          } catch (error) {
-                            // Removed console.error
-                          }
-                        }}
-                        className={`w-6 h-6 flex items-center justify-center cursor-pointer text-xs ${
-                          isErrorOnPosition(editedPA.pa_error_on, pos)
-                            ? 'bg-white text-red-500 border border-red-500' 
-                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                        }`}
-                        title={`Error by ${pos} - ${
-                          pos === 1 ? 'Pitcher - P' : 
-                          pos === 2 ? 'Catcher - C' : 
-                          pos === 3 ? 'First Base - 1B' : 
-                          pos === 4 ? 'Second Base - 2B' : 
-                          pos === 5 ? 'Third Base - 3B' : 
-                          pos === 6 ? 'Shortstop - SS' :
-                          pos === 7 ? 'Left Field - LF' : 
-                          pos === 8 ? 'Center Field - CF' : 
-                          'Right Field - RF'
-                        }`}
-                      >
-                        {pos}
-                      </div>
-                    ))}
-                  </div>
-                  
-                  {/* Infield row (1-6) */}
-                  <div className="flex gap-1">
-                    {[1, 2, 3, 4, 5, 6].map(pos => (
-                      <div 
-                        key={`error-on-${pos}`}
-                        onClick={() => {
-                          try {
-                            // Safely get arrays
-                            const paErrorOn = safeArray(editedPA.pa_error_on, 'pa_error_on');
-                            const isSelected = safeIncludes(paErrorOn, pos);
-                            
-                            // Toggle selection
-                            let newPaErrorOn = [...paErrorOn];
-                            if (isSelected) {
-                              // If already selected, remove it
-                              newPaErrorOn = newPaErrorOn.filter(p => p !== pos);
-                            } else {
-                              // If not selected, add it
-                              newPaErrorOn.push(pos);
-                            }
-                            // Update pa_error_on field
-                            handleInputChange('pa_error_on', newPaErrorOn);
-                          } catch (error) {
-                            // Removed console.error
-                          }
-                        }}
-                        className={`w-6 h-6 flex items-center justify-center cursor-pointer text-xs ${
-                          isErrorOnPosition(editedPA.pa_error_on, pos)
-                            ? 'bg-white text-red-500 border border-red-500' 
-                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                        }`}
-                        title={`Error by ${pos} - ${
-                          pos === 1 ? 'Pitcher - P' : 
-                          pos === 2 ? 'Catcher - C' : 
-                          pos === 3 ? 'First Base - 1B' : 
-                          pos === 4 ? 'Second Base - 2B' : 
-                          pos === 5 ? 'Third Base - 3B' : 
-                          pos === 6 ? 'Shortstop - SS' :
-                          pos === 7 ? 'Left Field - LF' : 
-                          pos === 8 ? 'Center Field - CF' : 
-                          'Right Field - RF'
-                        }`}
-                      >
-                        {pos}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            {/* Base Running Section */}
-            <div className="mb-3">
-              <h5 className="text-xs font-medium text-gray-600 mb-1 pt-2">Base Running</h5>
-              
-              <div className="grid grid-cols-1 gap-2">
-                {/* Stolen Bases */}
-                <div className="flex items-start">
-                  <span className="text-xs text-gray-600 mr-2 pt-1 w-12">Stole:</span>
-                  <div className="flex space-x-1">
-                    {[2, 3, 4].map(base => {
-                      try {
-                        // Safely get arrays
-                        const stolenBases = safeArray(editedPA.stolen_bases, 'stolen_bases');
-                        const isSelected = safeIncludes(stolenBases, base);
-                        
-                        return (
+          <CollapsibleHeader 
+            title="PA Result" 
+            isOpen={paResultOpen} 
+            onToggle={() => setPaResultOpen(!paResultOpen)} 
+          />
+          
+          {paResultOpen && (
+            <div className="mt-2 space-y-3">
+              {/* Hit To Section (Only shows when relevant based on PA Why selection) */}
+              {hitToOpen && (
+                <div>
+                  <div className="flex items-start">
+                    <span className="text-sm text-gray-700 mr-2 w-16">Hit To:</span>
+                    <div className="flex flex-col gap-1">
+                      {/* Outfield row (7-9) */}
+                      <div className="flex gap-1 pl-9">
+                        {[7, 8, 9].map(pos => (
                           <div 
-                            key={`stolen-base-${base}`}
+                            key={`hit-to-${pos}`}
                             onClick={() => {
-                              try {
-                                // Safely get arrays
-                                const stolenBases = safeArray(editedPA.stolen_bases, 'stolen_bases');
-                                const isSelected = safeIncludes(stolenBases, base);
-                                
-                                // Toggle selection
-                                let newStolenBases = [...stolenBases];
-                                if (isSelected) {
-                                  // If already selected, remove it
-                                  newStolenBases = newStolenBases.filter(b => b !== base);
-                                } else {
-                                  // If not selected, add it
-                                  newStolenBases.push(base);
-                                }
-                                handleInputChange('stolen_bases', newStolenBases);
-                              } catch (error) {
-                                // Removed console.error
+                              // Toggle selection - if already selected, clear it
+                              if (editedPA.detailed_result === pos.toString()) {
+                                handleInputChange('detailed_result', '');
+                                handleInputChange('hit_to', '');
+                              } else {
+                                handleInputChange('detailed_result', pos.toString());
+                                // Also update hit_to as a string
+                                handleInputChange('hit_to', pos.toString());
                               }
                             }}
-                            className={`w-6 h-6 flex items-center justify-center cursor-pointer text-xs ${
-                              isSelected
-                                ? 'bg-white text-indigo-600 border border-indigo-600'
+                            className={`w-[27.27px] h-[27.27px] flex items-center justify-center cursor-pointer text-xs ${
+                              editedPA.detailed_result === pos.toString() 
+                                ? 'bg-white text-indigo-600 border border-indigo-600' 
                                 : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                             }`}
-                            title={`Stole ${base === 2 ? 'Second' : base === 3 ? 'Third' : 'Home'}`}
+                            title={`Ball hit to ${pos}`}
                           >
-                            {base}
+                            {pos}
                           </div>
-                        );
-                      } catch (error) {
-                        // Removed console.error
-                        return null;
-                      }
-                    })}
-                  </div>
-                </div>
-                
-                {/* Hit Around */}
-                <div className="flex items-start">
-                  <span className="text-xs text-gray-600 mr-2 pt-1 w-12">Hit:</span>
-                  <div className="flex space-x-1">
-                    {[2, 3, 4].map(base => {
-                      try {
-                        // Safely get arrays
-                        const hitAround = safeArray(editedPA.hit_around_bases, 'hit_around_bases');
-                        const stolenBases = safeArray(editedPA.stolen_bases, 'stolen_bases');
-                        const isSelected = safeIncludes(hitAround, base);
-                        const isStolen = safeIncludes(stolenBases, base);
-                        
-                        return (
+                        ))}
+                      </div>
+                      
+                      {/* Infield row (1-6) */}
+                      <div className="flex gap-1">
+                        {[1, 2, 3, 4, 5, 6].map(pos => (
                           <div 
-                            key={`hit-around-${base}`}
+                            key={`hit-to-${pos}`}
                             onClick={() => {
-                              if (!isStolen) {
-                                handleHitAroundToggle(base);
+                              // Toggle selection - if already selected, clear it
+                              if (editedPA.detailed_result === pos.toString()) {
+                                handleInputChange('detailed_result', '');
+                                handleInputChange('hit_to', '');
+                              } else {
+                                handleInputChange('detailed_result', pos.toString());
+                                // Also update hit_to as a string
+                                handleInputChange('hit_to', pos.toString());
                               }
                             }}
-                            className={`w-6 h-6 flex items-center justify-center cursor-pointer text-xs ${
-                              isSelected
-                                ? 'bg-white text-indigo-600 border border-indigo-600'
-                                : isStolen
-                                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                            className={`w-[27.27px] h-[27.27px] flex items-center justify-center cursor-pointer text-xs ${
+                              editedPA.detailed_result === pos.toString() 
+                                ? 'bg-white text-indigo-600 border border-indigo-600' 
+                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                             }`}
-                            title={`Hit Around to ${base === 2 ? 'Second' : base === 3 ? 'Third' : 'Home'}`}
+                            title={`Ball hit to ${pos}`}
                           >
-                            {base}
+                            {pos}
                           </div>
-                        );
-                      } catch (error) {
-                        // Removed console.error
-                        return null;
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Bases Reached with circles replacing diamonds */}
+              <div>
+                <div className="flex items-start">
+                  <span className="text-sm text-gray-700 mr-2 w-16">Bases:</span>
+                  <div className="flex space-x-1">
+                    {[0, 1, 2, 3, 4].map(base => {
+                      // Determine if player was out (out_at has a value)
+                      const isPlayerOut = editedPA.out_at && editedPA.out_at > 0;
+                      const isSelected = (typeof editedPA.pa_result === 'number' && editedPA.pa_result === base) || 
+                            (typeof editedPA.pa_result === 'string' && editedPA.pa_result === base.toString()) ||
+                            editedPA.bases_reached === base.toString();
+                      
+                      // Base 0 represents an out, use red styling
+                      const isOut = base === 0;
+                      
+                      // Determine color based on status
+                      let buttonStyle = '';
+                      if (isSelected) {
+                        if (isOut) {
+                          // Out selected - red fill
+                          buttonStyle = 'bg-red-500 text-white';
+                        } else {
+                          // Bases 1-4 selected - indigo fill
+                          buttonStyle = 'bg-indigo-600 text-white';
+                        }
+                      } else {
+                        // Not selected
+                        buttonStyle = 'bg-gray-200 text-gray-700 hover:bg-gray-300';
                       }
+                      
+                      return (
+                        <div 
+                          key={`base-${base}`}
+                          onClick={() => {
+                            // Update both pa_result and bases_reached
+                            handleInputChange('pa_result', base);
+                            handleInputChange('bases_reached', base.toString());
+                          }}
+                          className={`w-[27.27px] h-[27.27px] rounded-full flex items-center justify-center text-xs cursor-pointer ${buttonStyle}`}
+                        >
+                          {base}
+                        </div>
+                      );
                     })}
                   </div>
                 </div>
-                
-                {/* Base Running Errors */}
+              </div>
+            </div>
+          )}
+        </div>
+        
+        {/* Final Base section - Collapsible, only shown if Bases Reached > 0 */}
+        {basesReached > 0 && (
+          <div className="mb-3">
+            <CollapsibleHeader 
+              title="Final Base" 
+              isOpen={finalBaseOpen} 
+              onToggle={() => setFinalBaseOpen(!finalBaseOpen)} 
+            />
+            
+            {finalBaseOpen && (
+              <div className="mt-2 space-y-3">
                 <div className="flex items-start">
-                  <span className="text-xs text-gray-600 mr-2 pt-1 w-12">BR Error:</span>
+                  <span className="text-sm text-gray-700 mr-2 w-16">Base:</span>
+                  <div className="flex space-x-1">
+                    {[0, 1, 2, 3, 4].map(base => {
+                      // Determine color based on current value
+                      let bgColor = editedPA.final_base === base ? 'bg-indigo-600' : 'bg-gray-200';
+                      let textColor = editedPA.final_base === base ? 'text-white' : 'text-gray-700';
+                      
+                      return (
+                        <button
+                          key={`final-base-${base}`}
+                          type="button"
+                          onClick={() => handleInputChange('final_base', base)}
+                          className={`w-[27.27px] h-[27.27px] rounded-full flex items-center justify-center text-xs ${bgColor} ${textColor} hover:bg-opacity-90`}
+                          title={`Final Base ${base}`}
+                        >
+                          {base}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Collapsible Base Running Section */}
+        <div className="mb-3">
+          <CollapsibleHeader 
+            title="Base Running" 
+            isOpen={baseRunningOpen} 
+            onToggle={() => setBaseRunningOpen(!baseRunningOpen)} 
+          />
+          
+          {baseRunningOpen && (
+            <div className="grid grid-cols-1 gap-2 mt-2">
+              {/* Stolen Bases */}
+              <div className="flex items-start">
+                <span className="text-sm text-gray-700 mr-2 w-12">Stole:</span>
+                <div className="flex space-x-1">
+                  {[2, 3, 4].map(base => {
+                    try {
+                      // Safely get arrays
+                      const stolenBases = safeArray(editedPA.stolen_bases, 'stolen_bases');
+                      const isSelected = safeIncludes(stolenBases, base);
+                      
+                      // Check if the base should be disabled based on pa_result
+                      const isDisabled = editedPA.pa_result === 2 && base === 2;
+                      
+                      return (
+                        <div 
+                          key={`stolen-base-${base}`}
+                          onClick={() => {
+                            try {
+                              // Safely get arrays
+                              const stolenBases = safeArray(editedPA.stolen_bases, 'stolen_bases');
+                              const isSelected = safeIncludes(stolenBases, base);
+                              
+                              // Check if the base should be disabled based on pa_result
+                              if (editedPA.pa_result === 2 && base === 2) {
+                                return; // Don't allow toggling if pa_result is 2 and base is 2
+                              }
+                              
+                              // Toggle selection
+                              let newStolenBases = [...stolenBases];
+                              if (isSelected) {
+                                // If already selected, remove it
+                                newStolenBases = newStolenBases.filter(b => b !== base);
+                              } else {
+                                // If not selected, add it
+                                newStolenBases.push(base);
+                              }
+                              // Update both stolen_bases and br_stolen_bases for consistency
+                              handleInputChange('stolen_bases', newStolenBases);
+                              handleInputChange('br_stolen_bases', newStolenBases);
+                            } catch (error) {
+                              // Error handling
+                            }
+                          }}
+                          className={`w-[27.27px] h-[27.27px] rounded-full flex items-center justify-center cursor-pointer text-xs ${
+                            isSelected 
+                              ? 'bg-indigo-600 text-white' 
+                              : isDisabled
+                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          }`}
+                          title={`Stole ${base === 2 ? 'Second' : base === 3 ? 'Third' : 'Home'}`}
+                        >
+                          {base}
+                        </div>
+                      );
+                    } catch (error) {
+                      return null;
+                    }
+                  })}
+                </div>
+              </div>
+              
+              {/* Hit Around */}
+              <div className="flex items-start">
+                <span className="text-sm text-gray-700 mr-2 w-12">Hit:</span>
+                <div className="flex space-x-1">
+                  {[2, 3, 4].map(base => {
+                    try {
+                      // Safely get arrays
+                      const hitAround = safeArray(editedPA.hit_around_bases, 'hit_around_bases');
+                      const stolenBases = safeArray(editedPA.stolen_bases, 'stolen_bases');
+                      const isSelected = safeIncludes(hitAround, base);
+                      const isStolen = safeIncludes(stolenBases, base);
+                      
+                      // Check if the base should be disabled based on pa_result
+                      const isDisabled = editedPA.pa_result === 2 && base === 2;
+                      
+                      return (
+                        <div 
+                          key={`hit-around-${base}`}
+                          onClick={() => {
+                            if (!isStolen) {
+                              // Handle hit around toggle
+                              try {
+                                // Safely get arrays
+                                const hitAround = safeArray(editedPA.hit_around_bases, 'hit_around_bases');
+                                const stolenBases = safeArray(editedPA.stolen_bases, 'stolen_bases');
+                                const baseRunningHitAround = safeArray(editedPA.base_running_hit_around, 'base_running_hit_around');
+                                
+                                // Check if this base is already selected in stolen bases
+                                if (safeIncludes(stolenBases, base)) {
+                                  return; // Don't allow toggling if already stolen
+                                }
+                                
+                                // Check if the base should be disabled based on pa_result
+                                if (editedPA.pa_result === 2 && base === 2) {
+                                  return; // Don't allow toggling if pa_result is 2 and base is 2
+                                }
+                                
+                                // Toggle selection
+                                let newHitAround = [...hitAround];
+                                if (safeIncludes(hitAround, base)) {
+                                  // If already selected, remove it
+                                  newHitAround = newHitAround.filter(b => b !== base);
+                                } else {
+                                  // If not selected, add it
+                                  newHitAround.push(base);
+                                }
+                                
+                                // Update both hit_around_bases and base_running_hit_around for consistency
+                                handleInputChange('hit_around_bases', newHitAround);
+                                handleInputChange('base_running_hit_around', newHitAround);
+                                
+                                // Update Final Base if this is now the maximum base
+                                const maxBase = newHitAround.length > 0 ? Math.max(...newHitAround) : 0;
+                                const maxStolenBase = stolenBases.length > 0 ? Math.max(...stolenBases) : 0;
+                                const currentBrResult = editedPA.br_result !== undefined ? Number(editedPA.br_result) : basesReached;
+                                
+                                if (maxBase > currentBrResult && maxBase > maxStolenBase) {
+                                  handleInputChange('br_result', maxBase);
+                                }
+                              } catch (error) {
+                                // Error handling
+                              }
+                            }
+                          }}
+                          className={`w-[27.27px] h-[27.27px] rounded-full flex items-center justify-center cursor-pointer text-xs ${
+                            isSelected
+                              ? 'bg-indigo-600 text-white'
+                              : isStolen
+                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                : isDisabled
+                                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          }`}
+                          title={`Hit Around to ${base === 2 ? 'Second' : base === 3 ? 'Third' : 'Home'}`}
+                        >
+                          {base}
+                        </div>
+                      );
+                    } catch (error) {
+                      // Error handling
+                      return null;
+                    }
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+        
+        {/* Out At Collapsible Section */}
+        <div className="mb-3">
+          <CollapsibleHeader 
+            title="Out At" 
+            isOpen={outAtOpen} 
+            onToggle={() => setOutAtOpen(!outAtOpen)} 
+          />
+          
+          {outAtOpen && (
+            <div className="mt-2 space-y-3">
+              <div className="flex items-start">
+                <span className="text-sm text-gray-700 mr-2 w-16">Base:</span>
+                <div className="flex space-x-1">
+                  {[1, 2, 3, 4].map(base => (
+                    <button
+                      key={`out-at-${base}`}
+                      type="button"
+                      onClick={() => handleInputChange('out_at', base)}
+                      className={`w-[27.27px] h-[27.27px] rounded-full flex items-center justify-center text-xs ${
+                        editedPA.out_at === base
+                          ? 'bg-white text-red-600 border border-red-500'
+                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      }`}
+                      title={`Out at base ${base}`}
+                    >
+                      {base}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+        
+        {/* Errors Collapsible Section */}
+        <div className="mb-3">
+          <CollapsibleHeader 
+            title="Errors" 
+            isOpen={errorsOpen} 
+            onToggle={() => setErrorsOpen(!errorsOpen)} 
+          />
+          
+          {errorsOpen && (
+            <div className="mt-2 space-y-3">
+              {/* PA Error Section */}
+              <div>
+                <div className="flex items-start">
+                  <span className="text-sm text-gray-700 mr-2 w-16">PA Error:</span>
                   <div className="flex flex-col gap-1">
                     {/* Outfield row (7-9) */}
                     <div className="flex gap-1 pl-9">
                       {[7, 8, 9].map(pos => (
-                        <div 
-                          key={`br-error-on-${pos}`}
-                          onClick={() => {
-                            try {
-                              // Safely get arrays
-                              const brErrorOn = safeArray(editedPA.br_error_on, 'br_error_on');
-                              const isSelected = safeIncludes(brErrorOn, pos);
-                              
-                              // Toggle selection
-                              let newBrErrorOn = [...brErrorOn];
-                              if (isSelected) {
-                                // If already selected, remove it
-                                newBrErrorOn = newBrErrorOn.filter(p => p !== pos);
-                              } else {
-                                // If not selected, add it
-                                newBrErrorOn.push(pos);
-                              }
-                              // Update ONLY br_error_on, not pa_error_on
-                              handleInputChange('br_error_on', newBrErrorOn);
-                            } catch (error) {
-                              // Removed console.error
-                            }
-                          }}
-                          className={`w-6 h-6 flex items-center justify-center cursor-pointer text-xs ${
-                            isErrorOnPosition(editedPA.br_error_on, pos)
-                              ? 'bg-white text-red-500 border border-red-500'
+                        <button 
+                          key={`pa-error-${pos}`}
+                          type="button"
+                          onClick={() => handleInputChange('pa_error', pos.toString())}
+                          className={`w-[27.27px] h-[27.27px] flex items-center justify-center text-xs ${
+                            editedPA.pa_error === pos.toString() 
+                              ? 'bg-white text-indigo-600 border border-indigo-600' 
                               : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                           }`}
-                          title={`Base Running Error by ${pos} - ${
-                            pos === 1 ? 'Pitcher - P' : 
-                            pos === 2 ? 'Catcher - C' : 
-                            pos === 3 ? 'First Base - 1B' : 
-                            pos === 4 ? 'Second Base - 2B' : 
-                            pos === 5 ? 'Third Base - 3B' : 
-                            pos === 6 ? 'Shortstop - SS' :
-                            pos === 7 ? 'Left Field - LF' : 
-                            pos === 8 ? 'Center Field - CF' : 
-                            'Right Field - RF'
-                          }`}
+                          title={`Error by ${pos}`}
                         >
                           {pos}
-                        </div>
+                        </button>
                       ))}
                     </div>
                     
                     {/* Infield row (1-6) */}
                     <div className="flex gap-1">
                       {[1, 2, 3, 4, 5, 6].map(pos => (
-                        <div 
-                          key={`br-error-on-${pos}`}
-                          onClick={() => {
-                            try {
-                              // Safely get arrays
-                              const brErrorOn = safeArray(editedPA.br_error_on, 'br_error_on');
-                              const isSelected = safeIncludes(brErrorOn, pos);
-                              
-                              // Toggle selection
-                              let newBrErrorOn = [...brErrorOn];
-                              if (isSelected) {
-                                // If already selected, remove it
-                                newBrErrorOn = newBrErrorOn.filter(p => p !== pos);
-                              } else {
-                                // If not selected, add it
-                                newBrErrorOn.push(pos);
-                              }
-                              // Update ONLY br_error_on, not pa_error_on
-                              handleInputChange('br_error_on', newBrErrorOn);
-                            } catch (error) {
-                              // Removed console.error
-                            }
-                          }}
-                          className={`w-6 h-6 flex items-center justify-center cursor-pointer text-xs ${
-                            isErrorOnPosition(editedPA.br_error_on, pos)
-                              ? 'bg-white text-red-500 border border-red-500'
+                        <button 
+                          key={`pa-error-${pos}`}
+                          type="button"
+                          onClick={() => handleInputChange('pa_error', pos.toString())}
+                          className={`w-[27.27px] h-[27.27px] flex items-center justify-center text-xs ${
+                            editedPA.pa_error === pos.toString() 
+                              ? 'bg-white text-indigo-600 border border-indigo-600' 
                               : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                           }`}
-                          title={`Base Running Error by ${pos} - ${
-                            pos === 1 ? 'Pitcher - P' : 
-                            pos === 2 ? 'Catcher - C' : 
-                            pos === 3 ? 'First Base - 1B' : 
-                            pos === 4 ? 'Second Base - 2B' : 
-                            pos === 5 ? 'Third Base - 3B' : 
-                            pos === 6 ? 'Shortstop - SS' :
-                            pos === 7 ? 'Left Field - LF' : 
-                            pos === 8 ? 'Center Field - CF' : 
-                            'Right Field - RF'
-                          }`}
+                          title={`Error by ${pos}`}
                         >
                           {pos}
-                        </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Base Running Error Section */}
+              <div>
+                <div className="flex items-start">
+                  <span className="text-sm text-gray-700 mr-2 w-16">BR Error:</span>
+                  <div className="flex flex-col gap-1">
+                    {/* Outfield row (7-9) */}
+                    <div className="flex gap-1 pl-9">
+                      {[7, 8, 9].map(pos => (
+                        <button 
+                          key={`br-error-${pos}`}
+                          type="button"
+                          onClick={() => {
+                            // Manage the array of base running errors
+                            const current = [...(editedPA.br_error_on || [])];
+                            
+                            // Find the index of the position in the array
+                            const posIndex = parseInt(pos.toString()) - 1;
+                            
+                            // Toggle the value at that index (true/false)
+                            // If array is too short, extend it with undefined values
+                            while (current.length <= posIndex) {
+                              current.push(0);
+                            }
+                            
+                            // Toggle the value (0 for false, 1 for true)
+                            current[posIndex] = current[posIndex] ? 0 : 1;
+                            
+                            handleInputChange('br_error_on', current);
+                          }}
+                          className={`w-[27.27px] h-[27.27px] flex items-center justify-center cursor-pointer text-xs ${
+                            editedPA.br_error_on && 
+                            editedPA.br_error_on.length > pos-1 && 
+                            editedPA.br_error_on[pos-1] 
+                              ? 'bg-white text-indigo-600 border border-indigo-600' 
+                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          }`}
+                          title={`Base Running Error by ${pos}`}
+                        >
+                          {pos}
+                        </button>
+                      ))}
+                    </div>
+                    
+                    {/* Infield row (1-6) */}
+                    <div className="flex gap-1">
+                      {[1, 2, 3, 4, 5, 6].map(pos => (
+                        <button 
+                          key={`br-error-${pos}`}
+                          type="button"
+                          onClick={() => {
+                            // Manage the array of base running errors
+                            const current = [...(editedPA.br_error_on || [])];
+                            
+                            // Find the index of the position in the array
+                            const posIndex = parseInt(pos.toString()) - 1;
+                            
+                            // Toggle the value at that index (true/false)
+                            // If array is too short, extend it with undefined values
+                            while (current.length <= posIndex) {
+                              current.push(0);
+                            }
+                            
+                            // Toggle the value (0 for false, 1 for true)
+                            current[posIndex] = current[posIndex] ? 0 : 1;
+                            
+                            handleInputChange('br_error_on', current);
+                          }}
+                          className={`w-[27.27px] h-[27.27px] flex items-center justify-center text-xs ${
+                            editedPA.br_error_on && 
+                            editedPA.br_error_on.length > pos-1 && 
+                            editedPA.br_error_on[pos-1] 
+                              ? 'bg-white text-indigo-600 border border-indigo-600' 
+                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          }`}
+                          title={`Base Running Error by ${pos}`}
+                        >
+                          {pos}
+                        </button>
                       ))}
                     </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-        
-        {/* Out At row - Always show */}
-        <div className="mb-3">
-          <div className="flex items-center">
-            <span className="text-sm font-bold text-gray-700 mr-3">Out At</span>
-            <div className="flex space-x-2">
-              {[1, 2, 3, 4].map(base => (
-                <div 
-                  key={`out-at-${base}`}
-                  onClick={() => {
-                    // Toggle out_at
-                    if (editedPA.out_at === base) {
-                      // If clicking the same base again, clear the out_at
-                      handleInputChange('out_at', 0);
-                      // Don't automatically change br_result when clearing
-                    } else {
-                      // Set out_at to the clicked base
-                      handleInputChange('out_at', base);
-                      // Also set br_result to the same base when marking a player out
-                      handleInputChange('br_result', base);
-                    }
-                  }}
-                  className={`transform rotate-45 w-6 h-6 flex items-center justify-center cursor-pointer ${
-                    editedPA.out_at === base
-                      ? 'bg-red-500 text-white'
-                      : 'bg-gray-200 hover:bg-gray-300'
-                  }`}
-                >
-                  <span className="transform -rotate-45">{base}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-        
-        {/* Final Base row - Always show */}
-        <div className="mb-3">
-          <div className="flex items-center">
-            <span className="text-sm font-bold text-gray-700 mr-3">Final Base</span>
-            <div className="flex space-x-2">
-              {[0, 1, 2, 3, 4].map(base => {
-                // Determine if player was out (out_at has a value)
-                const isPlayerOut = editedPA.out_at && editedPA.out_at > 0;
-                
-                return (
-                  <div 
-                    key={`final-base-${base}`}
-                    onClick={() => handleInputChange('br_result', base)}
-                    className={`transform rotate-45 w-6 h-6 flex items-center justify-center cursor-pointer ${
-                      editedPA.br_result === base
-                        ? isPlayerOut 
-                          ? 'bg-red-500 text-white' // Red if out
-                          : 'bg-indigo-600 text-white' // Same indigo as Why buttons if not out
-                        : 'bg-gray-200 hover:bg-gray-300'
-                    }`}
-                  >
-                    <span className="transform -rotate-45">{base}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

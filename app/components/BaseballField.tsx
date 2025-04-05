@@ -786,12 +786,12 @@ const BaseballField = ({
           if (pa.slap === 1) {
             indicator = 'SLAP';
             indicatorColor = 'border-purple-600';
+          } else if (pa.bunt === 1) {
+            indicator = 'BUNT';
+            indicatorColor = 'border-purple-600';
           } else if (pa.late_swings !== undefined && pa.late_swings > 1) {
             indicator = 'LATE';
             indicatorColor = 'border-red-600';
-          } else if (pa.pa_why === 'B') {
-            indicator = 'BUNT';
-            indicatorColor = 'border-purple-600';
           }
           
           if (indicator) {

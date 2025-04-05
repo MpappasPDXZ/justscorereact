@@ -59,6 +59,7 @@ export interface ScoreBookEntry {
   qab?: number;
   hard_hit?: number;
   slap?: number;              // 1 if slap hit
+  bunt?: number;              // 1 if bunt hit
   sac?: number;
   rbi?: number;
   late_swings?: number;       // Number of late swings

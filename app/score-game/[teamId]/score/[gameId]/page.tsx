@@ -109,6 +109,7 @@ interface ScoreBookEntry {
   hard_hit?: number;          // Add hard_hit field
   slap?: number;              // Add slap field
   sac?: number;               // Add sac (sacrifice) field
+  bunt?: number;              // Add bunt field
 }
 
 interface InningDetail {
@@ -526,6 +527,7 @@ export default function ScoreGame() {
                   // Add explicit parsing for slap and sac fields
                   slap: parseInt(details.slap?.toString() || '0'),
                   sac: parseInt(details.sac?.toString() || '0'),
+                  bunt: parseInt(details.bunt?.toString() || '0'),
                   
                   // Error information - pass as a string or first element of array for ScoreCardGrid compatibility
                   error_on: details.pa_error_on?.length ? details.pa_error_on[0].toString() : undefined,
@@ -539,10 +541,10 @@ export default function ScoreGame() {
                   
                   // Store array fields for PlateAppearanceModal
                   // These fields aren't expected by ScoreCardGrid but are needed by PlateAppearanceModal
-                  base_running_hit_around: details.base_running_hit_around || [],
-                  br_stolen_bases: details.br_stolen_bases || [],
-                  pa_error_on: details.pa_error_on || [],
-                  br_error_on: details.br_error_on || [],
+                  base_running_hit_around: Array.isArray(details.base_running_hit_around) ? details.base_running_hit_around : [],
+                  br_stolen_bases: Array.isArray(details.br_stolen_bases) ? details.br_stolen_bases : [],
+                  pa_error_on: Array.isArray(details.pa_error_on) ? details.pa_error_on : [],
+                  br_error_on: Array.isArray(details.br_error_on) ? details.br_error_on : [],
                 };
                 
                 transformedEntries.push(entry);
@@ -817,6 +819,18 @@ export default function ScoreGame() {
               // The sequence ID is calculated as: (round - 1) * lineupSize + order_number
               const newSeqId = (round - 1) * lineupSize + orderNumber;
               
+              // Get player information from lineup entries
+              let playerJerseyNumber = '';
+              let playerName = '';
+              
+              if (inningDetail?.lineup_entries) {
+                const playerInfo = inningDetail.lineup_entries.find(entry => entry.order_number === orderNumber);
+                if (playerInfo) {
+                  playerJerseyNumber = playerInfo.jersey_number;
+                  playerName = playerInfo.name;
+                }
+              }
+              
               // Create a new PA with the required fields
               const newPA: ScoreBookEntry = {
                 inning_number: parseInt(selectedInning),
@@ -827,8 +841,8 @@ export default function ScoreGame() {
                 round: round,
                 team_id: teamId,
                 game_id: gameId,
-                batter_jersey_number: '',
-                batter_name: '',
+                batter_jersey_number: playerJerseyNumber,
+                batter_name: playerName,
                 bases_reached: '',
                 why_base_reached: '',
                 pa_result: '',
@@ -842,7 +856,7 @@ export default function ScoreGame() {
                 strikes_unsure: 0,
                 fouls_after_two_strikes: 0,
                 base_running_stolen_base: 0,
-                pitch_count: 0, // Add this required field
+                pitch_count: 0,
                 // Initialize array fields
                 base_running_hit_around: [],
                 br_stolen_bases: [],
@@ -851,7 +865,8 @@ export default function ScoreGame() {
                 fouls: 0,
                 ball_swinging: 0,
                 slap: 0,
-                sac: 0
+                sac: 0,
+                bunt: 0
               } as ScoreBookEntry;
               
               setSelectedPA(newPA);
@@ -1015,13 +1030,14 @@ export default function ScoreGame() {
                       hard_hit: parseInt(details.hard_hit?.toString() || '0'),
                       slap: parseInt(details.slap?.toString() || '0'),
                       sac: parseInt(details.sac?.toString() || '0'),
+                      bunt: parseInt(details.bunt?.toString() || '0'),
                       error_on: details.pa_error_on?.length ? details.pa_error_on[0].toString() : undefined,
                       round: details.pa_round ? parseInt(details.pa_round.toString()) : 1,
                       br_result: details.br_result !== undefined ? parseInt(details.br_result.toString()) : undefined,
-                      base_running_hit_around: details.base_running_hit_around || [],
-                      br_stolen_bases: details.br_stolen_bases || [],
-                      pa_error_on: details.pa_error_on || [],
-                      br_error_on: details.br_error_on || []
+                      base_running_hit_around: Array.isArray(details.base_running_hit_around) ? details.base_running_hit_around : [],
+                      br_stolen_bases: Array.isArray(details.br_stolen_bases) ? details.br_stolen_bases : [],
+                      pa_error_on: Array.isArray(details.pa_error_on) ? details.pa_error_on : [],
+                      br_error_on: Array.isArray(details.br_error_on) ? details.br_error_on : []
                     };
                     transformedEntries.push(entry);
                   }
@@ -1120,6 +1136,7 @@ export default function ScoreGame() {
         hard_hit: Number(updatedPA.hard_hit || 0),
         slap: Number(updatedPA.slap || 0),
         sac: Number(updatedPA.sac || 0),
+        bunt: Number(updatedPA.bunt || 0),
         base_running_hit_around: Array.isArray(updatedPA.base_running_hit_around) ? updatedPA.base_running_hit_around : [],
         br_stolen_bases: Array.isArray(updatedPA.br_stolen_bases) ? updatedPA.br_stolen_bases : [],
         pa_error_on: Array.isArray(updatedPA.pa_error_on) ? updatedPA.pa_error_on : [],
@@ -1243,13 +1260,14 @@ export default function ScoreGame() {
                       hard_hit: parseInt(details.hard_hit?.toString() || '0'),
                       slap: parseInt(details.slap?.toString() || '0'),
                       sac: parseInt(details.sac?.toString() || '0'),
+                      bunt: parseInt(details.bunt?.toString() || '0'),
                       error_on: details.pa_error_on?.length ? details.pa_error_on[0].toString() : undefined,
                       round: details.pa_round ? parseInt(details.pa_round.toString()) : 1,
                       br_result: details.br_result !== undefined ? parseInt(details.br_result.toString()) : undefined,
-                      base_running_hit_around: details.base_running_hit_around || [],
-                      br_stolen_bases: details.br_stolen_bases || [],
-                      pa_error_on: details.pa_error_on || [],
-                      br_error_on: details.br_error_on || []
+                      base_running_hit_around: Array.isArray(details.base_running_hit_around) ? details.base_running_hit_around : [],
+                      br_stolen_bases: Array.isArray(details.br_stolen_bases) ? details.br_stolen_bases : [],
+                      pa_error_on: Array.isArray(details.pa_error_on) ? details.pa_error_on : [],
+                      br_error_on: Array.isArray(details.br_error_on) ? details.br_error_on : []
                     };
                     transformedEntries.push(entry);
                   }
@@ -1392,6 +1410,7 @@ export default function ScoreGame() {
         hard_hit: pa.hard_hit !== undefined ? parseInt(pa.hard_hit.toString()) : 0,
         slap: pa.slap !== undefined ? parseInt(pa.slap.toString()) : 0,
         sac: pa.sac !== undefined ? parseInt(pa.sac.toString()) : 0,
+        bunt: pa.bunt !== undefined ? parseInt(pa.bunt.toString()) : 0,
         
         // CRITICAL: Ensure round is set from the correct source
         // If pa.round exists use it, otherwise check pa.pa_round, default to 1
@@ -1454,6 +1473,7 @@ export default function ScoreGame() {
         ball_swinging: 0,
         slap: 0,
         sac: 0,
+        bunt: 0,
         
         // Additional quality indicators - initialize all to 0 for new PAs
         wild_pitch: 0,

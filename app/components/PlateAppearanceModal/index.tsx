@@ -20,6 +20,7 @@ interface AdditionalFields {
   pa_error_on?: number[];
   rbi?: number;
   late_swings?: number;
+  bunt?: number;
 }
 
 // Define InningDetail interface
@@ -70,6 +71,7 @@ interface ScoreBookEntryStructure {
   qab: number;
   hard_hit: number;
   slap: number;
+  bunt: number;
   sac: number;
   // At the plate
   out_at: number;
@@ -115,7 +117,7 @@ interface PlateAppearanceModalProps {
   paEditEndpoint?: string; // New prop for the API endpoint
 }
 
-const PlateAppearanceModal = ({ 
+const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({ 
   pa, 
   isOpen, 
   onClose,
@@ -129,7 +131,7 @@ const PlateAppearanceModal = ({
   onDelete,
   inningDetail, // used to find the jersey number and name of the batter
   paEditEndpoint
-}: PlateAppearanceModalProps) => {
+}) => {
   const [editedPA, setEditedPA] = useState<ScoreBookEntry | null>(null);
   const [showJson, setShowJson] = useState(false);
   const [jsonData, setJsonData] = useState('');
@@ -138,20 +140,155 @@ const PlateAppearanceModal = ({
   const dataFetchedRef = React.useRef<{[key: string]: boolean}>({});
 
   // Define quality indicators array once for reuse
-  const qualityIndicators = ['qab', 'hard_hit', 'slap', 'sac'];
+  const qualityIndicators = ['qab', 'hard_hit', 'slap', 'bunt', 'sac'];
+
+  // Define array fields that should always be handled as lists of numbers
+  const arrayFields = ["hit_around_bases", "stolen_bases", "pa_error_on", "br_error_on", "base_running_hit_around", "br_stolen_bases"];
 
   // Add a function to fetch PA data from the custom endpoint
   const fetchPADataFromEndpoint = async (endpoint: string) => {
     try {
+      console.log(`Fetching data from endpoint: ${process.env.NEXT_PUBLIC_API_BASE_URL}${endpoint}`);
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}${endpoint}`);
       
       if (!response.ok) {
+        console.error(`Error fetching data: ${response.status} ${response.statusText}`);
         return null;
       }
       
       const data = await response.json();
+      console.log('API Response:', data);
       return data;
     } catch (error) {
+      console.error('Error fetching data:', error);
+      return null;
+    }
+  };
+
+  // Helper function to parse array fields from API
+  const parseArrayField = (value: any, convertToNumbers: boolean = false): any[] => {
+    if (!value) return [];
+    
+    // If it's already an array, convert values if needed and return
+    if (Array.isArray(value)) {
+      return convertToNumbers 
+        ? value.map(item => typeof item === 'string' ? Number(item) : Number(item))
+        : value;
+    }
+    
+    // If it's a number, return it as a single-item array
+    if (typeof value === 'number' && !isNaN(value) && value > 0) {
+      return [value];
+    }
+    
+    // If it's a string representation of an array, parse it
+    if (typeof value === 'string') {
+      try {
+        // Try to parse as JSON
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed)) {
+          return convertToNumbers 
+            ? parsed.map(item => typeof item === 'string' ? Number(item) : Number(item))
+            : parsed;
+        }
+        
+        // Handle string format like "['2', '3', '4']"
+        if (value.includes('[') && value.includes(']')) {
+          // Remove the outer quotes and brackets, then split by comma
+          const cleanedStr = value.replace(/^\[|\]$/g, '').replace(/'/g, '').replace(/"/g, '');
+          if (cleanedStr.trim() === '') return [];
+          const items = cleanedStr.split(',').map(item => item.trim());
+          return convertToNumbers ? items.map(item => Number(item)) : items;
+        }
+        
+        // Handle comma-separated values
+        if (value.includes(',')) {
+          const items = value.split(',').map(item => item.trim());
+          return convertToNumbers ? items.map(item => Number(item)) : items;
+        }
+        
+        // Try to convert to number directly
+        const num = Number(value);
+        if (!isNaN(num) && num > 0) return [num];
+        
+        // Single value
+        const result = [value];
+        return convertToNumbers ? result.map(item => Number(item)) : result;
+      } catch (e) {
+        // If parsing fails, return as a single-item array
+        if (value.includes('[') && value.includes(']')) {
+          const cleanedStr = value.replace(/^\[|\]$/g, '').replace(/'/g, '').replace(/"/g, '');
+          if (cleanedStr.trim() === '') return [];
+          const items = cleanedStr.split(',').map(item => item.trim());
+          return convertToNumbers ? items.map(item => Number(item)) : items;
+        }
+        
+        // Try to convert to number directly
+        const num = Number(value);
+        if (!isNaN(num) && num > 0) return [num];
+        
+        const result = [value];
+        return convertToNumbers ? result.map(item => Number(item)) : result;
+      }
+    }
+    
+    return [];
+  };
+
+  // Add a function to fetch player information from the lineup endpoint
+  const fetchPlayerInfoFromLineup = async (orderNumber: number) => {
+    try {
+      // Ensure we have valid teamId and gameId
+      if (!teamId || !gameId || !homeOrAway) {
+        console.error('Missing required parameters for lineup fetch', { teamId, gameId, homeOrAway });
+        return null;
+      }
+      
+      const endpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL}/lineup/games/${teamId}/${gameId}/${homeOrAway}/order_by_batter`;
+      console.log(`Fetching player info from: ${endpoint}`);
+      
+      const response = await fetch(endpoint);
+      
+      if (!response.ok) {
+        console.error(`Error fetching lineup data: ${response.status} ${response.statusText}`);
+        return null;
+      }
+      
+      const data = await response.json();
+      console.log('Lineup data:', data);
+      
+      // The data structure is:
+      // batting_order: {
+      //   order_number: inning_number: {
+      //     jersey_number, player_name, display
+      //   }
+      // }
+      
+      // Check if we have the batting_order data
+      if (data && data.batting_order) {
+        // Convert order number to string since the keys are strings
+        const orderNumberKey = String(orderNumber);
+        
+        // Check if the player exists for this order number
+        if (data.batting_order[orderNumberKey]) {
+          // Get the first inning number key (assuming it's the first one)
+          const inningKeys = Object.keys(data.batting_order[orderNumberKey]);
+          if (inningKeys.length > 0) {
+            const inningKey = inningKeys[0];
+            const player = data.batting_order[orderNumberKey][inningKey];
+            
+            console.log(`Found player: ${player.player_name} (#${player.jersey_number})`);
+            return {
+              jersey_number: player.jersey_number,
+              player_name: player.player_name || player.display?.split(' - ')[1] || ''
+            };
+          }
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error fetching player info:', error);
       return null;
     }
   };
@@ -175,61 +312,28 @@ const PlateAppearanceModal = ({
         }
       }
       
-      // Helper function to parse array fields from API
-      const parseArrayField = (value: any, convertToNumbers: boolean = false): any[] => {
-        if (!value) return [];
-        
-        // If it's already an array, convert values if needed and return
-        if (Array.isArray(value)) {
-          return convertToNumbers 
-            ? value.map(item => typeof item === 'string' ? Number(item) : item)
-            : value;
+      // If still missing, try to fetch from the lineup endpoint
+      if ((!updatedJerseyNumber || !updatedPlayerName) && pa.order_number) {
+        // Use a ref to track if we've already fetched this player's info
+        const playerKey = `${pa.order_number}_${pa.inning_number}`;
+        if (!dataFetchedRef.current[playerKey]) {
+          dataFetchedRef.current[playerKey] = true;
+          
+          // Fetch player info from the lineup endpoint
+          fetchPlayerInfoFromLineup(pa.order_number).then(playerInfo => {
+            if (playerInfo) {
+              setEditedPA(prev => {
+                if (!prev) return null;
+                return {
+                  ...prev,
+                  batter_jersey_number: playerInfo.jersey_number || prev.batter_jersey_number || '',
+                  batter_name: playerInfo.player_name || prev.batter_name || ''
+                };
+              });
+            }
+          });
         }
-        
-        // If it's a string representation of an array, parse it
-        if (typeof value === 'string') {
-          try {
-            // Try to parse as JSON
-            const parsed = JSON.parse(value);
-            if (Array.isArray(parsed)) {
-              return convertToNumbers 
-                ? parsed.map(item => typeof item === 'string' ? Number(item) : item)
-                : parsed;
-            }
-            
-            // Handle string format like "['2', '3', '4']"
-            if (value.includes('[') && value.includes(']')) {
-              // Remove the outer quotes and brackets, then split by comma
-              const cleanedStr = value.replace(/^\[|\]$/g, '').replace(/'/g, '').replace(/"/g, '');
-              if (cleanedStr.trim() === '') return [];
-              const items = cleanedStr.split(',').map(item => item.trim());
-              return convertToNumbers ? items.map(item => Number(item)) : items;
-            }
-            
-            // Handle comma-separated values
-            if (value.includes(',')) {
-              const items = value.split(',').map(item => item.trim());
-              return convertToNumbers ? items.map(item => Number(item)) : items;
-            }
-            
-            // Single value
-            const result = [value];
-            return convertToNumbers ? result.map(item => Number(item)) : result;
-          } catch (e) {
-            // If parsing fails, return as a single-item array
-            if (value.includes('[') && value.includes(']')) {
-              const cleanedStr = value.replace(/^\[|\]$/g, '').replace(/'/g, '').replace(/"/g, '');
-              if (cleanedStr.trim() === '') return [];
-              const items = cleanedStr.split(',').map(item => item.trim());
-              return convertToNumbers ? items.map(item => Number(item)) : items;
-            }
-            const result = [value];
-            return convertToNumbers ? result.map(item => Number(item)) : result;
-          }
-        }
-        
-        return [];
-      };
+      }
       
       // Create a copy of the PA with default values for missing fields
       const updatedPA: ScoreBookEntry = { 
@@ -255,11 +359,15 @@ const PlateAppearanceModal = ({
         hard_hit: (pa as AdditionalFields).hard_hit !== undefined ? Number((pa as AdditionalFields).hard_hit) : 0,
         rbi: (pa as AdditionalFields).rbi || 0,
         risp: null,
-        // Parse array fields from API as number arrays
+        // Parse array fields from API as number arrays - use consistent approach for all
         pa_error_on: parseArrayField(pa.pa_error_on, true),
         br_error_on: parseArrayField(pa.br_error_on, true),
-        stolen_bases: parseArrayField(pa.br_stolen_bases, true),
-        hit_around_bases: parseArrayField(pa.base_running_hit_around, true)
+        br_stolen_bases: parseArrayField(pa.br_stolen_bases, true),
+        base_running_hit_around: parseArrayField(pa.base_running_hit_around, true),
+        // Ensure bunt field is properly set from the API - treat it like other quality indicators
+        bunt: (pa as AdditionalFields).bunt !== undefined ? Number((pa as AdditionalFields).bunt) : 0,
+        // Ensure sac field is properly set from the API
+        sac: (pa as AdditionalFields).sac !== undefined ? Number((pa as AdditionalFields).sac) : 0
       };
       
       // If why_base_reached exists but pa_why doesn't, copy the value for backward compatibility
@@ -274,6 +382,11 @@ const PlateAppearanceModal = ({
       // If pa_why is 'HH', ensure hard_hit field is set to 1
       if (updatedPA.pa_why === 'HH') {
         updatedPA.hard_hit = 1;
+      }
+      
+      // If pa_why is 'B', ensure bunt field is set to 1
+      if (updatedPA.pa_why === 'B') {
+        updatedPA.bunt = 1;
       }
       
       // If this is a sacrifice fly/bunt or hard hit, it's a QAB
@@ -351,25 +464,21 @@ const PlateAppearanceModal = ({
         hard_hit: 0, // Initialize hard_hit field as 0
         rbi: 0,
         // Add missing required properties
-        pa_why: '', // This is the field we'll use going forward
-        why_base_reached: '', // For backward compatibility
-        detailed_result: '', // Add detailed_result field
-        result_type: '', // Required by ScoreBookEntry interface
-        // Explicitly initialize arrays to empty
         pa_error_on: [],
         br_error_on: [],
-        stolen_bases: [],
-        hit_around_bases: []
+        br_stolen_bases: [],
+        base_running_hit_around: [],
+        slap: 0,
+        sac: 0,
+        bunt: 0
       };
       
-      // Set default values for all quality indicators
-      qualityIndicators.forEach(field => {
-        newPA[field] = 0;
-      });
-      
       setEditedPA(newPA);
+    } else if (!isOpen) {
+      // Reset the tracking when modal is closed
+      dataFetchedRef.current = {};
     }
-  }, [pa, isOpen, teamId, gameId, inningNumber, homeOrAway, inningDetail, nextBatterSeqId]);
+  }, [isOpen, paEditEndpoint, pa?.batter_seq_id]);
 
   // Use the endpoint in the useEffect
   useEffect(() => {
@@ -381,16 +490,81 @@ const PlateAppearanceModal = ({
       if (!dataFetchedRef.current[fetchKey]) {
         dataFetchedRef.current[fetchKey] = true;
         
+        // Special log for the specific endpoint
+        if (paEditEndpoint.includes('/scores/new/1/1/home/1/scorecardgrid_paonly_inningonly/2/pa_edit')) {
+          console.log('Fetching data for the specific endpoint:', paEditEndpoint);
+        }
+        
         // Fetch data from the provided endpoint
         fetchPADataFromEndpoint(paEditEndpoint).then(data => {
           if (data) {
-            // Update the form with the fetched data
-            if (data.plate_appearance) {
-              const fetchedPA = data.plate_appearance;
-              // Directly extract the base_running_hit_around array from the API
-              const baseRunningHitAround = Array.isArray(fetchedPA.base_running_hit_around) 
-                ? [...fetchedPA.base_running_hit_around] // Create a copy
-                : [];
+            // Special log for the specific endpoint
+            if (paEditEndpoint.includes('/scores/new/1/1/home/1/scorecardgrid_paonly_inningonly/2/pa_edit')) {
+              console.log('Response for the specific endpoint:', data);
+            }
+            
+            // Extract the plate appearance data from the nested structure
+            let fetchedPA = null;
+            
+            // Check if the data has the nested structure
+            if (data.plate_appearances && data.plate_appearances[1] && data.plate_appearances[1].rounds && 
+                data.plate_appearances[1].rounds[2] && data.plate_appearances[1].rounds[2].details) {
+              // Use the nested structure
+              fetchedPA = data.plate_appearances[1].rounds[2].details;
+              console.log('Using nested structure for plate appearance data:', fetchedPA);
+              
+              // Log all fields in the nested structure for debugging
+              console.log('All fields in nested structure:', Object.keys(fetchedPA));
+              
+              // Log specific fields we're interested in
+              console.log('Quality indicators in nested structure:', {
+                qab: fetchedPA.qab,
+                hard_hit: fetchedPA.hard_hit,
+                slap: fetchedPA.slap,
+                bunt: fetchedPA.bunt,
+                sac: fetchedPA.sac
+              });
+              
+              console.log('Result fields in nested structure:', {
+                pa_result: fetchedPA.pa_result,
+                pa_why: fetchedPA.pa_why,
+                hit_to: fetchedPA.hit_to,
+                br_result: fetchedPA.br_result
+              });
+              
+              console.log('Count fields in nested structure:', {
+                balls_before_play: fetchedPA.balls_before_play,
+                strikes_before_play: fetchedPA.strikes_before_play,
+                strikes_watching: fetchedPA.strikes_watching,
+                strikes_swinging: fetchedPA.strikes_swinging,
+                strikes_unsure: fetchedPA.strikes_unsure,
+                fouls: fetchedPA.fouls,
+                ball_swinging: fetchedPA.ball_swinging,
+                pitch_count: fetchedPA.pitch_count
+              });
+              
+              console.log('Array fields in nested structure:', {
+                pa_error_on: fetchedPA.pa_error_on,
+                br_error_on: fetchedPA.br_error_on,
+                br_stolen_bases: fetchedPA.br_stolen_bases,
+                base_running_hit_around: fetchedPA.base_running_hit_around
+              });
+            } else if (data.plate_appearance) {
+              // Fall back to the direct structure
+              fetchedPA = data.plate_appearance;
+              console.log('Using direct structure for plate appearance data:', fetchedPA);
+            }
+            
+            if (fetchedPA) {
+              // Extract all array fields from the API
+              const extractedArrays: Record<string, any[]> = {};
+              
+              // Process each array field consistently
+              arrayFields.forEach(field => {
+                extractedArrays[field] = Array.isArray(fetchedPA[field]) 
+                  ? [...fetchedPA[field]] // Create a copy
+                  : [];
+              });
               
               // Map the fields from the API response to the form state
               const mappedData = mapAPIResponseToFormState(fetchedPA);
@@ -398,25 +572,46 @@ const PlateAppearanceModal = ({
                 setEditedPA(currentPA => {
                   if (!currentPA) return null;
                   
-                  // Use type assertion to handle the null value for br_result
-                  const updatedPA = {
-                    ...currentPA,
-                    ...mappedData,
-                    // Ensure these arrays are explicitly copied from the API data
-                    base_running_hit_around: baseRunningHitAround,
-                    hit_around_bases: baseRunningHitAround,
-                    br_stolen_bases: Array.isArray(fetchedPA.br_stolen_bases) ? [...fetchedPA.br_stolen_bases] : [],
-                    stolen_bases: Array.isArray(fetchedPA.br_stolen_bases) ? [...fetchedPA.br_stolen_bases] : [],
-                    // Explicitly copy count-related fields
-                    fouls: Number(fetchedPA.fouls ?? 0),
-                    ball_swinging: Number(fetchedPA.ball_swinging ?? 0),
-                    strikes_unsure: Number(fetchedPA.strikes_unsure ?? 0),
-                    strikes_watching: Number(fetchedPA.strikes_watching ?? 0),
-                    strikes_swinging: Number(fetchedPA.strikes_swinging ?? 0),
-                    late_swings: Number(fetchedPA.late_swings ?? 0),
-                    // Convert null to undefined for br_result if needed
-                    br_result: mappedData.br_result === null ? undefined : mappedData.br_result
-                  };
+                  // Create a complete copy of the current PA
+                  const updatedPA = { ...currentPA };
+                  
+                  // Update with all mapped data
+                  Object.keys(mappedData).forEach(key => {
+                    if (mappedData[key] !== undefined) {
+                      updatedPA[key] = mappedData[key];
+                    }
+                  });
+                  
+                  // Ensure all array fields are explicitly copied from the API data
+                  arrayFields.forEach(field => {
+                    updatedPA[field] = extractedArrays[field];
+                  });
+                  
+                  // Also set the legacy fields for backward compatibility
+                  updatedPA.hit_around_bases = extractedArrays.base_running_hit_around;
+                  updatedPA.stolen_bases = extractedArrays.br_stolen_bases;
+                  updatedPA.br_stolen_bases = extractedArrays.stolen_bases;
+                  
+                  // Explicitly copy count-related fields
+                  updatedPA.fouls = Number(fetchedPA.fouls ?? 0);
+                  updatedPA.ball_swinging = Number(fetchedPA.ball_swinging ?? 0);
+                  updatedPA.strikes_unsure = Number(fetchedPA.strikes_unsure ?? 0);
+                  updatedPA.strikes_watching = Number(fetchedPA.strikes_watching ?? 0);
+                  updatedPA.strikes_swinging = Number(fetchedPA.strikes_swinging ?? 0);
+                  updatedPA.late_swings = Number(fetchedPA.late_swings ?? 0);
+                  
+                  // Ensure all quality indicators are properly set
+                  qualityIndicators.forEach(field => {
+                    updatedPA[field] = fetchedPA[field] !== undefined ? Number(fetchedPA[field]) : 0;
+                  });
+                  
+                  // Convert null to undefined for br_result if needed
+                  if (updatedPA.br_result === null) {
+                    updatedPA.br_result = undefined;
+                  }
+                  
+                  // Log the updated PA to see what fields are available
+                  console.log('Updated PA with all fields:', updatedPA);
                   
                   return updatedPA;
                 });
@@ -435,33 +630,25 @@ const PlateAppearanceModal = ({
   const mapAPIResponseToFormState = (apiPA: Record<string, any>): Partial<ScoreBookEntry> | null => {
     if (!apiPA) return null;
     
-    // Helper function to properly handle array fields
-    const parseArrayField = (value: any): number[] => {
-      if (!value) return [];
-      
-      // If it's already an array, ensure all elements are numbers
-      if (Array.isArray(value)) {
-        return value.map(item => typeof item === 'string' ? Number(item) : Number(item));
-      }
-      
-      // Handle string representations
-      if (typeof value === 'string') {
-        try {
-          const parsed = JSON.parse(value);
-          if (Array.isArray(parsed)) {
-            return parsed.map(item => Number(item));
-          }
-        } catch (e) {
-          // If parsing fails, split by comma or return as a single-item array
-          if (value.includes(',')) {
-            return value.split(',').map(item => Number(item.trim()));
-          }
-          return [Number(value)];
-        }
-      }
-      
-      return [];
-    };
+    // Log the incoming apiPA to see what fields are available
+    console.log('Incoming apiPA in mapAPIResponseToFormState:', apiPA);
+    
+    // Log all quality indicators in the incoming apiPA
+    console.log('Quality indicators in incoming apiPA:', {
+      qab: apiPA.qab,
+      hard_hit: apiPA.hard_hit,
+      slap: apiPA.slap,
+      bunt: apiPA.bunt,
+      sac: apiPA.sac
+    });
+    
+    // Log all array fields in the incoming apiPA
+    console.log('Array fields in incoming apiPA:', {
+      pa_error_on: apiPA.pa_error_on,
+      br_error_on: apiPA.br_error_on,
+      br_stolen_bases: apiPA.br_stolen_bases,
+      base_running_hit_around: apiPA.base_running_hit_around
+    });
     
     // Make explicit conversions to ensure type safety
     const mappedData: Partial<ScoreBookEntry> = {
@@ -488,18 +675,17 @@ const PlateAppearanceModal = ({
                 (apiPA.br_result !== undefined ? Number(apiPA.br_result) : undefined),
       
       // Array fields - store the arrays directly
-      pa_error_on: apiPA.pa_error_on ? parseArrayField(apiPA.pa_error_on) : [],
-      br_error_on: apiPA.br_error_on ? parseArrayField(apiPA.br_error_on) : [],
-      stolen_bases: apiPA.br_stolen_bases ? parseArrayField(apiPA.br_stolen_bases) : [],
-      hit_around_bases: apiPA.base_running_hit_around ? parseArrayField(apiPA.base_running_hit_around) : [],
-      // Make sure base_running_hit_around is also directly stored if available
-      base_running_hit_around: apiPA.base_running_hit_around ? parseArrayField(apiPA.base_running_hit_around) : [],
-      br_stolen_bases: apiPA.br_stolen_bases ? parseArrayField(apiPA.br_stolen_bases) : [],
+      pa_error_on: parseArrayField(apiPA.pa_error_on, true),
+      br_error_on: parseArrayField(apiPA.br_error_on, true),
+      br_stolen_bases: parseArrayField(apiPA.br_stolen_bases, true),
+      base_running_hit_around: parseArrayField(apiPA.base_running_hit_around, true),
       
       // Quality indicators - ensure we're using Number() to convert undefined to 0
+      // Treat all quality indicators consistently
       qab: Number(apiPA.qab ?? 0),
       hard_hit: Number(apiPA.hard_hit ?? 0),
       slap: Number(apiPA.slap ?? 0),
+      bunt: Number(apiPA.bunt ?? 0),
       sac: Number(apiPA.sac ?? 0),
       
       // Optional fields
@@ -518,6 +704,26 @@ const PlateAppearanceModal = ({
       round: Number(apiPA.pa_round ?? 1),
     };
     
+    // Log the mapped data to see what fields are available
+    console.log('Mapped data in mapAPIResponseToFormState:', mappedData);
+    
+    // Log all quality indicators in the mapped data
+    console.log('Quality indicators in mapped data:', {
+      qab: mappedData.qab,
+      hard_hit: mappedData.hard_hit,
+      slap: mappedData.slap,
+      bunt: mappedData.bunt,
+      sac: mappedData.sac
+    });
+    
+    // Log all array fields in the mapped data
+    console.log('Array fields in mapped data:', {
+      pa_error_on: mappedData.pa_error_on,
+      br_error_on: mappedData.br_error_on,
+      br_stolen_bases: mappedData.br_stolen_bases,
+      base_running_hit_around: mappedData.base_running_hit_around
+    });
+    
     return mappedData;
   };
 
@@ -533,8 +739,70 @@ const PlateAppearanceModal = ({
       // Create updated object with the new field value with explicit typing to fix linter errors
       const updated = { ...prev, pitch_count: prev.pitch_count || 0 } as ScoreBookEntry & { pitch_count: number };
       
+      // Special handling for array fields to ensure they're always stored as arrays
+      const arrayFields = ["hit_around_bases", "stolen_bases", "pa_error_on", "br_error_on", "base_running_hit_around", "br_stolen_bases"];
+      if (arrayFields.includes(field)) {
+        // Ensure value is always an array
+        if (!value) {
+          updated[field] = [];
+        } else if (Array.isArray(value)) {
+          updated[field] = value;
+        } else if (typeof value === 'string') {
+          try {
+            // Try to parse as JSON
+            const parsed = JSON.parse(value);
+            if (Array.isArray(parsed)) {
+              updated[field] = parsed;
+            } else {
+              // Handle string format like "['2', '3', '4']"
+              if (value.includes('[') && value.includes(']')) {
+                const cleanedStr = value.replace(/^\[|\]$/g, '').replace(/'/g, '').replace(/"/g, '');
+                if (cleanedStr.trim() === '') {
+                  updated[field] = [];
+                } else {
+                  updated[field] = cleanedStr.split(',').map(item => Number(item.trim()));
+                }
+              } else if (value.includes(',')) {
+                // Handle comma-separated values
+                updated[field] = value.split(',').map(item => Number(item.trim()));
+              } else if (value.trim() !== '') {
+                // Single value
+                updated[field] = [Number(value.trim())];
+              } else {
+                updated[field] = [];
+              }
+            }
+          } catch (e) {
+            // If parsing fails, try simpler methods
+            if (value.includes(',')) {
+              updated[field] = value.split(',').map(item => Number(item.trim()));
+            } else if (value.trim() !== '') {
+              updated[field] = [Number(value.trim())];
+            } else {
+              updated[field] = [];
+            }
+          }
+        } else {
+          // Single value
+          updated[field] = [Number(value)];
+        }
+        
+        // Update br_result if we're changing an array field that affects it
+        if (field === 'base_running_hit_around' || field === 'stolen_bases') {
+          updateBrResult(updated);
+        }
+        
+        // Ensure base_running_hit_around doesn't include any bases that are in br_stolen_bases
+        syncBaseRunningHitAroundWithStolenBases(updated);
+        
+        // Hide base 2 in both arrays when pa_result is 2
+        hideBase2WhenPaResultIs2(updated);
+        
+        return updated;
+      }
+      
       // Special handling for quality indicators to ensure they're properly set
-      const qualityIndicators = ['qab', 'hard_hit', 'slap', 'sac'];
+      const qualityIndicators = ['qab', 'hard_hit', 'slap', 'bunt', 'sac'];
       if (qualityIndicators.includes(field)) {
         updated[field] = value === null || value === undefined ? 0 : Number(value);
         return updated;
@@ -588,6 +856,53 @@ const PlateAppearanceModal = ({
             }
           }
         }
+      } else if (field === 'pa_result') {
+        // Update pa_result
+        updated[field] = Number(value);
+        
+        // Hide base 2 in both arrays when pa_result is 2
+        hideBase2WhenPaResultIs2(updated);
+        
+        // Update br_result based on the new pa_result
+        updateBrResult(updated);
+      } else if (field === 'br_result') {
+        // Update br_result
+        updated[field] = Number(value);
+        
+        // If br_result is 4, automatically set base_running_hit_around for bases between pa_result and br_result
+        if (Number(value) === 4) {
+          const paResult = updated.pa_result || 0;
+          
+          // Create an array of bases between pa_result and br_result (inclusive)
+          const basesToAdd = [];
+          for (let base = paResult + 1; base <= 4; base++) {
+            basesToAdd.push(base);
+          }
+          
+          // Set base_running_hit_around to include these bases
+          if (basesToAdd.length > 0) {
+            // Ensure base_running_hit_around is initialized as an array
+            if (!Array.isArray(updated.base_running_hit_around)) {
+              updated.base_running_hit_around = [];
+            }
+            
+            // Add each base to base_running_hit_around if it's not already there
+            basesToAdd.forEach(base => {
+              if (!updated.base_running_hit_around?.includes(base)) {
+                updated.base_running_hit_around?.push(base);
+              }
+            });
+            
+            // Also update the legacy field for backward compatibility
+            updated.hit_around_bases = [...(updated.base_running_hit_around || [])];
+          }
+          
+          // Ensure base_running_hit_around doesn't include any bases that are in br_stolen_bases
+          syncBaseRunningHitAroundWithStolenBases(updated);
+          
+          // Hide base 2 in both arrays when pa_result is 2
+          hideBase2WhenPaResultIs2(updated);
+        }
       } else {
         // For any other field, just set the value directly
         updated[field] = value;
@@ -624,170 +939,109 @@ const PlateAppearanceModal = ({
     });
   };
 
-  // Increment a counter field with validation for specific fields
-  const incrementCounter = (field: string, value: number = 1) => {
-    setEditedPA(prev => {
-      if (!prev) return null;
-      
-      const updated = { ...prev };
-      const currentValue = updated[field] || 0;
-      let newValue = currentValue + value;
-      
-      // Apply specific validation rules for certain fields
-      if (field === 'balls_before_play') {
-        // Ensure balls_before_play never exceeds 3
-        newValue = Math.min(3, newValue);
-      } else if (field === 'strikes_before_play' || field === 'strikes_watching' || 
-                 field === 'strikes_swinging' || field === 'strikes_unsure') {
-        // Ensure no strike-related field makes strikes_before_play exceed 2
-        const currentStrikes = updated.strikes_before_play || 0;
-        if (field === 'strikes_before_play') {
-          newValue = Math.min(2, newValue);
-        } else {
-          // For other strike types, calculate the new total and ensure it doesn't exceed 2
-          const otherStrikeTypes = ['strikes_watching', 'strikes_swinging', 'strikes_unsure'];
-          const totalStrikes = otherStrikeTypes.reduce((sum, type) => {
-            if (type === field) {
-              return sum + newValue; // Use the new value for the current field
-            } else {
-              return sum + (updated[type] || 0); // Use existing values for other fields
-            }
-          }, 0);
-          
-          // If incrementing would exceed 2 total strikes, don't increment
-          if (totalStrikes > 2) {
-            newValue = currentValue; // Keep the current value unchanged
-          }
-          
-          // Update strikes_before_play to match the total
-          updated.strikes_before_play = Math.min(2, totalStrikes);
-        }
-      } else if (field === 'fouls') {
-        // Special handling for fouls - they should add to strikes_before_play if it's less than 2
-        const currentStrikes = updated.strikes_before_play || 0;
-        if (currentStrikes < 2) {
-          // Only increment strikes_before_play once per foul until we reach 2 strikes
-          updated.strikes_before_play = Math.min(2, currentStrikes + 1);
-        }
-      }
-      
-      // Set the updated value
-      updated[field] = newValue;
-      
-      // If incrementing a strike type, ensure strikes_before_play reflects the total
-      if (['strikes_watching', 'strikes_swinging', 'strikes_unsure'].includes(field)) {
-        const watching = updated.strikes_watching || 0;
-        const swinging = updated.strikes_swinging || 0;
-        const unsure = updated.strikes_unsure || 0;
-        
-        // Calculate total strikes from individual types, capped at 2
-        updated.strikes_before_play = Math.min(2, watching + swinging + unsure);
-      }
-      
-      // Add additional pitches based on the outcome (pa_why)
-      if (updated.pa_why) {
-        if (updated.pa_why === 'BB') {
-          // For walks (BB), ensure we count the final pitch that resulted in the walk
-          // if it's not already included in balls_before_play
-          if ((updated.balls_before_play || 0) < 3) {
-            updated.pitch_count = (updated.pitch_count || 0) + (3 - (updated.balls_before_play || 0));
-          }
-        } else if (updated.pa_why === 'K' || updated.pa_why === 'KK') {
-          // For strikeouts (K or KK), ensure we count the final pitch that resulted in the strikeout
-          // if it's not already included in strikes_before_play
-          if ((updated.strikes_before_play || 0) < 2) {
-            updated.pitch_count = (updated.pitch_count || 0) + (2 - (updated.strikes_before_play || 0));
-          }
-        } else {
-          // For all other outcomes, add 1 for the final pitch that resulted in the play
-          updated.pitch_count = (updated.pitch_count || 0) + 1;
-        }
-      }
-      
-      return updated;
-    });
+  // Helper function to update br_result based on the maximum value among pa_result, stolen_bases, and base_running_hit_around
+  const updateBrResult = (updatedPA: any) => {
+    const paResult = updatedPA.pa_result || 0;
+    const maxStolenBase = Array.isArray(updatedPA.br_stolen_bases) ? Math.max(...updatedPA.br_stolen_bases, 0) : 0;
+    const maxHitAroundBase = Array.isArray(updatedPA.base_running_hit_around) ? Math.max(...updatedPA.base_running_hit_around, 0) : 0;
+    
+    // Set br_result to the maximum of all values
+    updatedPA.br_result = Math.max(paResult, maxStolenBase, maxHitAroundBase);
   };
 
-  // Decrement a counter field with validation
-  const decrementCounter = (field: string, value: number = 1) => {
-    setEditedPA(prev => {
-      if (!prev) return null;
-      
-      const updated = { ...prev };
-      const currentValue = updated[field] || 0;
-      
-      // Ensure we don't go below 0
-      updated[field] = Math.max(0, currentValue - value);
-      
-      // Special handling for decreasing fouls
-      if (field === 'fouls') {
-        const watching = updated.strikes_watching || 0;
-        const swinging = updated.strikes_swinging || 0;
-        const unsure = updated.strikes_unsure || 0;
-        
-        // If there are no explicit strike types counted and strikes_before_play is > 0,
-        // that means strikes_before_play was being driven by fouls
-        if (watching === 0 && swinging === 0 && unsure === 0) {
-          // Calculate how many fouls we had before, and how many now
-          const oldFouls = currentValue;
-          const newFouls = updated[field];
-          
-          // If we've decremented fouls to zero and there were previously fouls
-          // we should also adjust strikes_before_play
-          if (newFouls === 0 && oldFouls > 0) {
-            // Decrement strikes_before_play, but only if there are no other strike types
-            updated.strikes_before_play = Math.max(0, (updated.strikes_before_play || 0) - 1);
-          }
-        }
+  // Helper function to ensure base_running_hit_around doesn't include any bases that are in br_stolen_bases
+  const syncBaseRunningHitAroundWithStolenBases = (updatedPA: any) => {
+    // Ensure both arrays exist
+    if (!Array.isArray(updatedPA.br_stolen_bases)) {
+      updatedPA.br_stolen_bases = [];
+    }
+    
+    if (!Array.isArray(updatedPA.base_running_hit_around)) {
+      updatedPA.base_running_hit_around = [];
+    }
+    
+    // Remove any bases from base_running_hit_around that are in br_stolen_bases
+    updatedPA.base_running_hit_around = updatedPA.base_running_hit_around.filter(
+      (base: number) => !updatedPA.br_stolen_bases.includes(base)
+    );
+    
+    // Also update the legacy field for backward compatibility
+    updatedPA.hit_around_bases = [...updatedPA.base_running_hit_around];
+    
+    // Log the arrays for debugging
+    console.log('After sync: br_stolen_bases =', updatedPA.br_stolen_bases);
+    console.log('After sync: base_running_hit_around =', updatedPA.base_running_hit_around);
+  };
+
+  // Helper function to hide base 2 in both br_stolen_bases and base_running_hit_around when pa_result is 2
+  const hideBase2WhenPaResultIs2 = (updatedPA: any) => {
+    // If pa_result is 2, hide base 2 in both arrays
+    if (updatedPA.pa_result === 2) {
+      // Remove base 2 from br_stolen_bases if it exists
+      if (Array.isArray(updatedPA.br_stolen_bases)) {
+        updatedPA.br_stolen_bases = updatedPA.br_stolen_bases.filter((base: number) => base !== 2);
       }
       
-      // If decrementing a strike type, ensure strikes_before_play reflects the total
-      if (['strikes_watching', 'strikes_swinging', 'strikes_unsure'].includes(field)) {
-        const watching = updated.strikes_watching || 0;
-        const swinging = updated.strikes_swinging || 0;
-        const unsure = updated.strikes_unsure || 0;
-        
-        // Calculate total strikes from individual types
-        updated.strikes_before_play = watching + swinging + unsure;
+      // Remove base 2 from base_running_hit_around if it exists
+      if (Array.isArray(updatedPA.base_running_hit_around)) {
+        updatedPA.base_running_hit_around = updatedPA.base_running_hit_around.filter((base: number) => base !== 2);
       }
       
-      // Calculate pitch_count as the sum of all pitch-related fields
-      updated.pitch_count = (
-        (updated.balls_before_play || 0) +
-        (updated.strikes_watching || 0) +
-        (updated.strikes_swinging || 0) +
-        (updated.strikes_unsure || 0) +
-        (updated.ball_swinging || 0) +
-        (updated.fouls || 0)
-      );
-      
-      // Add additional pitches based on the outcome (pa_why)
-      if (updated.pa_why) {
-        if (updated.pa_why === 'BB') {
-          // For walks (BB), ensure we count the final pitch that resulted in the walk
-          // if it's not already included in balls_before_play
-          if ((updated.balls_before_play || 0) < 3) {
-            updated.pitch_count = (updated.pitch_count || 0) + (3 - (updated.balls_before_play || 0));
-          }
-        } else if (updated.pa_why === 'K' || updated.pa_why === 'KK') {
-          // For strikeouts (K or KK), ensure we count the final pitch that resulted in the strikeout
-          // if it's not already included in strikes_before_play
-          if ((updated.strikes_before_play || 0) < 2) {
-            updated.pitch_count = (updated.pitch_count || 0) + (2 - (updated.strikes_before_play || 0));
-          }
-        } else {
-          // For all other outcomes, add 1 for the final pitch that resulted in the play
-          updated.pitch_count = (updated.pitch_count || 0) + 1;
-        }
+      // Also update the legacy field for backward compatibility
+      if (Array.isArray(updatedPA.base_running_hit_around)) {
+        updatedPA.hit_around_bases = [...updatedPA.base_running_hit_around];
       }
-      
-      return updated;
-    });
+    }
+  };
+
+  // Helper function to check if a base should be disabled based on pa_result
+  const isBaseDisabled = (base: number, paResult: number) => {
+    // If pa_result is 2, disable base 2
+    if (paResult === 2 && base === 2) {
+      return true;
+    }
+    return false;
+  };
+
+  // Helper function to increment a counter
+  const incrementCounter = (field: string) => {
+    if (!editedPA) return;
+    const currentValue = editedPA[field] || 0;
+    handleInputChange(field, currentValue + 1);
+  };
+
+  // Helper function to decrement a counter
+  const decrementCounter = (field: string) => {
+    if (!editedPA) return;
+    const currentValue = editedPA[field] || 0;
+    if (currentValue > 0) {
+      handleInputChange(field, currentValue - 1);
+    }
   };
 
   // Create a helper function to generate the API data structure
   const createApiData = (): ScoreBookEntryStructure | null => {
     if (!editedPA) return null;
+    
+    // Log the editedPA to see what fields are available
+    console.log('editedPA in createApiData:', editedPA);
+    
+    // Log all quality indicators in the editedPA
+    console.log('Quality indicators in editedPA:', {
+      qab: (editedPA as any).qab,
+      hard_hit: (editedPA as any).hard_hit,
+      slap: (editedPA as any).slap,
+      bunt: (editedPA as any).bunt,
+      sac: (editedPA as any).sac
+    });
+    
+    // Log all array fields in the editedPA
+    console.log('Array fields in editedPA:', {
+      pa_error_on: (editedPA as any).pa_error_on,
+      br_error_on: (editedPA as any).br_error_on,
+      br_stolen_bases: (editedPA as any).br_stolen_bases,
+      base_running_hit_around: (editedPA as any).base_running_hit_around
+    });
     
     // Create a copy of the edited data to ensure we don't modify the original
     const paData = { 
@@ -798,13 +1052,35 @@ const PlateAppearanceModal = ({
       ball_swinging: (editedPA as any).ball_swinging || 0,
       pitch_count: (editedPA as any).pitch_count || 0,
       // Quality Indicators - use ?? to preserve 0 values explicitly
+      // Treat all quality indicators consistently
       qab: (editedPA as any).qab !== undefined ? Number((editedPA as any).qab) : 0,
       hard_hit: (editedPA as any).hard_hit !== undefined ? Number((editedPA as any).hard_hit) : 0,
       slap: (editedPA as any).slap !== undefined ? Number((editedPA as any).slap) : 0,
+      bunt: (editedPA as any).bunt !== undefined ? Number((editedPA as any).bunt) : 0,
       sac: (editedPA as any).sac !== undefined ? Number((editedPA as any).sac) : 0,
       // Ensure pa_why is set
       pa_why: editedPA.pa_why || editedPA.why_base_reached || ''
     };
+    
+    // Log the paData to see what fields are available
+    console.log('paData in createApiData:', paData);
+    
+    // Log all quality indicators in the paData
+    console.log('Quality indicators in paData:', {
+      qab: paData.qab,
+      hard_hit: paData.hard_hit,
+      slap: paData.slap,
+      bunt: paData.bunt,
+      sac: paData.sac
+    });
+    
+    // Log all array fields in the paData
+    console.log('Array fields in paData:', {
+      pa_error_on: paData.pa_error_on,
+      br_error_on: paData.br_error_on,
+      br_stolen_bases: paData.br_stolen_bases,
+      base_running_hit_around: paData.base_running_hit_around
+    });
     
     // Helper function to safely parse array fields and convert to numbers
     const parseArrayField = (value: any, convertToNumbers: boolean = true): any[] => {
@@ -843,6 +1119,10 @@ const PlateAppearanceModal = ({
             return convertToNumbers ? items.map(item => Number(item)) : items;
           }
           
+          // Try to convert to number directly
+          const num = Number(value);
+          if (!isNaN(num) && num > 0) return [num];
+          
           // Single value if not empty
           if (value.trim() !== '') {
             const result = [value];
@@ -859,30 +1139,6 @@ const PlateAppearanceModal = ({
           }
           return [];
         }
-      }
-      
-      return [];
-    };
-    
-    // Convert string pa_error_on to array
-    const parseErrorOn = (value: string | number[] | undefined): number[] => {
-      if (!value) return [];
-      
-      // If it's already an array, return it directly
-      if (Array.isArray(value)) {
-        return value.map(item => typeof item === 'string' ? Number(item) : Number(item));
-      }
-      
-      // Now we know value is a string since we've handled arrays above
-      if (typeof value === 'string') {
-        if (value.trim() === '') return [];
-        
-        // Try to convert to number directly
-        const num = Number(value);
-        if (!isNaN(num) && num > 0) return [num];
-        
-        // Otherwise try to parse as array
-        return parseArrayField(value);
       }
       
       return [];
@@ -915,30 +1171,24 @@ const PlateAppearanceModal = ({
       // One-off tracking
       rbi: paData.rbi !== undefined ? Number(paData.rbi) : null,
       late_swings: paData.late_swings !== undefined ? Number(paData.late_swings) : null,
-      // Quality Indicators
+      // Quality Indicators - treat all quality indicators consistently
       qab: paData.qab !== undefined ? Number(paData.qab) : 0,
       hard_hit: paData.hard_hit !== undefined ? Number(paData.hard_hit) : 0,
       slap: paData.slap !== undefined ? Number(paData.slap) : 0,
+      bunt: paData.bunt !== undefined ? Number(paData.bunt) : 0,
       sac: paData.sac !== undefined ? Number(paData.sac) : 0,
       // At the plate
       out_at: paData.out_at ? Number(paData.out_at) : 0,
       pa_why: paData.pa_why || '', // Primary field for plate appearance reason
       pa_result: Number(paData.pa_result || 0),
       hit_to: Number(paData.hit_to || paData.detailed_result || 0),
-      // Fixed array fields parsing
-      pa_error_on: Array.isArray(paData.pa_error_on) ? paData.pa_error_on : parseErrorOn(typeof paData.pa_error_on === 'string' ? paData.pa_error_on : ''),
+      // Fixed array fields parsing - use consistent approach for all
+      pa_error_on: parseArrayField(paData.pa_error_on, true),
+      br_error_on: parseArrayField(paData.br_error_on, true),
+      br_stolen_bases: parseArrayField(paData.br_stolen_bases, true),
+      base_running_hit_around: parseArrayField(paData.base_running_hit_around, true),
       // Base running
       br_result: paData.br_result !== undefined ? Number(paData.br_result) : null,
-      br_stolen_bases: Array.isArray(paData.stolen_bases) ? paData.stolen_bases : 
-                        Array.isArray(paData.br_stolen_bases) ? paData.br_stolen_bases :
-                        parseArrayField(paData.br_stolen_bases || paData.stolen_bases || []),
-      // Explicitly use base_running_hit_around from the form state
-      base_running_hit_around: Array.isArray(paData.base_running_hit_around) 
-        ? paData.base_running_hit_around 
-        : Array.isArray(paData.hit_around_bases)
-        ? paData.hit_around_bases
-        : [],
-      br_error_on: Array.isArray(paData.br_error_on) ? paData.br_error_on : parseErrorOn(typeof paData.br_error_on === 'string' ? paData.br_error_on : ''),
       // Balls and strikes - EXPLICITLY ensure these are included
       pitch_count: Number(paData.pitch_count || 0),
       balls_before_play: Number(paData.balls_before_play || 0),
@@ -949,6 +1199,26 @@ const PlateAppearanceModal = ({
       ball_swinging: Number(paData.ball_swinging || 0),
       fouls: Number(paData.fouls || 0),
     };
+    
+    // Log the apiData to see what fields are available
+    console.log('apiData in createApiData:', apiData);
+    
+    // Log all quality indicators in the apiData
+    console.log('Quality indicators in apiData:', {
+      qab: apiData.qab,
+      hard_hit: apiData.hard_hit,
+      slap: apiData.slap,
+      bunt: apiData.bunt,
+      sac: apiData.sac
+    });
+    
+    // Log all array fields in the apiData
+    console.log('Array fields in apiData:', {
+      pa_error_on: apiData.pa_error_on,
+      br_error_on: apiData.br_error_on,
+      br_stolen_bases: apiData.br_stolen_bases,
+      base_running_hit_around: apiData.base_running_hit_around
+    });
     
     return apiData;
   };
@@ -1008,11 +1278,18 @@ const PlateAppearanceModal = ({
       pitch_count: Number(editedPA?.pitch_count || 0),
       ball_swinging: Number(editedPA?.ball_swinging || 0),
       
-      // Quality indicators
+      // Quality indicators - treat all quality indicators consistently
       qab: Number(editedPA?.qab || 0),
       hard_hit: Number(editedPA?.hard_hit || 0),
       slap: Number(editedPA?.slap || 0),
+      bunt: Number(editedPA?.bunt || 0),
       sac: Number(editedPA?.sac || 0),
+      
+      // Array fields - ensure all array fields are included
+      pa_error_on: Array.isArray(editedPA?.pa_error_on) ? editedPA.pa_error_on : [],
+      br_error_on: Array.isArray(editedPA?.br_error_on) ? editedPA.br_error_on : [],
+      br_stolen_bases: Array.isArray(editedPA?.br_stolen_bases) ? editedPA.br_stolen_bases : [],
+      base_running_hit_around: Array.isArray(editedPA?.base_running_hit_around) ? editedPA.base_running_hit_around : [],
       
       // Other fields
       wild_pitch: Number(editedPA?.wild_pitch || 0),
@@ -1020,6 +1297,26 @@ const PlateAppearanceModal = ({
       late_swings: Number(editedPA?.late_swings || 0),
       rbi: Number(editedPA?.rbi || 0)
     };
+    
+    // Log the data being displayed in the JSON view
+    console.log('Data being displayed in JSON view:', allFields);
+    
+    // Log all quality indicators in the JSON view
+    console.log('Quality indicators in JSON view:', {
+      qab: allFields.qab,
+      hard_hit: allFields.hard_hit,
+      slap: allFields.slap,
+      bunt: allFields.bunt,
+      sac: allFields.sac
+    });
+    
+    // Log all array fields in the JSON view
+    console.log('Array fields in JSON view:', {
+      pa_error_on: allFields.pa_error_on,
+      br_error_on: allFields.br_error_on,
+      br_stolen_bases: allFields.br_stolen_bases,
+      base_running_hit_around: allFields.base_running_hit_around
+    });
     
     // Convert the data to a formatted JSON string
     const jsonString = JSON.stringify(allFields, null, 2);
@@ -1098,144 +1395,254 @@ const PlateAppearanceModal = ({
     }
   };
 
+  const handleArrayFieldChange = (field: string, value: number) => {
+    setEditedPA(currentPA => {
+      if (!currentPA) return null;
+      
+      // Create a complete copy of the current PA
+      const updatedPA = { ...currentPA };
+      
+      // Check if the base should be disabled based on pa_result
+      if (isBaseDisabled(value, updatedPA.pa_result || 0)) {
+        // If the base should be disabled, don't add it
+        return updatedPA;
+      }
+      
+      // Ensure the field is initialized as an array
+      if (!Array.isArray(updatedPA[field])) {
+        updatedPA[field] = [];
+      }
+      
+      // Handle the array field change
+      const currentArray = [...updatedPA[field]];
+      const index = currentArray.indexOf(value);
+      
+      if (index === -1) {
+        // Add the value if it's not already in the array
+        currentArray.push(value);
+        
+        // Special handling for base_running_hit_around
+        if (field === 'base_running_hit_around') {
+          // Remove this base from br_stolen_bases if it exists there
+          if (Array.isArray(updatedPA.br_stolen_bases)) {
+            updatedPA.br_stolen_bases = updatedPA.br_stolen_bases.filter(base => base !== value);
+          }
+        }
+        
+        // Special handling for br_stolen_bases
+        if (field === 'br_stolen_bases') {
+          // IMMEDIATELY remove this base from base_running_hit_around if it exists there
+          if (Array.isArray(updatedPA.base_running_hit_around)) {
+            // Remove the base from base_running_hit_around
+            updatedPA.base_running_hit_around = updatedPA.base_running_hit_around.filter(base => base !== value);
+            
+            // Also update the legacy field for backward compatibility
+            updatedPA.hit_around_bases = [...updatedPA.base_running_hit_around];
+          }
+        }
+      } else {
+        // Remove the value if it's already in the array
+        currentArray.splice(index, 1);
+        
+        // Special handling for base_running_hit_around
+        if (field === 'base_running_hit_around') {
+          // Also update the legacy field for backward compatibility
+          updatedPA.hit_around_bases = [...currentArray];
+        }
+      }
+      
+      // Update the field with the new array
+      updatedPA[field] = currentArray;
+      
+      // Also update the legacy fields for backward compatibility
+      if (field === 'base_running_hit_around') {
+        updatedPA.hit_around_bases = currentArray;
+      } else if (field === 'br_stolen_bases') {
+        updatedPA.stolen_bases = currentArray;
+      }
+      
+      // Log the arrays for debugging
+      console.log('Before sync: br_stolen_bases =', updatedPA.br_stolen_bases);
+      console.log('Before sync: base_running_hit_around =', updatedPA.base_running_hit_around);
+      
+      // Ensure base_running_hit_around doesn't include any bases that are in br_stolen_bases
+      // This is a redundant check, but it ensures consistency
+      syncBaseRunningHitAroundWithStolenBases(updatedPA);
+      
+      // Hide base 2 in both arrays when pa_result is 2
+      hideBase2WhenPaResultIs2(updatedPA);
+      
+      // Update br_result based on the maximum value among pa_result, stolen_bases, and base_running_hit_around
+      updateBrResult(updatedPA);
+      
+      return updatedPA;
+    });
+  };
+
   if (!isOpen) return null;
   if (!editedPA) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex items-start justify-center min-h-screen pt-16 px-4 pb-20 text-center sm:block sm:p-0">
-        <div className="fixed inset-0 transition-opacity" aria-hidden="true">
-          <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
-        </div>
-        
-        <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-        
-        <div className="inline-block align-top bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-4 sm:align-middle sm:max-w-4xl sm:w-full sm:max-h-[90vh]">
-          <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4 max-h-[calc(95vh-120px)] overflow-y-auto">
-            <div className="sm:flex sm:items-start">
-              <div className="mt-3 text-center sm:mt-0 sm:text-left w-full">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg leading-6 font-medium text-gray-900">
-                    {editedPA?.batter_name 
-                      ? `Edit PA for ${editedPA.batter_name} (#${editedPA.batter_jersey_number || ''})`
-                      : "Edit Plate Appearance"
-                    }
-                  </h3>
-                  
-                  <div className="flex space-x-2">
-                    <button
-                      type="button"
-                      className="inline-flex justify-center rounded-md border border-blue-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-blue-700 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:text-sm"
-                      onClick={displayJsonData}
-                    >
-                      Show JSON
-                    </button>
-                    <button
-                      type="button"
-                      className="inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:text-sm"
-                      onClick={handleSave}
-                    >
-                      Save
-                    </button>
-                    
-                    <button
-                      type="button"
-                      className="inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:text-sm"
-                      onClick={handleClose}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-                
-                {/* Main content area with form and JSON side by side */}
-                <div className="flex flex-row gap-4">
-                  {/* Left side: Form */}
-                  <div className="flex-grow">
-                    <div className="grid grid-cols-12 gap-4 mb-4">
-                      <div className="col-span-5">
-                        <CountSection 
-                          editedPA={editedPA}
-                          incrementCounter={incrementCounter}
-                          decrementCounter={decrementCounter}
-                          handleInputChange={handleInputChange}
-                        />
-                      </div>
-                      
-                      <div className="col-span-7">
-                        <ResultSection 
-                          editedPA={editedPA}
-                          handleInputChange={handleInputChange}
-                          incrementCounter={incrementCounter}
-                          decrementCounter={decrementCounter}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Right side: JSON data */}
-                  <div className={`w-80 transition-all duration-300 ${showJson ? 'opacity-100' : 'opacity-0 w-0'}`}>
-                    {showJson && (
-                      <div className="border rounded p-3 bg-gray-50 h-full">
-                        <div className="flex justify-between items-center mb-2">
-                          <h4 className="font-medium text-sm">JSON Data</h4>
-                          <button
-                            type="button"
-                            className="text-gray-500 hover:text-gray-700"
-                            onClick={() => setShowJson(false)}
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                          </button>
-                        </div>
-                        <div className="bg-gray-900 text-gray-100 p-3 rounded overflow-auto max-h-[660px] text-xs font-mono">
-                          <pre>{jsonData}</pre>
-                        </div>
-                        <div className="mt-2 flex justify-end">
-                          <button
-                            type="button"
-                            className="text-xs text-blue-600 hover:text-blue-800"
-                            onClick={() => {
-                              navigator.clipboard.writeText(jsonData);
-                              alert('JSON copied to clipboard!');
-                            }}
-                          >
-                            Copy to clipboard
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-              </div>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white w-full h-full max-h-screen overflow-y-auto">
+        {/* Mobile-friendly thin header with responsive wrapping */}
+        <div className="bg-gray-100 py-1 px-3 border-b border-gray-200 flex flex-col sm:flex-row items-start sm:items-center justify-between text-xs sticky top-0 z-10">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 w-full">
+            <div className="flex items-center">
+              <span className="font-bold">PA:</span>
+              <span>{editedPA?.inning_number || '-'}</span>
+            </div>
+            <span className="mx-1">-</span>
+            <div className="flex items-center">
+              <span className="font-medium">Inning:</span>
+              <span>{editedPA?.inning_number || '-'}</span>
+            </div>
+            <span className="mx-1">-</span>
+            <div className="flex items-center">
+              <span className="font-medium">Side:</span>
+              <span>{editedPA?.home_or_away || homeOrAway || '-'}</span>
+            </div>
+            <span className="mx-1">-</span>
+            <div className="flex items-center">
+              <span className="font-medium">Order:</span>
+              <span>{editedPA?.order_number || '-'}</span>
+            </div>
+            <span className="mx-1">-</span>
+            <div className="flex items-center">
+              <span className="font-medium">Seq.:</span>
+              <span>{editedPA?.batter_seq_id || '-'}</span>
+            </div>
+            <span className="mx-1">-</span>
+            <div className="flex items-center">
+              <span className="font-medium">#:</span>
+              <span className="truncate max-w-[120px]">{editedPA?.batter_jersey_number || '-'}</span>
+            </div>
+            <span className="mx-1">-</span>
+            <div className="flex items-center">
+              <span className="font-medium">Name:</span>
+              <span className="truncate max-w-[120px]">{editedPA?.batter_name || '-'}</span>
             </div>
           </div>
-          <div className="bg-gray-50 px-4 py-3 border-t border-gray-200">
-            <div className="text-xs text-gray-500 flex flex-wrap gap-x-4">
-              <span><strong>Team:</strong> {editedPA.team_id || teamId || '-'}</span>
-              <span><strong>Game:</strong> {editedPA.game_id || gameId || '-'}</span>
-              <span><strong>Inning:</strong> {editedPA.inning_number || inningNumber || '-'}</span>
-              <span><strong>Side:</strong> {editedPA.home_or_away || homeOrAway || '-'}</span>
-              <span><strong>My Team:</strong> {myTeamHomeOrAway || '-'}</span>
-              <span><strong>Sequence:</strong> {editedPA.batter_seq_id || nextBatterSeqId || '-'}</span>
+        </div>
+        
+        <div className="px-3">
+          <div className="flex justify-between items-center mb-2 mt-2">
+            <h2 className="text-xl font-semibold">
+              Edit
+            </h2>
+            <div className="flex space-x-2">
+              <button
+                type="button"
+                className="inline-flex justify-center rounded-md border border-transparent shadow-sm px-3 py-1.5 bg-emerald-600 text-xs font-medium text-white hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={handleSave}
+                disabled={!editedPA?.pa_why}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" />
+                </svg>
+                Save
+              </button>
+              <button 
+                type="button"
+                className="inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-3 py-1.5 bg-gray-100 text-xs font-medium text-gray-700 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+                onClick={() => onClose()}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+          <div className="flex flex-col lg:flex-row gap-4">
+            {/* Left side: Form */}
+            <div className="flex-grow">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div className="w-full">
+                  <CountSection 
+                    editedPA={editedPA}
+                    incrementCounter={incrementCounter}
+                    decrementCounter={decrementCounter}
+                    handleInputChange={handleInputChange}
+                  />
+                </div>
+                
+                <div className="w-full">
+                  <ResultSection 
+                    editedPA={editedPA}
+                    handleInputChange={handleInputChange}
+                    incrementCounter={incrementCounter}
+                    decrementCounter={decrementCounter}
+                  />
+                </div>
+              </div>
             </div>
             
-            <div className="mt-2 flex justify-between">
-              {pa && (
-                <button
-                  type="button"
-                  className="w-full sm:w-auto inline-flex justify-center items-center rounded-md border border-red-300 shadow-sm px-6 py-3 bg-white text-base font-medium text-red-700 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:text-sm"
-                  onClick={handleDelete}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                  </svg>
-                  Delete Plate Appearance
-                </button>
+            {/* Right side: JSON data */}
+            <div className={`transition-all duration-300 ${showJson ? 'lg:w-80 w-full' : 'w-0 hidden'}`}>
+              {showJson && (
+                <div className="border rounded p-3 bg-gray-50 h-full">
+                  <div className="flex justify-between items-center mb-2">
+                    <h4 className="font-medium text-sm">JSON Data</h4>
+                    <button
+                      type="button"
+                      className="text-gray-500 hover:text-gray-700"
+                      onClick={() => setShowJson(false)}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  <div className="bg-gray-900 text-gray-100 p-3 rounded overflow-auto max-h-[660px] text-xs font-mono">
+                    <pre>{jsonData}</pre>
+                  </div>
+                  <div className="mt-2 flex justify-end">
+                    <button
+                      type="button"
+                      className="text-xs text-blue-600 hover:text-blue-800"
+                      onClick={() => {
+                        navigator.clipboard.writeText(jsonData);
+                        alert('JSON copied to clipboard!');
+                      }}
+                    >
+                      Copy to clipboard
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
+          </div>
+        </div>
+        
+        {/* Footer with buttons */}
+        <div className="flex justify-between items-center mt-2 p-1">
+          <button
+            onClick={() => onClose()}
+            className="px-3 py-1.5 text-sm border border-gray-400 text-gray-500 rounded hover:bg-gray-100"
+          >
+            Cancel
+          </button>
+          <div className="flex space-x-2">
+            <button
+              onClick={handleSave}
+              disabled={!editedPA?.pa_why}
+              className="px-3 py-1.5 text-sm border border-emerald-500 text-emerald-600 rounded hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" />
+              </svg>
+              Save
+            </button>
+            {process.env.NODE_ENV === 'development' && (
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  displayJsonData();
+                  setShowJson(!showJson);
+                }}
+                className="px-3 py-1.5 text-sm border border-gray-400 text-gray-500 rounded hover:bg-gray-100"
+              >
+                {showJson ? 'Hide JSON' : 'Show JSON'}
+              </button>
+            )}
           </div>
         </div>
       </div>
