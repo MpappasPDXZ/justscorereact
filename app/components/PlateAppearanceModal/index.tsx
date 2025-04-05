@@ -167,14 +167,17 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
   const parseArrayField = (value: any, convertToNumbers: boolean = false): any[] => {
     if (!value) return [];
     
-    // If it's already an array, convert values if needed and return
+    // If it's already an array, convert values if needed and filter out zeros and invalid values
     if (Array.isArray(value)) {
-      return convertToNumbers 
+      const processed = convertToNumbers 
         ? value.map(item => typeof item === 'string' ? Number(item) : Number(item))
         : value;
+      
+      // For numeric arrays, filter out zeros and NaN values
+      return convertToNumbers ? processed.filter(item => typeof item === 'number' && item > 0 && !isNaN(item)) : processed;
     }
     
-    // If it's a number, return it as a single-item array
+    // If it's a number, return it as a single-item array (if it's valid)
     if (typeof value === 'number' && !isNaN(value) && value > 0) {
       return [value];
     }
@@ -185,9 +188,12 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
         // Try to parse as JSON
         const parsed = JSON.parse(value);
         if (Array.isArray(parsed)) {
-          return convertToNumbers 
+          const processed = convertToNumbers 
             ? parsed.map(item => typeof item === 'string' ? Number(item) : Number(item))
             : parsed;
+          
+          // For numeric arrays, filter out zeros and NaN values
+          return convertToNumbers ? processed.filter(item => typeof item === 'number' && item > 0 && !isNaN(item)) : processed;
         }
         
         // Handle string format like "['2', '3', '4']"
@@ -196,13 +202,19 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
           const cleanedStr = value.replace(/^\[|\]$/g, '').replace(/'/g, '').replace(/"/g, '');
           if (cleanedStr.trim() === '') return [];
           const items = cleanedStr.split(',').map(item => item.trim());
-          return convertToNumbers ? items.map(item => Number(item)) : items;
+          const processed = convertToNumbers ? items.map(item => Number(item)) : items;
+          
+          // For numeric arrays, filter out zeros and NaN values
+          return convertToNumbers ? processed.filter(item => typeof item === 'number' && item > 0 && !isNaN(item)) : processed;
         }
         
         // Handle comma-separated values
         if (value.includes(',')) {
           const items = value.split(',').map(item => item.trim());
-          return convertToNumbers ? items.map(item => Number(item)) : items;
+          const processed = convertToNumbers ? items.map(item => Number(item)) : items;
+          
+          // For numeric arrays, filter out zeros and NaN values
+          return convertToNumbers ? processed.filter(item => typeof item === 'number' && item > 0 && !isNaN(item)) : processed;
         }
         
         // Try to convert to number directly
@@ -211,14 +223,20 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
         
         // Single value
         const result = [value];
-        return convertToNumbers ? result.map(item => Number(item)) : result;
+        const processed = convertToNumbers ? result.map(item => Number(item)) : result;
+        
+        // For numeric arrays, filter out zeros and NaN values
+        return convertToNumbers ? processed.filter(item => typeof item === 'number' && item > 0 && !isNaN(item)) : processed;
       } catch (e) {
         // If parsing fails, return as a single-item array
         if (value.includes('[') && value.includes(']')) {
           const cleanedStr = value.replace(/^\[|\]$/g, '').replace(/'/g, '').replace(/"/g, '');
           if (cleanedStr.trim() === '') return [];
           const items = cleanedStr.split(',').map(item => item.trim());
-          return convertToNumbers ? items.map(item => Number(item)) : items;
+          const processed = convertToNumbers ? items.map(item => Number(item)) : items;
+          
+          // For numeric arrays, filter out zeros and NaN values
+          return convertToNumbers ? processed.filter(item => typeof item === 'number' && item > 0 && !isNaN(item)) : processed;
         }
         
         // Try to convert to number directly
@@ -226,7 +244,10 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
         if (!isNaN(num) && num > 0) return [num];
         
         const result = [value];
-        return convertToNumbers ? result.map(item => Number(item)) : result;
+        const processed = convertToNumbers ? result.map(item => Number(item)) : result;
+        
+        // For numeric arrays, filter out zeros and NaN values
+        return convertToNumbers ? processed.filter(item => typeof item === 'number' && item > 0 && !isNaN(item)) : processed;
       }
     }
     
@@ -636,7 +657,7 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
     // Empty useEffect
   }, [editedPA]);
 
-  const handleInputChange = (field: string, value: any) => {
+  const handleInputChange = (field: string, value: any, fromFoul?: boolean) => {
     setEditedPA(prev => {
       if (!prev) return null;
       
@@ -728,8 +749,8 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
         const currentTotal = currentWatching + currentSwinging + currentUnsure;
         
         // If the new total is different from the current sum of individual strike types,
-        // we need to adjust the individual types
-        if (newStrikesTotal !== currentTotal) {
+        // we need to adjust the individual types, UNLESS this came from a foul ball
+        if (newStrikesTotal !== currentTotal && !fromFoul) {
           if (newStrikesTotal > currentTotal) {
             // If we're increasing total strikes, add the difference to strikes_unsure
             updated.strikes_unsure = currentUnsure + (newStrikesTotal - currentTotal);
@@ -777,28 +798,38 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
         if (Number(value) === 4) {
           const paResult = updated.pa_result || 0;
           
-          // Create an array of bases between pa_result and br_result (inclusive)
-          const basesToAdd = [];
-          for (let base = paResult + 1; base <= 4; base++) {
-            basesToAdd.push(base);
-          }
-          
-          // Set base_running_hit_around to include these bases
-          if (basesToAdd.length > 0) {
-            // Ensure base_running_hit_around is initialized as an array
-            if (!Array.isArray(updated.base_running_hit_around)) {
-              updated.base_running_hit_around = [];
+          // Only add bases if pa_result is less than br_result
+          if (paResult < 4) {
+            // Create an array of bases between pa_result and br_result (inclusive)
+            const basesToAdd = [];
+            for (let base = paResult + 1; base <= 4; base++) {
+              basesToAdd.push(base);
             }
             
-            // Add each base to base_running_hit_around if it's not already there
-            basesToAdd.forEach(base => {
-              if (!updated.base_running_hit_around?.includes(base)) {
-                updated.base_running_hit_around?.push(base);
+            // Set base_running_hit_around to include these bases
+            if (basesToAdd.length > 0) {
+              // Ensure base_running_hit_around is initialized as an array
+              if (!Array.isArray(updated.base_running_hit_around)) {
+                updated.base_running_hit_around = [];
               }
-            });
-            
-            // Also update the legacy field for backward compatibility
-            updated.hit_around_bases = [...(updated.base_running_hit_around || [])];
+              
+              // Add each base to base_running_hit_around if it's not already there
+              // and not in br_stolen_bases
+              basesToAdd.forEach(base => {
+                // Check if we already have this base in either array
+                const inHitAround = updated.base_running_hit_around?.includes(base);
+                const inStolenBases = Array.isArray(updated.br_stolen_bases) && 
+                                      updated.br_stolen_bases.includes(base);
+                
+                // Only add to base_running_hit_around if not already there and not in stolen bases
+                if (!inHitAround && !inStolenBases) {
+                  updated.base_running_hit_around?.push(base);
+                }
+              });
+              
+              // Also update the legacy field for backward compatibility
+              updated.hit_around_bases = [...(updated.base_running_hit_around || [])];
+            }
           }
           
           // Ensure base_running_hit_around doesn't include any bases that are in br_stolen_bases
@@ -810,6 +841,21 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
       } else {
         // For any other field, just set the value directly
         updated[field] = value;
+      }
+      
+      // Update strikes_before_play when individual strike types change
+      if (field === 'strikes_watching' || field === 'strikes_swinging' || field === 'strikes_unsure') {
+        const watchingStrikes = updated.strikes_watching || 0;
+        const swingingStrikes = updated.strikes_swinging || 0;
+        const unsureStrikes = updated.strikes_unsure || 0;
+        
+        // Calculate the total number of strikes (limit to maximum of 2)
+        const totalStrikes = Math.min(2, watchingStrikes + swingingStrikes + unsureStrikes);
+        
+        // Update strikes_before_play if it's different from the calculated total
+        if (updated.strikes_before_play !== totalStrikes) {
+          updated.strikes_before_play = totalStrikes;
+        }
       }
       
       // Always recalculate pitch_count
@@ -872,6 +918,32 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
     // Also update the legacy field for backward compatibility
     updatedPA.hit_around_bases = [...updatedPA.base_running_hit_around];
     
+    // If pa_result < br_result and br_result is 4, ensure all bases between pa_result and br_result
+    // are either in br_stolen_bases or base_running_hit_around
+    const paResult = updatedPA.pa_result || 0;
+    const brResult = updatedPA.br_result || 0;
+    
+    if (paResult < brResult && brResult === 4) {
+      // Go through all bases between pa_result and br_result
+      for (let base = paResult + 1; base <= brResult; base++) {
+        // Skip base 2 if pa_result is 2 (special case)
+        if (paResult === 2 && base === 2) {
+          continue;
+        }
+        
+        // Check if the base is accounted for in either array
+        const inStolenBases = updatedPA.br_stolen_bases.includes(base);
+        const inHitAround = updatedPA.base_running_hit_around.includes(base);
+        
+        // If not in either array, add to base_running_hit_around
+        if (!inStolenBases && !inHitAround) {
+          updatedPA.base_running_hit_around.push(base);
+        }
+      }
+      
+      // Also update the legacy field for backward compatibility
+      updatedPA.hit_around_bases = [...updatedPA.base_running_hit_around];
+    }
   };
 
   // Helper function to hide base 2 in both br_stolen_bases and base_running_hit_around when pa_result is 2
@@ -1270,6 +1342,33 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
         if (field === 'base_running_hit_around') {
           // Also update the legacy field for backward compatibility
           updatedPA.hit_around_bases = [...currentArray];
+        }
+        
+        // Special handling when removing a stolen base
+        // If br_result is 4 and pa_result < 4, we need to put the base back into base_running_hit_around
+        if (field === 'br_stolen_bases') {
+          const paResult = updatedPA.pa_result || 0;
+          const brResult = updatedPA.br_result || 0;
+          
+          if (paResult < 4 && brResult === 4) {
+            // Check if the base is between pa_result and br_result
+            if (value > paResult && value <= brResult) {
+              // Ensure base_running_hit_around is initialized as an array
+              if (!Array.isArray(updatedPA.base_running_hit_around)) {
+                updatedPA.base_running_hit_around = [];
+              }
+              
+              // Check if the base is not already in base_running_hit_around
+              if (!updatedPA.base_running_hit_around.includes(value)) {
+                // Add the base to base_running_hit_around
+                updatedPA.base_running_hit_around.push(value);
+                // Sort the array for consistency
+                updatedPA.base_running_hit_around.sort((a: number, b: number) => a - b);
+                // Update the legacy field
+                updatedPA.hit_around_bases = [...updatedPA.base_running_hit_around];
+              }
+            }
+          }
         }
       }
       

@@ -57,7 +57,10 @@ const ResultSection = ({
   const basesReached = parseInt(editedPA.bases_reached || '0');
   
   // Check for base running errors
-  const brErrorsExist = editedPA.br_error_on && editedPA.br_error_on.length > 0 && editedPA.br_error_on.some(err => err);
+  const brErrorsExist = editedPA.br_error_on && 
+                       Array.isArray(editedPA.br_error_on) && 
+                       editedPA.br_error_on.length > 0 && 
+                       editedPA.br_error_on.some(pos => pos > 0);
   
   // Update errorsOpen when relevant conditions change
   useEffect(() => {
@@ -80,16 +83,16 @@ const ResultSection = ({
   const isErrorOnPosition = (errorOn: any, position: string | number): boolean => {
     if (!errorOn) return false;
     
-    const positionStr = position.toString();
-    
-    // Handle string type (comma-separated values)
-    if (typeof errorOn === 'string') {
-      return errorOn.split(',').map(p => p.trim()).includes(positionStr);
-    }
+    const positionNum = Number(position);
     
     // Handle array type
     if (Array.isArray(errorOn)) {
-      return errorOn.some(p => p.toString() === positionStr);
+      return errorOn.some(p => Number(p) === positionNum);
+    }
+    
+    // Handle string type (comma-separated values)
+    if (typeof errorOn === 'string') {
+      return errorOn.split(',').map(p => Number(p.trim())).includes(positionNum);
     }
     
     return false;
@@ -734,45 +737,7 @@ const ResultSection = ({
           )}
         </div>
         
-        {/* Final Base section - Collapsible, only shown if Bases Reached > 0 */}
-        {basesReached > 0 && (
-          <div className="mb-3">
-            <CollapsibleHeader 
-              title="Final Base" 
-              isOpen={finalBaseOpen} 
-              onToggle={() => setFinalBaseOpen(!finalBaseOpen)} 
-            />
-            
-            {finalBaseOpen && (
-              <div className="mt-2 space-y-3">
-                <div className="flex items-start">
-                  <span className="text-sm text-gray-700 mr-2 w-16">Base:</span>
-                  <div className="flex space-x-1">
-                    {[0, 1, 2, 3, 4].map(base => {
-                      // Determine color based on current value
-                      let bgColor = editedPA.final_base === base ? 'bg-indigo-600' : 'bg-gray-200';
-                      let textColor = editedPA.final_base === base ? 'text-white' : 'text-gray-700';
-                      
-                      return (
-                        <button
-                          key={`final-base-${base}`}
-                          type="button"
-                          onClick={() => handleInputChange('final_base', base)}
-                          className={`w-[27.27px] h-[27.27px] rounded-full flex items-center justify-center text-xs ${bgColor} ${textColor} hover:bg-opacity-90`}
-                          title={`Final Base ${base}`}
-                        >
-                          {base}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Collapsible Base Running Section */}
+        {/* Base Running Section */}
         <div className="mb-3">
           <CollapsibleHeader 
             title="Base Running" 
@@ -782,6 +747,66 @@ const ResultSection = ({
           
           {baseRunningOpen && (
             <div className="grid grid-cols-1 gap-2 mt-2">
+              {/* BR Result (End Base) - Moved from PA Result section */}
+              {basesReached > 0 && (
+                <div className="flex items-start">
+                  <span className="text-sm text-gray-700 mr-2 w-12">End:</span>
+                  <div className="flex space-x-1">
+                    {[0, 1, 2, 3, 4].map(base => {
+                      // Determine color based on current value
+                      let buttonStyle = '';
+                      if (editedPA.br_result === base) {
+                        buttonStyle = 'bg-indigo-600 text-white';
+                      } else {
+                        buttonStyle = 'bg-gray-200 text-gray-700 hover:bg-gray-300';
+                      }
+                      
+                      return (
+                        <div
+                          key={`br-result-${base}`}
+                          onClick={() => {
+                            // Update br_result
+                            handleInputChange('br_result', base);
+                            
+                            // Auto-select hit around bases when going home (4) from a lower pa_result
+                            if (base === 4 && editedPA.pa_result < 4) {
+                              // Get the current pa_result
+                              const paResult = editedPA.pa_result || 0;
+                              
+                              // Create an array of all bases between pa_result and br_result (4)
+                              const basesToAdd = [];
+                              for (let b = paResult + 1; b <= 4; b++) {
+                                // Skip base 2 if pa_result is 2 (special case)
+                                if (paResult === 2 && b === 2) continue;
+                                basesToAdd.push(b);
+                              }
+                              
+                              // Get current arrays
+                              const currentHitAround = safeArray(editedPA.base_running_hit_around, 'base_running_hit_around');
+                              const stolenBases = safeArray(editedPA.stolen_bases, 'stolen_bases');
+                              
+                              // Don't add bases that are already in stolen bases
+                              const basesToAddFiltered = basesToAdd.filter(b => !stolenBases.includes(b));
+                              
+                              // Combine with new bases (avoiding duplicates)
+                              const newHitAround = [...new Set([...currentHitAround, ...basesToAddFiltered])];
+                              
+                              // Update both hit_around_bases and base_running_hit_around
+                              handleInputChange('hit_around_bases', newHitAround);
+                              handleInputChange('base_running_hit_around', newHitAround);
+                            }
+                          }}
+                          className={`w-[27.27px] h-[27.27px] rounded-full flex items-center justify-center cursor-pointer text-xs ${buttonStyle}`}
+                          title={`Final Base ${base}`}
+                        >
+                          {base}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Stolen Bases */}
               <div className="flex items-start">
                 <span className="text-sm text-gray-700 mr-2 w-12">Stole:</span>
@@ -988,9 +1013,36 @@ const ResultSection = ({
                         <button 
                           key={`pa-error-${pos}`}
                           type="button"
-                          onClick={() => handleInputChange('pa_error', pos.toString())}
+                          onClick={() => {
+                            // Get current pa_error_on array or initialize if doesn't exist
+                            const currentErrors = Array.isArray(editedPA.pa_error_on) ? [...editedPA.pa_error_on] : [];
+                            
+                            // Check if position already exists in array
+                            const posExists = currentErrors.includes(pos);
+                            
+                            // Toggle the position in the array
+                            let newErrors;
+                            if (posExists) {
+                              // Remove if already exists
+                              newErrors = currentErrors.filter(p => p !== pos);
+                            } else {
+                              // Add if doesn't exist
+                              newErrors = [...currentErrors, pos];
+                            }
+                            
+                            // Update pa_error_on
+                            handleInputChange('pa_error_on', newErrors);
+                            
+                            // Also update the single pa_error for backward compatibility
+                            if (newErrors.length > 0) {
+                              handleInputChange('pa_error', newErrors[0].toString());
+                            } else {
+                              handleInputChange('pa_error', '');
+                            }
+                          }}
                           className={`w-[27.27px] h-[27.27px] flex items-center justify-center text-xs ${
-                            editedPA.pa_error === pos.toString() 
+                            editedPA.pa_error_on && Array.isArray(editedPA.pa_error_on) && 
+                            editedPA.pa_error_on.includes(pos)
                               ? 'bg-white text-indigo-600 border border-indigo-600' 
                               : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                           }`}
@@ -1007,9 +1059,36 @@ const ResultSection = ({
                         <button 
                           key={`pa-error-${pos}`}
                           type="button"
-                          onClick={() => handleInputChange('pa_error', pos.toString())}
+                          onClick={() => {
+                            // Get current pa_error_on array or initialize if doesn't exist
+                            const currentErrors = Array.isArray(editedPA.pa_error_on) ? [...editedPA.pa_error_on] : [];
+                            
+                            // Check if position already exists in array
+                            const posExists = currentErrors.includes(pos);
+                            
+                            // Toggle the position in the array
+                            let newErrors;
+                            if (posExists) {
+                              // Remove if already exists
+                              newErrors = currentErrors.filter(p => p !== pos);
+                            } else {
+                              // Add if doesn't exist
+                              newErrors = [...currentErrors, pos];
+                            }
+                            
+                            // Update pa_error_on
+                            handleInputChange('pa_error_on', newErrors);
+                            
+                            // Also update the single pa_error for backward compatibility
+                            if (newErrors.length > 0) {
+                              handleInputChange('pa_error', newErrors[0].toString());
+                            } else {
+                              handleInputChange('pa_error', '');
+                            }
+                          }}
                           className={`w-[27.27px] h-[27.27px] flex items-center justify-center text-xs ${
-                            editedPA.pa_error === pos.toString() 
+                            editedPA.pa_error_on && Array.isArray(editedPA.pa_error_on) && 
+                            editedPA.pa_error_on.includes(pos)
                               ? 'bg-white text-indigo-600 border border-indigo-600' 
                               : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                           }`}
@@ -1035,27 +1114,28 @@ const ResultSection = ({
                           key={`br-error-${pos}`}
                           type="button"
                           onClick={() => {
-                            // Manage the array of base running errors
-                            const current = [...(editedPA.br_error_on || [])];
+                            // Get current br_error_on array or initialize if doesn't exist
+                            const currentErrors = Array.isArray(editedPA.br_error_on) ? [...editedPA.br_error_on] : [];
                             
-                            // Find the index of the position in the array
-                            const posIndex = parseInt(pos.toString()) - 1;
+                            // Check if position already exists in array
+                            const posExists = currentErrors.includes(pos);
                             
-                            // Toggle the value at that index (true/false)
-                            // If array is too short, extend it with undefined values
-                            while (current.length <= posIndex) {
-                              current.push(0);
+                            // Toggle the position in the array
+                            let newErrors;
+                            if (posExists) {
+                              // Remove if already exists
+                              newErrors = currentErrors.filter(p => p !== pos);
+                            } else {
+                              // Add if doesn't exist
+                              newErrors = [...currentErrors, pos];
                             }
                             
-                            // Toggle the value (0 for false, 1 for true)
-                            current[posIndex] = current[posIndex] ? 0 : 1;
-                            
-                            handleInputChange('br_error_on', current);
+                            // Update br_error_on
+                            handleInputChange('br_error_on', newErrors);
                           }}
                           className={`w-[27.27px] h-[27.27px] flex items-center justify-center cursor-pointer text-xs ${
-                            editedPA.br_error_on && 
-                            editedPA.br_error_on.length > pos-1 && 
-                            editedPA.br_error_on[pos-1] 
+                            editedPA.br_error_on && Array.isArray(editedPA.br_error_on) && 
+                            editedPA.br_error_on.includes(pos)
                               ? 'bg-white text-indigo-600 border border-indigo-600' 
                               : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                           }`}
@@ -1073,27 +1153,28 @@ const ResultSection = ({
                           key={`br-error-${pos}`}
                           type="button"
                           onClick={() => {
-                            // Manage the array of base running errors
-                            const current = [...(editedPA.br_error_on || [])];
+                            // Get current br_error_on array or initialize if doesn't exist
+                            const currentErrors = Array.isArray(editedPA.br_error_on) ? [...editedPA.br_error_on] : [];
                             
-                            // Find the index of the position in the array
-                            const posIndex = parseInt(pos.toString()) - 1;
+                            // Check if position already exists in array
+                            const posExists = currentErrors.includes(pos);
                             
-                            // Toggle the value at that index (true/false)
-                            // If array is too short, extend it with undefined values
-                            while (current.length <= posIndex) {
-                              current.push(0);
+                            // Toggle the position in the array
+                            let newErrors;
+                            if (posExists) {
+                              // Remove if already exists
+                              newErrors = currentErrors.filter(p => p !== pos);
+                            } else {
+                              // Add if doesn't exist
+                              newErrors = [...currentErrors, pos];
                             }
                             
-                            // Toggle the value (0 for false, 1 for true)
-                            current[posIndex] = current[posIndex] ? 0 : 1;
-                            
-                            handleInputChange('br_error_on', current);
+                            // Update br_error_on
+                            handleInputChange('br_error_on', newErrors);
                           }}
-                          className={`w-[27.27px] h-[27.27px] flex items-center justify-center text-xs ${
-                            editedPA.br_error_on && 
-                            editedPA.br_error_on.length > pos-1 && 
-                            editedPA.br_error_on[pos-1] 
+                          className={`w-[27.27px] h-[27.27px] flex items-center justify-center cursor-pointer text-xs ${
+                            editedPA.br_error_on && Array.isArray(editedPA.br_error_on) && 
+                            editedPA.br_error_on.includes(pos)
                               ? 'bg-white text-indigo-600 border border-indigo-600' 
                               : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                           }`}

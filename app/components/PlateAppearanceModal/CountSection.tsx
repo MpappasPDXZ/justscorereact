@@ -5,7 +5,7 @@ interface CountSectionProps {
   editedPA: ScoreBookEntry;
   incrementCounter: (field: string, value?: number) => void;
   decrementCounter: (field: string, value?: number) => void;
-  handleInputChange?: (field: string, value: any) => void;
+  handleInputChange?: (field: string, value: any, fromFoul?: boolean) => void;
 }
 
 const CountSection = ({ editedPA, incrementCounter, decrementCounter, handleInputChange }: CountSectionProps) => {
@@ -26,39 +26,23 @@ const CountSection = ({ editedPA, incrementCounter, decrementCounter, handleInpu
     }
   };
   
-  // Handle strike increment with special logic for unsure strikes
-  const handleStrikeIncrement = () => {
-    incrementCounter('strikes_unsure');
-  };
-
-  // Add a handler for strike decrement that also decreases unsure strikes
-  const handleStrikeDecrement = () => {
-    // Only decrement unsure if there are any unsure strikes
-    if ((editedPA.strikes_unsure || 0) > 0) {
-      decrementCounter('strikes_unsure');
-    } 
-    // If no unsure strikes, try to decrement other types in this order: swinging, watching
-    else if ((editedPA.strikes_swinging || 0) > 0) {
-      decrementCounter('strikes_swinging');
-    }
-    else if ((editedPA.strikes_watching || 0) > 0) {
-      decrementCounter('strikes_watching');
-    }
-  };
-
   // Handle foul increment with special logic for two-strike situations
   const handleFoulIncrement = () => {
-    // Always increment the fouls counter
+    // Always increment the fouls counter for total pitch count
     incrementCounter('fouls');
     
-    // Get current strikes
-    const strikes = editedPA.strikes_before_play || 0;
+    const currentStrikes = editedPA.strikes_before_play || 0;
     
-    // If already at 2 strikes, increment fouls_after_two_strikes
-    if (strikes >= 2) {
+    // If we have fewer than 2 strikes, increment strikes_before_play
+    if (currentStrikes < 2) {
+      // Use a special handler to prevent strikes_unsure from being incremented
+      // by setting a fromFoul flag to true
+      handleInputChange?.('strikes_before_play', currentStrikes + 1, true);
+    }
+    // If already at 2 strikes, increment fouls_after_two_strikes but don't add to strikes_before_play
+    else if (currentStrikes >= 2) {
       incrementCounter('fouls_after_two_strikes');
     }
-    // No need to increment strikes_before_play - it will be calculated automatically
   };
 
   // Handle foul decrement with special logic for two-strike situations
@@ -66,19 +50,84 @@ const CountSection = ({ editedPA, incrementCounter, decrementCounter, handleInpu
     // Only proceed if there are fouls to decrement
     if ((editedPA.fouls || 0) <= 0) return;
     
-    // Get current strikes and fouls
-    const strikes = editedPA.strikes_before_play || 0;
-    const foulsAfterTwoStrikes = editedPA.fouls_after_two_strikes || 0;
-    
     // Decrement the fouls counter
     decrementCounter('fouls');
     
-    // If we have fouls after two strikes, decrement that first
+    const currentStrikes = editedPA.strikes_before_play || 0;
+    const foulsAfterTwoStrikes = editedPA.fouls_after_two_strikes || 0;
+    
+    // If we have fouls after two strikes, decrement that too
     if (foulsAfterTwoStrikes > 0) {
       decrementCounter('fouls_after_two_strikes');
     }
-    // No need to decrement strikes_before_play - it will be calculated automatically
+    // If current strikes is 1 or 2 and no fouls_after_two_strikes, decrement strikes_before_play
+    else if (currentStrikes > 0 && currentStrikes <= 2) {
+      // Use special handler with fromFoul flag to prevent auto-adjusting strikes_unsure
+      handleInputChange?.('strikes_before_play', currentStrikes - 1, true);
+    }
   };
+
+  // Handle strike increment with special logic for unsure strikes
+  const handleStrikeIncrement = () => {
+    // Get current strikes
+    const strikes = editedPA.strikes_before_play || 0;
+    
+    // Only proceed if we have fewer than 2 strikes
+    if (strikes < 2) {
+      // Increment strikes_before_play directly - this impacts pitch count
+      handleInputChange?.('strikes_before_play', strikes + 1);
+      
+      // Increment strikes_unsure - represents generic strikes that aren't watching, swinging, ball_swinging, or fouls
+      // This is the default strike type when incrementing from the main strike counter
+      handleInputChange?.('strikes_unsure', (editedPA.strikes_unsure || 0) + 1);
+    }
+  };
+
+  // Handle strike decrement that also decreases unsure strikes
+  const handleStrikeDecrement = () => {
+    // Get current strikes
+    const strikes = editedPA.strikes_before_play || 0;
+    
+    // Only proceed if we have strikes to decrement
+    if (strikes > 0) {
+      // Decrement strikes_before_play directly - this impacts pitch count
+      handleInputChange?.('strikes_before_play', strikes - 1);
+      
+      // Prioritize decrementing in this order: unsure, swinging, watching
+      // This ensures we properly track which type of strike is being removed
+      if ((editedPA.strikes_unsure || 0) > 0) {
+        handleInputChange?.('strikes_unsure', (editedPA.strikes_unsure || 0) - 1);
+      } 
+      else if ((editedPA.strikes_swinging || 0) > 0) {
+        handleInputChange?.('strikes_swinging', (editedPA.strikes_swinging || 0) - 1);
+      }
+      else if ((editedPA.strikes_watching || 0) > 0) {
+        handleInputChange?.('strikes_watching', (editedPA.strikes_watching || 0) - 1);
+      }
+    }
+  };
+
+  // Calculate the sum of all strike types for baseball foul logic
+  const calculateTotalStrikes = () => {
+    return (
+      (editedPA.strikes_unsure || 0) + 
+      (editedPA.strikes_watching || 0) + 
+      (editedPA.strikes_swinging || 0) + 
+      (editedPA.ball_swinging || 0)
+    );
+  };
+
+  /**
+   * Baseball Count Handling Logic:
+   * - strikes_before_play is affected by the main strikes [+] and [-] buttons
+   * - specific strike types (watching, swinging, ball_swinging) also affect strikes_before_play when incremented/decremented
+   * - strikes_before_play is also affected by fouls (special baseball rule):
+   *   - When strikes_before_play < 2, a foul ball adds 1 to strikes_before_play
+   *   - When strikes_before_play = 2, a foul ball does NOT add to strikes_before_play
+   *   - Removing a foul decrements strikes_before_play if it had previously incremented it
+   * - Each strike type has its own independent counter that's updated separately
+   * - strikes_unsure is only incremented by the main strikes [+] button, not by other strike types
+   */
 
   // Updated button styles with consistent gray for all subtract buttons
   const redButtonStyle = "px-1.5 py-0.5 text-xs border border-red-500 text-red-600 rounded hover:bg-red-50";
@@ -158,7 +207,7 @@ const CountSection = ({ editedPA, incrementCounter, decrementCounter, handleInpu
               </div>
             </div>
             
-            <div className="flex space-x-1">
+            <div className="flex space-x-1 ml-auto">
               <button 
                 onClick={handleBallIncrement}
                 disabled={balls >= 3}
@@ -174,7 +223,10 @@ const CountSection = ({ editedPA, incrementCounter, decrementCounter, handleInpu
                 -
               </button>
               <button 
-                onClick={() => handleInputChange?.('balls_before_play', 0)}
+                onClick={() => {
+                  // Clear only balls count
+                  handleInputChange?.('balls_before_play', 0);
+                }}
                 disabled={balls <= 0}
                 className="px-2 py-1 text-sm border border-gray-400 text-gray-500 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed ml-1"
                 title="Clear balls count"
@@ -209,7 +261,7 @@ const CountSection = ({ editedPA, incrementCounter, decrementCounter, handleInpu
               </div>
             </div>
             
-            <div className="flex space-x-1">
+            <div className="flex space-x-1 ml-auto">
               <button 
                 onClick={handleStrikeIncrement}
                 disabled={strikes >= 2}
@@ -226,11 +278,14 @@ const CountSection = ({ editedPA, incrementCounter, decrementCounter, handleInpu
               </button>
               <button 
                 onClick={() => {
-                  // Clear all strike-related counts
+                  // Clear only strike-related counts
                   handleInputChange?.('strikes_before_play', 0);
                   handleInputChange?.('strikes_watching', 0);
                   handleInputChange?.('strikes_swinging', 0);
                   handleInputChange?.('strikes_unsure', 0);
+                  handleInputChange?.('ball_swinging', 0);
+                  handleInputChange?.('fouls', 0);
+                  handleInputChange?.('fouls_after_two_strikes', 0);
                 }}
                 disabled={strikes <= 0}
                 className="px-2 py-1 text-sm border border-gray-400 text-gray-500 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed ml-1"
@@ -250,73 +305,163 @@ const CountSection = ({ editedPA, incrementCounter, decrementCounter, handleInpu
             onToggle={() => setStrikeBreakdownOpen(!strikeBreakdownOpen)} 
           />
           {strikeBreakdownOpen && (
-            <div className="mt-2 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <button 
-                    onClick={() => incrementCounter('strikes_watching')}
-                    className="px-2 py-1 text-sm border border-purple-500 text-purple-600 rounded hover:bg-purple-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    +
-                  </button>
-                  <button 
-                    onClick={() => decrementCounter('strikes_watching')}
-                    className="px-2 py-1 text-sm border border-gray-400 text-gray-500 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    -
-                  </button>
-                  <span className="text-sm text-gray-700">Watching:</span>
-                  <span className="font-bold">{editedPA.strikes_watching || 0}</span>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              {/* Watching */}
+              <div className="flex items-center justify-end">
+                <div className="flex items-center mr-2">
+                  <span className="text-sm text-gray-700" title="Strike not swinging">Watching:</span>
+                  <span className="font-bold ml-1">{editedPA.strikes_watching || 0}</span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <button 
-                    onClick={() => incrementCounter('strikes_swinging')}
+                    onClick={() => {
+                      // Increment the specific type counter
+                      incrementCounter('strikes_watching');
+                      // Also increment strikes_before_play if < 2
+                      const currentStrikes = editedPA.strikes_before_play || 0;
+                      if (currentStrikes < 2) {
+                        // Use fromFoul=true to prevent auto-adjusting strikes_unsure
+                        handleInputChange?.('strikes_before_play', currentStrikes + 1, true);
+                      }
+                    }}
                     className="px-2 py-1 text-sm border border-purple-500 text-purple-600 rounded hover:bg-purple-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Add watching strike"
                   >
                     +
                   </button>
                   <button 
-                    onClick={() => decrementCounter('strikes_swinging')}
+                    onClick={() => {
+                      // Only decrement if there are strikes to decrement
+                      const watchingStrikes = editedPA.strikes_watching || 0;
+                      if (watchingStrikes > 0) {
+                        decrementCounter('strikes_watching');
+                        // Also decrement strikes_before_play
+                        const currentStrikes = editedPA.strikes_before_play || 0;
+                        if (currentStrikes > 0) {
+                          // Use fromFoul=true to prevent auto-adjusting strikes_unsure
+                          handleInputChange?.('strikes_before_play', currentStrikes - 1, true);
+                        }
+                      }
+                    }}
                     className="px-2 py-1 text-sm border border-gray-400 text-gray-500 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Remove watching strike"
                   >
                     -
                   </button>
-                  <span className="text-sm text-gray-700">Swinging:</span>
-                  <span className="font-bold">{editedPA.strikes_swinging || 0}</span>
                 </div>
               </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <button 
-                    onClick={() => incrementCounter('fouls')}
-                    className="px-2 py-1 text-sm border border-purple-500 text-purple-600 rounded hover:bg-purple-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    +
-                  </button>
-                  <button 
-                    onClick={() => decrementCounter('fouls')}
-                    className="px-2 py-1 text-sm border border-gray-400 text-gray-500 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    -
-                  </button>
-                  <span className="text-sm text-gray-700">Fouls:</span>
-                  <span className="font-bold">{editedPA.fouls || 0}</span>
+              
+              {/* Swinging */}
+              <div className="flex items-center justify-end">
+                <div className="flex items-center mr-2">
+                  <span className="text-sm text-gray-700" title="Strike swinging">Swinging:</span>
+                  <span className="font-bold ml-1">{editedPA.strikes_swinging || 0}</span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <button 
-                    onClick={() => incrementCounter('ball_swinging')}
+                    onClick={() => {
+                      // Increment the specific type counter
+                      incrementCounter('strikes_swinging');
+                      // Also increment strikes_before_play if < 2
+                      const currentStrikes = editedPA.strikes_before_play || 0;
+                      if (currentStrikes < 2) {
+                        // Use fromFoul=true to prevent auto-adjusting strikes_unsure
+                        handleInputChange?.('strikes_before_play', currentStrikes + 1, true);
+                      }
+                    }}
                     className="px-2 py-1 text-sm border border-purple-500 text-purple-600 rounded hover:bg-purple-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Add swinging strike"
                   >
                     +
                   </button>
                   <button 
-                    onClick={() => decrementCounter('ball_swinging')}
+                    onClick={() => {
+                      // Only decrement if there are strikes to decrement
+                      const swingingStrikes = editedPA.strikes_swinging || 0;
+                      if (swingingStrikes > 0) {
+                        decrementCounter('strikes_swinging');
+                        // Also decrement strikes_before_play
+                        const currentStrikes = editedPA.strikes_before_play || 0;
+                        if (currentStrikes > 0) {
+                          // Use fromFoul=true to prevent auto-adjusting strikes_unsure
+                          handleInputChange?.('strikes_before_play', currentStrikes - 1, true);
+                        }
+                      }
+                    }}
                     className="px-2 py-1 text-sm border border-gray-400 text-gray-500 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Remove swinging strike"
                   >
                     -
                   </button>
-                  <span className="text-sm text-gray-700">Ball Swinging:</span>
-                  <span className="font-bold">{editedPA.ball_swinging || 0}</span>
+                </div>
+              </div>
+              
+              {/* Fouls */}
+              <div className="flex items-center justify-end">
+                <div className="flex items-center mr-2">
+                  <span className="text-sm text-gray-700" title="Foul Ball">Fouls:</span>
+                  <span className="font-bold ml-1">{editedPA.fouls || 0}</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <button 
+                    onClick={handleFoulIncrement}
+                    className="px-2 py-1 text-sm border border-purple-500 text-purple-600 rounded hover:bg-purple-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Add foul ball"
+                  >
+                    +
+                  </button>
+                  <button 
+                    onClick={handleFoulDecrement}
+                    className="px-2 py-1 text-sm border border-gray-400 text-gray-500 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Remove foul ball"
+                  >
+                    -
+                  </button>
+                </div>
+              </div>
+              
+              {/* Ball Swinging */}
+              <div className="flex items-center justify-end">
+                <div className="flex items-center mr-2">
+                  <span className="text-sm text-gray-700" title="Swung at a ball that would have been a called ball">Ball Swing:</span>
+                  <span className="font-bold ml-1">{editedPA.ball_swinging || 0}</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <button 
+                    onClick={() => {
+                      // Increment the specific type counter
+                      incrementCounter('ball_swinging');
+                      // Also increment strikes_before_play if < 2
+                      const currentStrikes = editedPA.strikes_before_play || 0;
+                      if (currentStrikes < 2) {
+                        // Use fromFoul=true to prevent auto-adjusting strikes_unsure
+                        handleInputChange?.('strikes_before_play', currentStrikes + 1, true);
+                      }
+                    }}
+                    className="px-2 py-1 text-sm border border-purple-500 text-purple-600 rounded hover:bg-purple-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Add ball swinging"
+                  >
+                    +
+                  </button>
+                  <button 
+                    onClick={() => {
+                      // Only decrement if there are strikes to decrement
+                      const ballSwinging = editedPA.ball_swinging || 0;
+                      if (ballSwinging > 0) {
+                        decrementCounter('ball_swinging');
+                        // Also decrement strikes_before_play
+                        const currentStrikes = editedPA.strikes_before_play || 0;
+                        if (currentStrikes > 0) {
+                          // Use fromFoul=true to prevent auto-adjusting strikes_unsure
+                          handleInputChange?.('strikes_before_play', currentStrikes - 1, true);
+                        }
+                      }
+                    }}
+                    className="px-2 py-1 text-sm border border-gray-400 text-gray-500 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Remove ball swinging"
+                  >
+                    -
+                  </button>
                 </div>
               </div>
             </div>
@@ -332,12 +477,18 @@ const CountSection = ({ editedPA, incrementCounter, decrementCounter, handleInpu
           />
           
           {pitcherCatcherStatsOpen && (
-            <div className="mt-2 space-y-2">
-              <div className="flex items-center justify-between">
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              {/* Wild Pitch */}
+              <div className="flex items-center justify-end">
+                <div className="flex items-center mr-2">
+                  <span className="text-sm text-gray-700" title="Pitch the catcher couldn't reasonably catch">Wild P:</span>
+                  <span className="font-bold ml-1">{editedPA.wild_pitch || 0}</span>
+                </div>
                 <div className="flex items-center space-x-2">
                   <button 
                     onClick={() => incrementCounter('wild_pitch')}
                     className="px-2 py-1 text-sm border border-purple-500 text-purple-600 rounded hover:bg-purple-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Add wild pitch"
                   >
                     +
                   </button>
@@ -345,16 +496,24 @@ const CountSection = ({ editedPA, incrementCounter, decrementCounter, handleInpu
                     onClick={() => decrementCounter('wild_pitch')}
                     className="px-2 py-1 text-sm border border-gray-400 text-gray-500 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={(editedPA.wild_pitch || 0) <= 0}
+                    title="Remove wild pitch"
                   >
                     -
                   </button>
-                  <span className="text-sm text-gray-700">Wild Pitch:</span>
-                  <span className="font-bold">{editedPA.wild_pitch || 0}</span>
+                </div>
+              </div>
+              
+              {/* Passed Ball */}
+              <div className="flex items-center justify-end">
+                <div className="flex items-center mr-2">
+                  <span className="text-sm text-gray-700" title="Catchable pitch that got by the catcher">Pass Ball:</span>
+                  <span className="font-bold ml-1">{editedPA.passed_ball || 0}</span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <button 
                     onClick={() => incrementCounter('passed_ball')}
                     className="px-2 py-1 text-sm border border-purple-500 text-purple-600 rounded hover:bg-purple-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Add passed ball"
                   >
                     +
                   </button>
@@ -362,11 +521,10 @@ const CountSection = ({ editedPA, incrementCounter, decrementCounter, handleInpu
                     onClick={() => decrementCounter('passed_ball')}
                     className="px-2 py-1 text-sm border border-gray-400 text-gray-500 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={(editedPA.passed_ball || 0) <= 0}
+                    title="Remove passed ball"
                   >
                     -
                   </button>
-                  <span className="text-sm text-gray-700">Passed Ball:</span>
-                  <span className="font-bold">{editedPA.passed_ball || 0}</span>
                 </div>
               </div>
             </div>
@@ -382,12 +540,18 @@ const CountSection = ({ editedPA, incrementCounter, decrementCounter, handleInpu
           />
           
           {battingStatsOpen && (
-            <div className="mt-2 space-y-2">
-              <div className="flex items-center justify-between">
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              {/* RBI */}
+              <div className="flex items-center justify-end">
+                <div className="flex items-center mr-2">
+                  <span className="text-sm text-gray-700" title="Runs Batted In - Number of runs scored due to this batter's plate appearance">RBI:</span>
+                  <span className="font-bold ml-1">{editedPA.rbi || 0}</span>
+                </div>
                 <div className="flex items-center space-x-2">
                   <button 
                     onClick={() => incrementCounter('rbi')}
                     className="px-2 py-1 text-sm border border-purple-500 text-purple-600 rounded hover:bg-purple-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Add RBI"
                   >
                     +
                   </button>
@@ -395,16 +559,24 @@ const CountSection = ({ editedPA, incrementCounter, decrementCounter, handleInpu
                     onClick={() => decrementCounter('rbi')}
                     className="px-2 py-1 text-sm border border-gray-400 text-gray-500 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={(editedPA.rbi || 0) <= 0}
+                    title="Remove RBI"
                   >
                     -
                   </button>
-                  <span className="text-sm text-gray-700">RBI:</span>
-                  <span className="font-bold">{editedPA.rbi || 0}</span>
+                </div>
+              </div>
+              
+              {/* Late Swings */}
+              <div className="flex items-center justify-end">
+                <div className="flex items-center mr-2">
+                  <span className="text-sm text-gray-700" title="Swings that were noticeably late on the pitch">Late Swing:</span>
+                  <span className="font-bold ml-1">{editedPA.late_swings || 0}</span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <button 
                     onClick={() => incrementCounter('late_swings')}
                     className="px-2 py-1 text-sm border border-purple-500 text-purple-600 rounded hover:bg-purple-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Add late swing"
                   >
                     +
                   </button>
@@ -412,11 +584,10 @@ const CountSection = ({ editedPA, incrementCounter, decrementCounter, handleInpu
                     onClick={() => decrementCounter('late_swings')}
                     className="px-2 py-1 text-sm border border-gray-400 text-gray-500 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={(editedPA.late_swings || 0) <= 0}
+                    title="Remove late swing"
                   >
                     -
                   </button>
-                  <span className="text-sm text-gray-700">Late Swings:</span>
-                  <span className="font-bold">{editedPA.late_swings || 0}</span>
                 </div>
               </div>
             </div>

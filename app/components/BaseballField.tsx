@@ -48,8 +48,11 @@ const BaseballField = ({
   function determineResult(pa: ScoreBookEntry): string {
     // Special cases for walks and strikeouts - check these first
     const paWhy = pa.pa_why || pa.why_base_reached;
-    if (paWhy === 'BB' || paWhy === 'B' || paWhy === 'HBP') {
+    if (paWhy === 'BB' || paWhy === 'B') {
       return 'BB'; // Always show BB for walks
+    }
+    if (paWhy === 'HBP') {
+      return 'HBP'; // Show HBP for hit by pitch
     }
     if (paWhy === 'K') {
       return 'K'; // Always show K for strikeouts
@@ -458,9 +461,12 @@ const BaseballField = ({
     // Get the display text - align with base path logic
     let displayText = '';
     
-    // Handle walks (BB) first - they always reach first base. BB and HBP are both walks
-    // so we need to check for both
-    if (pa.pa_why === 'BB' || pa.pa_why === 'HBP') {
+    // Handle HBP first
+    if (pa.pa_why === 'HBP') {
+      displayText = 'HBP';
+    }
+    // Handle walks (BB) next
+    else if (pa.pa_why === 'BB' || pa.why_base_reached === 'BB') {
       displayText = 'BB';
     }
     // Handle strikeouts (K) next

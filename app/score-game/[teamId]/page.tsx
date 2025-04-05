@@ -108,9 +108,9 @@ export default function TeamGames() {
       
       // Check if data.games exists and is an array
       if (data && Array.isArray(data.games)) {
-        // Sort games by date (ascending)
+        // Sort games by date (descending - newest first)
         const sortedGames = [...data.games].sort((a, b) => {
-          return new Date(a.event_date).getTime() - new Date(b.event_date).getTime();
+          return new Date(b.event_date).getTime() - new Date(a.event_date).getTime();
         });
         
         // Ensure all games have the correct data types
