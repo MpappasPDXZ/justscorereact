@@ -90,7 +90,6 @@ const BattingOrderTable = ({
       
       // Check global map to see if this request is already in progress
       if (inProgressRequests.get(requestId)) {
-        console.log(`Skipping duplicate request for ${requestId}`);
         return;
       }
       
@@ -99,7 +98,6 @@ const BattingOrderTable = ({
       setLoading(true);
       
       const apiUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/lineup/games/${teamId}/${gameId}/${teamChoice}/order_by_batter`;
-      console.log("Fetching batting order from:", apiUrl);
       
       const response = await fetch(apiUrl, {
         headers: {
@@ -113,7 +111,9 @@ const BattingOrderTable = ({
       inProgressRequests.set(requestId, false);
       
       // Check if component is still mounted
-      if (!componentMountedRef.current) return;
+      if (!componentMountedRef.current) {
+        return;
+      }
       
       if (!response.ok) {
         console.error(`Failed to fetch batting order: ${response.status} ${response.statusText}`);
@@ -122,16 +122,26 @@ const BattingOrderTable = ({
       }
       
       const data = await response.json();
-      setBattingOrderData(data);
-      setLoading(false);
       
-      // Call the callback with the lineup size if available
-      if (data && data.batting_order && onLineupSizeUpdate) {
-        const orderNumbers = Object.keys(data.batting_order);
-        if (orderNumbers.length > 0) {
-          const maxOrder = Math.max(...orderNumbers.map(n => parseInt(n)));
-          onLineupSizeUpdate(maxOrder);
+      // Ensure data is valid before updating state
+      if (data && data.batting_order) {
+        setBattingOrderData(data);
+        
+        // Call the callback with the lineup size if available
+        if (onLineupSizeUpdate) {
+          const orderNumbers = Object.keys(data.batting_order);
+          if (orderNumbers.length > 0) {
+            const maxOrder = Math.max(...orderNumbers.map(n => parseInt(n)));
+            onLineupSizeUpdate(maxOrder);
+          }
         }
+      } else {
+        console.warn("Received invalid batting order data:", data);
+      }
+      
+      // Always set loading to false regardless of data validity
+      if (componentMountedRef.current) {
+        setLoading(false);
       }
     } catch (error) {
       console.error("Error fetching batting order:", error);

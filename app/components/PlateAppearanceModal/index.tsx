@@ -59,6 +59,7 @@ interface ScoreBookEntryStructure {
   teamId: string;
   game_id: string;
   gameId: string;
+  // CRITICAL required fields
   out: number;
   my_team_ha: string;
   // Pitcher and Catcher Stats
@@ -156,6 +157,10 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
       }
       
       const data = await response.json();
+      
+      // Handle the original format from:
+      // /scores/new/{team_id}/{game_id}/{team_choice}/{inning_number}/scorecardgrid_paonly_inningonly/{batter_seq_id}/pa_edit
+      // No need to navigate nested structures - data is directly available
       return data;
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -510,79 +515,73 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
         // Fetch data from the provided endpoint
         fetchPADataFromEndpoint(paEditEndpoint).then(data => {
           if (data) {
-            // Extract the plate appearance data from the nested structure
-            let fetchedPA = null;
+            // Extract array fields from the API response
+            const extractedArrays: Record<string, any[]> = {};
             
-            // Check if the data has the nested structure
-            if (data.plate_appearances && data.plate_appearances[1] && data.plate_appearances[1].rounds && 
-                data.plate_appearances[1].rounds[2] && data.plate_appearances[1].rounds[2].details) {
-              // Use the nested structure
-              fetchedPA = data.plate_appearances[1].rounds[2].details;
-            } else if (data.plate_appearance) {
-              // Fall back to the direct structure
-              fetchedPA = data.plate_appearance;
-            }
+            // Process each array field consistently
+            arrayFields.forEach(field => {
+              extractedArrays[field] = Array.isArray(data[field]) 
+                ? [...data[field]] // Create a copy
+                : [];
+            });
             
-            if (fetchedPA) {
-              // Extract all array fields from the API
-              const extractedArrays: Record<string, any[]> = {};
-              
-              // Process each array field consistently
-              arrayFields.forEach(field => {
-                extractedArrays[field] = Array.isArray(fetchedPA[field]) 
-                  ? [...fetchedPA[field]] // Create a copy
-                  : [];
-              });
-              
-              // Map the fields from the API response to the form state
-              const mappedData = mapAPIResponseToFormState(fetchedPA);
-              if (mappedData) {
-                setEditedPA(currentPA => {
-                  if (!currentPA) return null;
-                  
-                  // Create a complete copy of the current PA
-                  const updatedPA = { ...currentPA };
-                  
-                  // Update with all mapped data
-                  Object.keys(mappedData).forEach(key => {
-                    if (mappedData[key] !== undefined) {
-                      updatedPA[key] = mappedData[key];
-                    }
-                  });
-                  
-                  // Ensure all array fields are explicitly copied from the API data
-                  arrayFields.forEach(field => {
-                    updatedPA[field] = extractedArrays[field];
-                  });
-                  
-                  // Also set the legacy fields for backward compatibility
-                  updatedPA.hit_around_bases = extractedArrays.base_running_hit_around;
-                  updatedPA.stolen_bases = extractedArrays.br_stolen_bases;
-                  updatedPA.br_stolen_bases = extractedArrays.stolen_bases;
-                  
-                  // Explicitly copy count-related fields
-                  updatedPA.fouls = Number(fetchedPA.fouls ?? 0);
-                  updatedPA.ball_swinging = Number(fetchedPA.ball_swinging ?? 0);
-                  updatedPA.strikes_unsure = Number(fetchedPA.strikes_unsure ?? 0);
-                  updatedPA.strikes_watching = Number(fetchedPA.strikes_watching ?? 0);
-                  updatedPA.strikes_swinging = Number(fetchedPA.strikes_swinging ?? 0);
-                  updatedPA.late_swings = Number(fetchedPA.late_swings ?? 0);
-                  
-                  // Ensure all quality indicators are properly set
-                  qualityIndicators.forEach(field => {
-                    updatedPA[field] = fetchedPA[field] !== undefined ? Number(fetchedPA[field]) : 0;
-                  });
-                  
-                  // Convert null to undefined for br_result if needed
-                  if (updatedPA.br_result === null) {
-                    updatedPA.br_result = undefined;
+            // Map the fields from the API response to the form state
+            const mappedData = mapAPIResponseToFormState(data);
+            
+            if (mappedData) {
+              setEditedPA(currentPA => {
+                if (!currentPA) {
+                  return null;
+                }
+                
+                // Create a complete copy of the current PA
+                const updatedPA = { ...currentPA };
+                
+                // Update with all mapped data
+                Object.keys(mappedData).forEach(key => {
+                  if (mappedData[key] !== undefined) {
+                    updatedPA[key] = mappedData[key];
                   }
-                  
-                  return updatedPA;
                 });
-              }
+                
+                // Ensure all array fields are explicitly copied from the API data
+                arrayFields.forEach(field => {
+                  updatedPA[field] = extractedArrays[field];
+                });
+                
+                // Also set the legacy fields for backward compatibility
+                updatedPA.hit_around_bases = extractedArrays.base_running_hit_around;
+                updatedPA.stolen_bases = extractedArrays.br_stolen_bases;
+                
+                // Explicitly copy count-related fields
+                updatedPA.fouls = Number(data.fouls ?? 0);
+                updatedPA.ball_swinging = Number(data.ball_swinging ?? 0);
+                updatedPA.strikes_unsure = Number(data.strikes_unsure ?? 0);
+                updatedPA.strikes_watching = Number(data.strikes_watching ?? 0);
+                updatedPA.strikes_swinging = Number(data.strikes_swinging ?? 0);
+                updatedPA.late_swings = Number(data.late_swings ?? 0);
+                
+                // Ensure all quality indicators are properly set with explicit handling
+                updatedPA.qab = data.qab !== undefined ? Number(data.qab) : 0;
+                updatedPA.hard_hit = data.hard_hit !== undefined ? Number(data.hard_hit) : 0;
+                updatedPA.slap = data.slap !== undefined ? Number(data.slap) : 0;
+                updatedPA.bunt = data.bunt !== undefined ? Number(data.bunt) : 0;
+                updatedPA.sac = data.sac !== undefined ? Number(data.sac) : 0;
+                
+                // Ensure out_at is properly set
+                updatedPA.out_at = data.out_at !== undefined ? Number(data.out_at) : 0;
+                
+                // Convert null to undefined for br_result if needed
+                if (updatedPA.br_result === null) {
+                  updatedPA.br_result = undefined;
+                }
+                
+                return updatedPA;
+              });
             }
           }
+        }).catch(error => {
+          console.error("Error fetching PA data:", error);
         });
       }
     } else if (!isOpen) {
@@ -595,67 +594,81 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
   const mapAPIResponseToFormState = (apiPA: Record<string, any>): Partial<ScoreBookEntry> | null => {
     if (!apiPA) return null;
     
-    // Make explicit conversions to ensure type safety
-    const mappedData: Partial<ScoreBookEntry> = {
-      // Base result fields
-      bases_reached: String(apiPA.pa_result ?? 0),
-      pa_result: Number(apiPA.pa_result ?? 0),
-      why_base_reached: String(apiPA.pa_why ?? ''),
-      pa_why: String(apiPA.pa_why ?? ''),
-      detailed_result: String(apiPA.hit_to ?? 0),
-      hit_to: Number(apiPA.hit_to ?? 0),
+    // Make sure we have the critical fields
+    const orderNumber = Number(apiPA.order_number || pa?.order_number || 1);
+    const battingOrderPosition = Number(apiPA.batting_order_position || orderNumber);
+    
+    // Log the values for debugging
+    console.log(`Mapping API response to form - order_number=${orderNumber}, batting_order_position=${battingOrderPosition}`);
+    
+    // Create a clean form state object
+    const formState: Partial<ScoreBookEntry> = {
+      // Critical fields
+      order_number: orderNumber,
+      batting_order_position: battingOrderPosition,
+      batter_seq_id: apiPA.batter_seq_id,
+      inning_number: apiPA.inning_number,
+      home_or_away: apiPA.home_or_away,
+      team_id: apiPA.team_id,
+      game_id: apiPA.game_id,
+      round: apiPA.round || apiPA.pa_round || 1,
       
-      // Count fields
-      balls_before_play: Number(apiPA.balls_before_play ?? 0),
-      strikes_before_play: Number(apiPA.strikes_before_play ?? 0),
-      strikes_watching: Number(apiPA.strikes_watching ?? 0),
-      strikes_swinging: Number(apiPA.strikes_swinging ?? 0),
-      strikes_unsure: Number(apiPA.strikes_unsure ?? 0),
-      fouls_after_two_strikes: Number(apiPA.fouls_after_two_strikes ?? 0),
-      fouls: Number(apiPA.fouls ?? 0),
-      ball_swinging: Number(apiPA.ball_swinging ?? 0),
+      // Player info
+      batter_name: apiPA.batter_name || '',
+      batter_jersey_number: apiPA.batter_jersey_number || '',
       
-      // Base running - convert null to undefined for type compatibility
-      br_result: apiPA.br_result === null ? undefined : 
-                (apiPA.br_result !== undefined ? Number(apiPA.br_result) : undefined),
+      // At plate fields
+      pa_why: apiPA.pa_why || '',
+      why_base_reached: apiPA.why_base_reached || apiPA.pa_why || '',
+      pa_result: apiPA.pa_result !== undefined ? Number(apiPA.pa_result) : 0,
+      bases_reached: apiPA.bases_reached || String(apiPA.pa_result || '0'),
+      hit_to: apiPA.hit_to !== undefined ? Number(apiPA.hit_to) : 0,
+      detailed_result: apiPA.detailed_result || apiPA.hit_to || 0,
+      out_at: apiPA.out_at !== undefined ? Number(apiPA.out_at) : 0,
+      result_type: apiPA.result_type || '',
+      base_running: apiPA.base_running || '',
       
-      // Array fields - store the arrays directly
-      pa_error_on: parseArrayField(apiPA.pa_error_on, true),
-      br_error_on: parseArrayField(apiPA.br_error_on, true),
-      br_stolen_bases: parseArrayField(apiPA.br_stolen_bases, true),
-      base_running_hit_around: parseArrayField(apiPA.base_running_hit_around, true),
+      // Pitch counts
+      pitch_count: apiPA.pitch_count !== undefined ? Number(apiPA.pitch_count) : 0,
+      balls_before_play: apiPA.balls_before_play !== undefined ? Number(apiPA.balls_before_play) : 0,
+      strikes_before_play: apiPA.strikes_before_play !== undefined ? Number(apiPA.strikes_before_play) : 0,
+      strikes_unsure: apiPA.strikes_unsure !== undefined ? Number(apiPA.strikes_unsure) : 0,
+      strikes_watching: apiPA.strikes_watching !== undefined ? Number(apiPA.strikes_watching) : 0,
+      strikes_swinging: apiPA.strikes_swinging !== undefined ? Number(apiPA.strikes_swinging) : 0,
+      fouls_after_two_strikes: apiPA.fouls_after_two_strikes !== undefined ? Number(apiPA.fouls_after_two_strikes) : 0,
       
-      // Quality indicators - ensure we're using Number() to convert undefined to 0
-      // Treat all quality indicators consistently
-      qab: Number(apiPA.qab ?? 0),
-      hard_hit: Number(apiPA.hard_hit ?? 0),
-      slap: Number(apiPA.slap ?? 0),
-      bunt: Number(apiPA.bunt ?? 0),
-      sac: Number(apiPA.sac ?? 0),
+      // Other batting stats
+      fouls: apiPA.fouls !== undefined ? Number(apiPA.fouls) : 0,
+      ball_swinging: apiPA.ball_swinging !== undefined ? Number(apiPA.ball_swinging) : 0,
       
-      // Optional fields
-      wild_pitch: apiPA.wild_pitch !== undefined ? Number(apiPA.wild_pitch) : undefined,
-      passed_ball: apiPA.passed_ball !== undefined ? Number(apiPA.passed_ball) : undefined,
-      late_swings: apiPA.late_swings !== undefined ? Number(apiPA.late_swings) : 0,
+      // Base running fields
+      br_result: apiPA.br_result !== undefined ? Number(apiPA.br_result) : 0,
+      base_running_stolen_base: apiPA.base_running_stolen_base !== undefined ? Number(apiPA.base_running_stolen_base) : 0,
+      
+      // Quality indicators
+      qab: apiPA.qab !== undefined ? Number(apiPA.qab) : 0,
+      hard_hit: apiPA.hard_hit !== undefined ? Number(apiPA.hard_hit) : 0,
+      slap: apiPA.slap !== undefined ? Number(apiPA.slap) : 0,
+      bunt: apiPA.bunt !== undefined ? Number(apiPA.bunt) : 0,
+      sac: apiPA.sac !== undefined ? Number(apiPA.sac) : 0,
+      
+      // Pitcher and catcher stats
+      wild_pitch: apiPA.wild_pitch !== undefined ? Number(apiPA.wild_pitch) : 0,
+      passed_ball: apiPA.passed_ball !== undefined ? Number(apiPA.passed_ball) : 0,
+      
+      // Other stats
       rbi: apiPA.rbi !== undefined ? Number(apiPA.rbi) : 0,
-      pitch_count: Number(apiPA.pitch_count ?? 0),
-      out: Number(apiPA.out ?? 0),
-      out_at: Number(apiPA.out_at ?? 0),
+      late_swings: apiPA.late_swings !== undefined ? Number(apiPA.late_swings) : 0,
       
-      // ID fields if they came from the server
-      order_number: Number(apiPA.order_number ?? 0),
-      batter_seq_id: Number(apiPA.batter_seq_id ?? 0),
-      inning_number: Number(apiPA.inning_number ?? 0),
-      round: Number(apiPA.pa_round ?? 1),
+      // Array fields
+      pa_error_on: Array.isArray(apiPA.pa_error_on) ? apiPA.pa_error_on : [],
+      br_error_on: Array.isArray(apiPA.br_error_on) ? apiPA.br_error_on : [],
+      br_stolen_bases: Array.isArray(apiPA.br_stolen_bases) ? apiPA.br_stolen_bases : [],
+      base_running_hit_around: Array.isArray(apiPA.base_running_hit_around) ? apiPA.base_running_hit_around : [],
     };
     
-    return mappedData;
+    return formState;
   };
-
-  // Remove useEffect logging statements
-  useEffect(() => {
-    // Empty useEffect
-  }, [editedPA]);
 
   const handleInputChange = (field: string, value: any, fromFoul?: boolean) => {
     setEditedPA(prev => {
@@ -819,7 +832,7 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
                 // Check if we already have this base in either array
                 const inHitAround = updated.base_running_hit_around?.includes(base);
                 const inStolenBases = Array.isArray(updated.br_stolen_bases) && 
-                                      updated.br_stolen_bases.includes(base);
+                                     updated.br_stolen_bases.includes(base);
                 
                 // Only add to base_running_hit_around if not already there and not in stolen bases
                 if (!inHitAround && !inStolenBases) {
@@ -837,6 +850,24 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
           
           // Hide base 2 in both arrays when pa_result is 2
           hideBase2WhenPaResultIs2(updated);
+        }
+      } else if (field === 'out_at') {
+        // Special handling for out_at field
+        if (value === 0) {
+          // If value is 0, treat it as a reset of the field
+          updated[field] = 0;
+          
+          // Since out_at is being cleared, we might need to adjust the 'out' field
+          // Only change 'out' to 0 if pa_result > 0 (player reached base)
+          if (updated.pa_result > 0) {
+            updated.out = 0;
+          }
+        } else {
+          // For all other values, set normally
+          updated[field] = Number(value);
+          
+          // If setting out_at to a base, also set 'out' to 1
+          updated.out = 1;
         }
       } else {
         // For any other field, just set the value directly
@@ -874,7 +905,7 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
         // For walks, add missing balls
         pitchCount += (3 - balls);
       } else if ((updated.pa_why === 'K' || updated.pa_why === 'KK') 
-                && (watchingStrikes + swingingStrikes + unsureStrikes) < 2) {
+               && (watchingStrikes + swingingStrikes + unsureStrikes) < 2) {
         // For strikeouts, add missing strikes
         pitchCount += (2 - (watchingStrikes + swingingStrikes + unsureStrikes));
       } else if (updated.pa_why && updated.pa_why !== '') {
@@ -993,29 +1024,19 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
   };
 
   // Create a helper function to generate the API data structure
-  const createApiData = (): ScoreBookEntryStructure | null => {
+  const createApiData = () => {
     if (!editedPA) return null;
-        
-    // Create a copy of the edited data to ensure we don't modify the original
-    const paData = { 
-      ...editedPA,
-      rbi: (editedPA as any).rbi || 0,
-      late_swings: (editedPA as any).late_swings || 0,
-      fouls: (editedPA as any).fouls || 0,
-      ball_swinging: (editedPA as any).ball_swinging || 0,
-      pitch_count: (editedPA as any).pitch_count || 0,
-      // Quality Indicators - use ?? to preserve 0 values explicitly
-      // Treat all quality indicators consistently
-      qab: (editedPA as any).qab !== undefined ? Number((editedPA as any).qab) : 0,
-      hard_hit: (editedPA as any).hard_hit !== undefined ? Number((editedPA as any).hard_hit) : 0,
-      slap: (editedPA as any).slap !== undefined ? Number((editedPA as any).slap) : 0,
-      bunt: (editedPA as any).bunt !== undefined ? Number((editedPA as any).bunt) : 0,
-      sac: (editedPA as any).sac !== undefined ? Number((editedPA as any).sac) : 0,
-      // Ensure pa_why is set
-      pa_why: editedPA.pa_why || editedPA.why_base_reached || ''
-    };
-      
-    // Helper function to safely parse array fields and convert to numbers
+    
+    // Get the order_number from the original pa or from the editedPA
+    const orderNumber = Number(pa?.order_number || editedPA.order_number || 1);
+    
+    // Critical fix: Ensure batting_order_position matches order_number
+    const battingOrderPosition = pa?.batting_order_position || orderNumber;
+    
+    // IMPORTANT: Log the values being used to help debug
+    console.log(`Creating PA data: order_number=${orderNumber}, batting_order_position=${battingOrderPosition}`);
+    
+    // Helper function to safely parse array fields and convert to numbers if needed
     const parseArrayField = (value: any, convertToNumbers: boolean = true): any[] => {
       if (!value) return [];
       
@@ -1077,60 +1098,83 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
       return [];
     };
     
-    // Get the shared ID values
-    const sharedGameId = paData.game_id || gameId || '';
-    const sharedTeamId = paData.team_id || teamId || '';
+    // Calculate the 'out' field based on pa_result
+    // - If pa_result is 0, it's an out
+    // - If out_at is set to a non-zero value, it's an out
+    const isOut = (editedPA.pa_result === 0 || (editedPA.out_at && editedPA.out_at !== 0)) ? 1 : 0;
     
-    // Create the structured data for the backend API
+    // Create the API data object with all necessary fields but WITHOUT spreading editedPA
+    // This avoids duplicate key errors
     const apiData = {
-      // Lineup and identification
-      order_number: Number(paData.order_number) || 1,
-      batter_seq_id: Number(paData.batter_seq_id) || nextBatterSeqId || 1,
-      inning_number: Number(paData.inning_number) || inningNumber || 1,
-      home_or_away: paData.home_or_away || homeOrAway || 'away',
-      batting_order_position: Number(paData.order_number) || 1, // Same as order_number
-      team_id: sharedTeamId,
-      teamId: sharedTeamId, // Use the same value to avoid duplicates
-      game_id: sharedGameId,
-      gameId: sharedGameId, // Use the same value to avoid duplicates
-      out: (typeof paData.pa_result === 'number' && paData.pa_result === 0) || 
-           (typeof paData.pa_result === 'string' && paData.pa_result === '0') || 
-           paData.bases_reached === '0' || 
-           (paData.out_at && paData.out_at !== 0) ? 1 : 0,
+      // Core identification fields - use pa values if available, otherwise use editedPA
+      team_id: pa?.team_id || editedPA.team_id || teamId || '',
+      game_id: pa?.game_id || editedPA.game_id || gameId || '',
+      inning_number: pa?.inning_number || editedPA.inning_number || inningNumber || 1,
+      home_or_away: pa?.home_or_away || editedPA.home_or_away || homeOrAway || '',
+      
+      // CRITICAL FIELDS: Use the values we extracted above
+      order_number: orderNumber,
+      batting_order_position: battingOrderPosition,
+      
+      // Use the batter_seq_id from the pa prop
+      batter_seq_id: pa?.batter_seq_id || editedPA.batter_seq_id || nextBatterSeqId || 1,
+      
+      // Get the round from pa or editedPA
+      round: pa?.round || editedPA.round || 1,
+      pa_round: pa?.round || editedPA.round || 1,
+      
+      // CRITICAL: Add the missing required fields
+      out: isOut,
       my_team_ha: myTeamHomeOrAway || 'away',
-      // Pitcher and catcher stats
-      wild_pitch: paData.wild_pitch !== undefined ? Number(paData.wild_pitch) : null,
-      passed_ball: paData.passed_ball !== undefined ? Number(paData.passed_ball) : null,
-      // One-off tracking
-      rbi: paData.rbi !== undefined ? Number(paData.rbi) : null,
-      late_swings: paData.late_swings !== undefined ? Number(paData.late_swings) : null,
-      // Quality Indicators - treat all quality indicators consistently
-      qab: paData.qab !== undefined ? Number(paData.qab) : 0,
-      hard_hit: paData.hard_hit !== undefined ? Number(paData.hard_hit) : 0,
-      slap: paData.slap !== undefined ? Number(paData.slap) : 0,
-      bunt: paData.bunt !== undefined ? Number(paData.bunt) : 0,
-      sac: paData.sac !== undefined ? Number(paData.sac) : 0,
-      // At the plate
-      out_at: paData.out_at ? Number(paData.out_at) : 0,
-      pa_why: paData.pa_why || '', // Primary field for plate appearance reason
-      pa_result: Number(paData.pa_result || 0),
-      hit_to: Number(paData.hit_to || paData.detailed_result || 0),
-      // Fixed array fields parsing - use consistent approach for all
-      pa_error_on: parseArrayField(paData.pa_error_on, true),
-      br_error_on: parseArrayField(paData.br_error_on, true),
-      br_stolen_bases: parseArrayField(paData.br_stolen_bases, true),
-      base_running_hit_around: parseArrayField(paData.base_running_hit_around, true),
+      
+      // Player information
+      batter_name: editedPA.batter_name || '',
+      batter_jersey_number: editedPA.batter_jersey_number || '',
+      
+      // At the plate fields
+      pa_why: editedPA.pa_why || editedPA.why_base_reached || '',
+      pa_result: Number(editedPA.pa_result || 0),
+      hit_to: Number(editedPA.hit_to || editedPA.detailed_result || 0),
+      
+      // CRITICAL: Explicitly set out_at field to ensure it's 0 when cleared by the user
+      // Intentionally use the exact value from editedPA without falling back to another value
+      out_at: editedPA.out_at !== undefined ? Number(editedPA.out_at) : 0,
+      
+      // Quality indicators
+      qab: editedPA.qab !== undefined ? Number(editedPA.qab) : 0,
+      hard_hit: editedPA.hard_hit !== undefined ? Number(editedPA.hard_hit) : 0,
+      slap: editedPA.slap !== undefined ? Number(editedPA.slap) : 0,
+      bunt: editedPA.bunt !== undefined ? Number(editedPA.bunt) : 0,
+      sac: editedPA.sac !== undefined ? Number(editedPA.sac) : 0,
+      
+      // Pitcher and catcher fields
+      wild_pitch: editedPA.wild_pitch !== undefined ? Number(editedPA.wild_pitch) : null,
+      passed_ball: editedPA.passed_ball !== undefined ? Number(editedPA.passed_ball) : null,
+      rbi: editedPA.rbi !== undefined ? Number(editedPA.rbi) : null,
+      late_swings: editedPA.late_swings !== undefined ? Number(editedPA.late_swings) : null,
+      
+      // Array fields
+      pa_error_on: parseArrayField(editedPA.pa_error_on, true),
+      br_error_on: parseArrayField(editedPA.br_error_on, true),
+      br_stolen_bases: parseArrayField(editedPA.br_stolen_bases, true),
+      base_running_hit_around: parseArrayField(editedPA.base_running_hit_around, true),
+      
       // Base running
-      br_result: paData.br_result !== undefined ? Number(paData.br_result) : null,
-      // Balls and strikes - EXPLICITLY ensure these are included
-      pitch_count: Number(paData.pitch_count || 0),
-      balls_before_play: Number(paData.balls_before_play || 0),
-      strikes_before_play: Number(paData.strikes_before_play || 0),
-      strikes_unsure: Number(paData.strikes_unsure || 0),
-      strikes_watching: Number(paData.strikes_watching || 0),
-      strikes_swinging: Number(paData.strikes_swinging || 0),
-      ball_swinging: Number(paData.ball_swinging || 0),
-      fouls: Number(paData.fouls || 0),
+      br_result: editedPA.br_result !== undefined ? Number(editedPA.br_result) : null,
+      
+      // Balls and strikes
+      pitch_count: Number(editedPA.pitch_count || 0),
+      balls_before_play: Number(editedPA.balls_before_play || 0),
+      strikes_before_play: Number(editedPA.strikes_before_play || 0),
+      strikes_unsure: Number(editedPA.strikes_unsure || 0),
+      strikes_watching: Number(editedPA.strikes_watching || 0),
+      strikes_swinging: Number(editedPA.strikes_swinging || 0),
+      ball_swinging: Number(editedPA.ball_swinging || 0),
+      fouls: Number(editedPA.fouls || 0),
+      
+      // For compatibility with different API naming
+      teamId: pa?.team_id || editedPA.team_id || teamId || '',
+      gameId: pa?.game_id || editedPA.game_id || gameId || ''
     };
     
     return apiData;
@@ -1152,9 +1196,28 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
     const apiData = createApiData();
     if (!apiData) return;
     
-    // CRITICAL: Explicitly ensure these fields are included by setting them directly
+    // CRITICAL: Double check these fields are correctly set
+    // Use Number() to convert to ensure we don't have undefined
+    const finalOrderNumber = Number(pa?.order_number || editedPA?.order_number || 1);
+    
+    // Calculate if this is an out based on pa_result and out_at
+    const isOut = (editedPA?.pa_result === 0 || (editedPA?.out_at && editedPA?.out_at !== 0)) ? 1 : 0;
+    
+    // Explicitly ensure these core fields are set correctly
+    apiData.order_number = finalOrderNumber;
+    apiData.batting_order_position = finalOrderNumber; // Always match order_number
     apiData.fouls = Number(editedPA?.fouls || 0);
     apiData.pitch_count = Number(editedPA?.pitch_count || 0);
+    
+    // CRITICAL: Ensure out_at is explicitly set to 0 if it's been cleared
+    apiData.out_at = editedPA?.out_at !== undefined ? Number(editedPA?.out_at) : 0;
+    
+    // CRITICAL: Ensure the required fields for the backend are set
+    apiData.out = isOut;
+    apiData.my_team_ha = myTeamHomeOrAway || 'away';
+    
+    // Log the key fields again just before saving
+    console.log(`Saving PA with order_number=${apiData.order_number}, batting_order_position=${apiData.batting_order_position}, out=${apiData.out}, my_team_ha=${apiData.my_team_ha}, out_at=${apiData.out_at}`);
     
     // Ensure gameId is properly set for the ScoreBookEntryStructure type
     apiData.gameId = apiData.game_id;
@@ -1183,6 +1246,9 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
     const apiData = createApiData();
     if (!apiData) return;
     
+    // Calculate if this is an out based on pa_result and out_at
+    const isOut = (editedPA?.pa_result === 0 || (editedPA?.out_at && editedPA?.out_at !== 0)) ? 1 : 0;
+    
     // CRITICAL: Explicitly ensure all fields are included
     const allFields = {
       ...apiData,
@@ -1191,12 +1257,19 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
       pitch_count: Number(editedPA?.pitch_count || 0),
       ball_swinging: Number(editedPA?.ball_swinging || 0),
       
-      // Quality indicators - treat all quality indicators consistently
-      qab: Number(editedPA?.qab || 0),
-      hard_hit: Number(editedPA?.hard_hit || 0),
-      slap: Number(editedPA?.slap || 0),
-      bunt: Number(editedPA?.bunt || 0),
-      sac: Number(editedPA?.sac || 0),
+      // Required fields for the backend
+      out: isOut,
+      my_team_ha: myTeamHomeOrAway || 'away',
+      
+      // Quality indicators - explicitly include each one individually
+      qab: editedPA?.qab !== undefined ? Number(editedPA.qab) : 0,
+      hard_hit: editedPA?.hard_hit !== undefined ? Number(editedPA.hard_hit) : 0,
+      slap: editedPA?.slap !== undefined ? Number(editedPA.slap) : 0,
+      bunt: editedPA?.bunt !== undefined ? Number(editedPA.bunt) : 0,
+      sac: editedPA?.sac !== undefined ? Number(editedPA.sac) : 0,
+      
+      // Explicitly include out_at to ensure it appears in the output
+      out_at: editedPA?.out_at !== undefined ? Number(editedPA.out_at) : 0,
       
       // Array fields - ensure all array fields are included
       pa_error_on: Array.isArray(editedPA?.pa_error_on) ? editedPA.pa_error_on : [],
@@ -1210,7 +1283,6 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
       late_swings: Number(editedPA?.late_swings || 0),
       rbi: Number(editedPA?.rbi || 0)
     };
-    
     
     // Convert the data to a formatted JSON string
     const jsonString = JSON.stringify(allFields, null, 2);
@@ -1528,12 +1600,26 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
         
         {/* Footer with buttons */}
         <div className="flex justify-between items-center mt-2 p-1">
-          <button
-            onClick={() => onClose()}
-            className="px-3 py-1.5 text-sm border border-gray-400 text-gray-500 rounded hover:bg-gray-100"
-          >
-            Cancel
-          </button>
+          <div className="flex space-x-2">
+            <button
+              onClick={() => onClose()}
+              className="px-3 py-1.5 text-sm border border-gray-400 text-gray-500 rounded hover:bg-gray-100"
+            >
+              Cancel
+            </button>
+            {/* Only show delete button for existing plate appearances (with a batter_seq_id) */}
+            {editedPA?.batter_seq_id && (
+              <button
+                onClick={handleDelete}
+                className="px-3 py-1.5 text-sm border border-red-500 text-red-600 rounded hover:bg-red-50 flex items-center"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Delete
+              </button>
+            )}
+          </div>
           <div className="flex space-x-2">
             <button
               onClick={handleSave}

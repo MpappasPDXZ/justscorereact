@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, forwardRef, useImperativeHandle } from 'react';
 import BaseballDiamondCell from '@/app/components/BaseballDiamondCell';
 import BattingOrderTable from '@/app/components/BattingOrderTable';
 import { ScoreBookEntry as TypedScoreBookEntry } from '@/app/types/scoreTypes';
@@ -37,6 +37,13 @@ interface LocalScoreBookEntry {
   late_swings?: number;
   fouls?: number;
   pitch_count?: number;
+  batting_order_position?: number;
+  out?: number;
+  out_at?: number;
+  my_team_ha?: string;
+  sac?: number;
+  bunt?: number;
+  qab?: number;
 }
 
 interface ScoreCardGridProps {
@@ -52,6 +59,8 @@ interface ScoreCardGridProps {
     awayLineupLoaded: boolean;
     homeLineupLoaded: boolean;
   };
+  refreshTimestamp?: number;
+  inningsToShow?: number[];
 }
 
 interface PlateAppearanceDetail {
@@ -81,6 +90,11 @@ interface PlateAppearanceDetail {
   pa_error_on: number[];
   br_error_on: number[];
   fouls?: number;
+  strikes_watching?: number;
+  strikes_swinging?: number;
+  strikes_unsure?: number;
+  ball_swinging?: number;
+  bunt?: number;
 }
 
 interface PlateAppearanceData {
@@ -88,19 +102,42 @@ interface PlateAppearanceData {
   game_id: number;
   team_choice: string;
   pa_available: string;
-  plate_appearances: {
+  // Support both old and new formats
+  plate_appearances?: {
     [inningNumber: string]: {
-      rounds: {
+      // New format with pa_rounds
+      pa_rounds?: {
+        [round: string]: {
+          [batterId: string]: {
+            order_number: number;
+            details: PlateAppearanceDetail;
+          }
+        }
+      };
+      // Old format with rounds
+      rounds?: {
         [orderNumber: string]: {
           order_number: number;
           details: PlateAppearanceDetail;
         }
       }
     }
+  };
+  // Legacy format
+  pa_rounds?: {
+    [round: string]: {
+      [batterId: string]: {
+        order_number: number;
+        details: PlateAppearanceDetail;
+      }
+    }
   }
 }
 
-const ScoreCardGrid = ({ 
+const ScoreCardGrid = forwardRef<
+  { loadAllPreviousInnings: () => Promise<void> },
+  ScoreCardGridProps
+>(function ScoreCardGrid({ 
   teamId, 
   gameId, 
   inningNumber,
@@ -109,8 +146,10 @@ const ScoreCardGrid = ({
   onPlateAppearanceClick,
   showPrecedingInnings = false,
   plateAppearanceData,
-  lineupsPreloaded
-}: ScoreCardGridProps) => {
+  lineupsPreloaded,
+  refreshTimestamp,
+  inningsToShow
+}, ref) {
   const [numberOfPAColumns, setNumberOfPAColumns] = useState(1);
   const [visiblePAColumns, setVisiblePAColumns] = useState(1); // Start with only 1 PA column visible
   const [transformedEntries, setTransformedEntries] = useState<LocalScoreBookEntry[]>([]);
@@ -121,26 +160,90 @@ const ScoreCardGrid = ({
   const [activeInning, setActiveInning] = useState<number>(parseInt(inningNumber));
   const [inningData, setInningData] = useState<{[inning: number]: LocalScoreBookEntry[]}>({});
   const [forceAdditionalColumns, setForceAdditionalColumns] = useState<number>(0); // New state to force additional columns
+  const [lastApiCallTimestamp, setLastApiCallTimestamp] = useState<{[key: string]: number}>({});
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+  const [showingAllInnings, setShowingAllInnings] = useState<boolean>(false);
+  const [highestViewedInning, setHighestViewedInning] = useState<number>(parseInt(inningNumber));
 
-  // Update active inning when inningNumber changes and fetch data for that inning
+  // Callback function to receive lineup size from BattingOrderTable
+  const handleLineupSizeUpdate = (size: number) => {
+    if (size > 0) {
+      setActualLineupSize(size);
+    }
+  };
+
+  // Expose the loadAllPreviousInnings method via ref
+  useImperativeHandle(ref, () => ({
+    loadAllPreviousInnings: async () => {
+      await loadAllPreviousInnings();
+    }
+  }));
+
+  // Simplify the shouldAllowApiCall logging
+  const shouldAllowApiCall = (endpoint: string, minDelay = 2000): boolean => {
+    const now = Date.now();
+    const lastCall = lastApiCallTimestamp[endpoint] || 0;
+    
+    // Allow more frequent calls when it's a refresh operation (shorter delay)
+    if (endpoint.includes('refresh-timestamp') && now - lastCall < 500) {
+      return false;
+    }
+    
+    // For regular calls use the standard delay
+    if (!endpoint.includes('refresh-timestamp') && now - lastCall < minDelay) {
+      return false;
+    }
+    
+    // Update the timestamp for this endpoint
+    setLastApiCallTimestamp(prev => ({
+      ...prev,
+      [endpoint]: now
+    }));
+    
+    return true;
+  };
+
+  // Update highestViewedInning when inning number changes
+  useEffect(() => {
+    const currentInningNum = parseInt(inningNumber);
+    // Update the highest viewed inning if the current inning is higher
+    if (currentInningNum > highestViewedInning) {
+      setHighestViewedInning(currentInningNum);
+    }
+
+    // ADDED: Automatically show all innings when navigating to inning > 1
+    if (currentInningNum > 1 && !showingAllInnings) {
+      setShowingAllInnings(true);
+    }
+  }, [inningNumber, highestViewedInning, showingAllInnings]);
+
+  // Modified useEffect to handle inning navigation properly
   useEffect(() => {
     const newInningNum = parseInt(inningNumber);
     
-    // When active inning changes, make sure we have data for that inning
-    // and all preceding innings
+    // When active inning changes, only load the newly selected inning if we don't have it already
     const loadInningData = async () => {
       if (!loading) {
-        // First, refresh all innings data to get the complete picture
-        await refreshAllInningsData();
+        // Check if we already have data for this inning in either inningData or transformedEntries
+        const hasInningDataInState = Object.keys(inningData).includes(newInningNum.toString());
+        const hasInningDataInEntries = transformedEntries.some(entry => entry.inning_number === newInningNum);
         
-        // Then, if needed, fetch specific inning data for each displayed inning
-        for (let i = 1; i <= newInningNum; i++) {
-          // Check if we already have data for this inning
-          const hasInningData = transformedEntries.some(entry => entry.inning_number === i);
-          
-          if (!hasInningData) {
-            // If we don't have data for this inning yet, fetch it
-            await fetchInningData(i);
+        // Only fetch if we don't have the data anywhere
+        if (!hasInningDataInState && !hasInningDataInEntries) {
+          const apiKey = `inning-${teamId}-${gameId}-${teamChoice}-${newInningNum}`;
+          if (shouldAllowApiCall(apiKey, 1000)) {
+            await fetchInningData(newInningNum);
+          }
+        } else {
+          // If we have data in transformedEntries but not in inningData, update inningData
+          if (!hasInningDataInState && hasInningDataInEntries) {
+            const inningEntries = transformedEntries.filter(entry => entry.inning_number === newInningNum);
+            
+            // Update inningData with the entries we already have
+            setInningData(prevData => ({
+              ...prevData,
+              [newInningNum]: inningEntries
+            }));
           }
         }
       }
@@ -150,106 +253,84 @@ const ScoreCardGrid = ({
     loadInningData();
   }, [inningNumber, loading]);
 
-  // Callback function to receive lineup size from BattingOrderTable
-  const handleLineupSizeUpdate = (size: number) => {
-    if (size > 0) {
-      setActualLineupSize(size);
-    }
-  };
-
-  // Function to force refresh all innings data
-  const refreshAllInningsData = async () => {
-    // Fetch the main scorecard data for all innings
-    try {
-      const apiUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/scores/${teamId}/${gameId}/${teamChoice}/scorecardgrid_paonly`;
-      
-      const response = await fetch(apiUrl, {
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0'
-        }
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to refresh scorecard data: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      
-      // Transform the nested structure to flat array
-      const transformed = transformPlateAppearanceData(data);
-      setTransformedEntries(transformed);
-      
-      // Initialize the inning data state with data grouped by inning
-      const inningDataMap: {[inning: number]: LocalScoreBookEntry[]} = {};
-      transformed.forEach(entry => {
-        if (entry.inning_number) {
-          if (!inningDataMap[entry.inning_number]) {
-            inningDataMap[entry.inning_number] = [];
-          }
-          inningDataMap[entry.inning_number].push(entry);
-        }
-      });
-      setInningData(inningDataMap);
-      
-      return transformed;
-    } catch (error) {
-      console.error("Error refreshing all innings data:", error);
-      return [];
-    }
-  };
-  
-  // Calculate which innings should be displayed
+  // Clean up logging in useEffect for displayedInnings
   useEffect(() => {
-    if (!loading && transformedEntries.length > 0) {
-      // Get all innings with data
-      const innings = transformedEntries
-        .map(entry => entry.inning_number)
-        .filter((inning): inning is number => inning !== undefined);
+    if (loading) return;
+    
+    // If inningsToShow is provided, use it directly to override normal behavior
+    if (inningsToShow && inningsToShow.length > 0) {
+      setDisplayedInnings(inningsToShow);
+      return;
+    }
+    
+    // Get the current inning number
+    const currentInningNum = parseInt(inningNumber);
+    
+    // Set displayed innings based on showingAllInnings state
+    if (showingAllInnings) {
+      // If showing all innings, we need to determine the highest inning to show
+      // Get all inning numbers we have data for
+      const loadedInningNumbers = Object.keys(inningData).map(num => parseInt(num));
       
-      // Find unique innings
-      const uniqueInnings = Array.from(new Set(innings)).sort((a, b) => a - b);
+      // Calculate the highest inning to display
+      const maxInningToShow = loadedInningNumbers.length > 0 
+        ? Math.max(currentInningNum, ...loadedInningNumbers)
+        : currentInningNum;
       
-      // Find the highest inning with at least one out
-      let highestInningWithOut = 1;
-      for (const entry of transformedEntries) {
-        if (entry.pa_result === "0" && entry.inning_number && entry.inning_number > highestInningWithOut) {
-          highestInningWithOut = entry.inning_number;
-        }
-      }
+      // Create array of all innings to show (1 through maxInningToShow)
+      const allInningsToShow = Array.from({ length: maxInningToShow }, (_, i) => i + 1);
       
-      // Max available inning is the highest inning with an out plus one (next inning)
-      const maxInning = Math.max(highestInningWithOut + 1, parseInt(inningNumber));
-      setMaxAvailableInning(maxInning);
-      
-      // Get the current inning number
+      setDisplayedInnings(allInningsToShow);
+    } else {
+      // When not showing all innings, only show the current inning
+      // This is the default behavior after save/delete operations or clicking on a box score inning
+      setDisplayedInnings([currentInningNum]);
+    }
+  }, [loading, showingAllInnings, inningNumber, inningData, inningsToShow]);
+  
+  // Update the initial useEffect to only load the current inning by default
+  useEffect(() => {
+    // Only run this if:
+    // 1. We don't already have data from props
+    // 2. We have valid teamId and gameId
+    // 3. We haven't already loaded data
+    const shouldFetchData = 
+      !scorebookEntries?.length && 
+      !plateAppearanceData && 
+      teamId && 
+      gameId && 
+      teamChoice && 
+      inningNumber;
+    
+    if (shouldFetchData && shouldAllowApiCall('initial-fetch')) {
+      // On initial load, only fetch the current inning
       const currentInningNum = parseInt(inningNumber);
       
-      // Create array of innings to display (all preceding innings up to current)
-      const inningsToDisplay = [];
-      for (let i = 1; i <= currentInningNum; i++) {
-        inningsToDisplay.push(i);
-      }
+      const loadInitialData = async () => {
+        setLoading(true);
+        
+        // Only load the current inning by default
+        await fetchInningData(currentInningNum);
+        
+        setInitialLoadComplete(true);
+        setLoading(false);
+      };
       
-      setDisplayedInnings(inningsToDisplay);
-    } else {
-      // Default to just the current inning if no data available
-      setDisplayedInnings([parseInt(inningNumber)]);
-    }
-  }, [loading, transformedEntries, inningNumber]);
-
-  // On initial mount, fetch all data
-  useEffect(() => {
-    // Only run this on mount
-    if (!scorebookEntries?.length && !plateAppearanceData) {
-      refreshAllInningsData();
+      loadInitialData();
+    } else if (scorebookEntries || plateAppearanceData) {
+      // If we have data already passed as props, we don't need to load
+      setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Function to fetch scorecard data directly from the component
+  }, [teamId, gameId, teamChoice, inningNumber]);
+  
+  // Improved useEffect for data processing
   useEffect(() => {
+    // If we're waiting for data, don't do anything yet
+    if (loading) {
+      return;
+    }
+    
     // If scorebookEntries are provided, use them directly
     if (scorebookEntries && scorebookEntries.length > 0) {
       // Ensure all numeric properties are parsed as numbers
@@ -268,6 +349,22 @@ const ScoreCardGrid = ({
       }));
       
       setTransformedEntries(parsedEntries);
+      
+      // Make sure we also put this in the inningData state
+      const currentInningNum = parseInt(inningNumber);
+      
+      // Update the inning data state with these entries
+      setInningData(prevData => {
+        const newData = {
+          ...prevData,
+          [currentInningNum]: parsedEntries.filter(entry => 
+            entry.inning_number === currentInningNum
+          )
+        };
+        return newData;
+      });
+      
+      setInitialLoadComplete(true);
       setLoading(false);
       return;
     }
@@ -276,21 +373,175 @@ const ScoreCardGrid = ({
     if (plateAppearanceData) {
       const transformed = transformPlateAppearanceData(plateAppearanceData);
       setTransformedEntries(transformed);
+      
+      // Also put this in the inningData map
+      const currentInningNum = parseInt(inningNumber);
+      setInningData(prevData => {
+        const newData = {
+          ...prevData,
+          [currentInningNum]: transformed.filter(entry => 
+            entry.inning_number === currentInningNum
+          )
+        };
+        return newData;
+      });
+      
+      setInitialLoadComplete(true);
       setLoading(false);
       return;
     }
     
-    // This will only be used on initial mount or when props change
-    refreshAllInningsData();
-  }, [teamId, gameId, teamChoice, scorebookEntries, plateAppearanceData]);
+    // Handle the case of empty scorebookEntries (first load or empty inning)
+    if (scorebookEntries && scorebookEntries.length === 0) {
+      setTransformedEntries([]);
+      setInitialLoadComplete(true);
+      setLoading(false);
+      return;
+    }
+    
+    // Check if we have already loaded data but need to refresh
+    if (initialLoadComplete && refreshTimestamp) {
+      // On refresh, we should reload the current inning
+      const currentInningNum = parseInt(inningNumber);
+      const refreshKey = `refresh-timestamp-${refreshTimestamp}-${teamId}-${gameId}-${teamChoice}-${currentInningNum}`;
+      
+      // Force a refresh regardless of the timestamp if refreshTimestamp changes
+      if (shouldAllowApiCall(refreshKey, 500)) {
+        fetchInningData(currentInningNum);
+      }
+    }
+  }, [teamId, gameId, teamChoice, scorebookEntries, plateAppearanceData, refreshTimestamp, loading, initialLoadComplete, inningNumber]);
 
-  // Function to fetch data for a specific inning
+  // Add a separate useEffect to specifically handle refreshTimestamp changes
+  useEffect(() => {
+    if (refreshTimestamp && !loading) {
+      // Refresh the current inning when refreshTimestamp changes
+      const currentInningNum = parseInt(inningNumber);
+      
+      // If we're passed scorebookEntries directly as props, use them instead of fetching
+      if (scorebookEntries && scorebookEntries.length > 0) {
+        // Just clear the cache
+        playerPAsCache.clear();
+        
+        // Parse the entries quickly
+        const parsedEntries = scorebookEntries.map(entry => ({
+          ...entry,
+          order_number: typeof entry.order_number === 'string' ? parseInt(entry.order_number) : entry.order_number,
+          batter_seq_id: typeof entry.batter_seq_id === 'string' ? parseInt(entry.batter_seq_id) : entry.batter_seq_id,
+          balls_before_play: typeof entry.balls_before_play === 'string' ? parseInt(entry.balls_before_play) : entry.balls_before_play,
+          strikes_before_play: typeof entry.strikes_before_play === 'string' ? parseInt(entry.strikes_before_play) : entry.strikes_before_play,
+          round: typeof entry.round === 'string' ? parseInt(entry.round) : entry.round
+        }));
+        
+        // Update inningData directly
+        setInningData(prevData => ({
+          ...prevData,
+          [currentInningNum]: parsedEntries.filter(entry => 
+            entry.inning_number === currentInningNum
+          )
+        }));
+        
+        // Update transformedEntries by replacing just the entries for this inning
+        setTransformedEntries(prevEntries => {
+          // Filter out entries for the current inning
+          const filteredEntries = prevEntries.filter(
+            entry => entry.inning_number !== currentInningNum
+          );
+          
+          // Add the new entries for this inning
+          return [...filteredEntries, ...parsedEntries.filter(entry => 
+            entry.inning_number === currentInningNum
+          )];
+        });
+        
+        // No need to set loading state at all
+        return;
+      }
+      
+      // Set a flag to track fetch status
+      let fetchAborted = false;
+      
+      // Clear cache for current inning only
+      playerPAsCache.clear();
+      
+      // Set loading to true briefly to show loading state
+      setLoading(true);
+      
+      // Only clear data for the current inning, preserving other innings
+      setInningData(prevData => {
+        const newData = { ...prevData };
+        // Only remove data for the current inning
+        delete newData[currentInningNum];
+        return newData;
+      });
+      
+      // Update transformedEntries to remove only entries for the current inning
+      setTransformedEntries(prevEntries => 
+        prevEntries.filter(entry => entry.inning_number !== currentInningNum)
+      );
+      
+      // Trigger a fetch of the current inning data with a shorter delay
+      setTimeout(() => {
+        if (fetchAborted) return;
+        
+        fetchInningData(currentInningNum)
+          .then(entries => {
+            if (entries.length === 0) {
+              // If no entries, set empty data for this inning
+              setInningData(prevData => ({
+                ...prevData,
+                [currentInningNum]: []
+              }));
+            }
+          })
+          .finally(() => {
+            if (!fetchAborted) {
+              setLoading(false);
+            }
+          });
+        
+        // Set loading to false faster to prevent long spinner
+        setTimeout(() => {
+          if (!fetchAborted) {
+            setLoading(false);
+          }
+        }, 300); // Force loading to false after 300ms
+      }, 10); // Reduced delay for faster response
+      
+      // Clean up
+      return () => {
+        fetchAborted = true;
+      };
+    }
+  }, [refreshTimestamp, scorebookEntries]);
+
+  // Optimize the fetchInningData function
   const fetchInningData = async (inningNum: number) => {
-    if (!teamId || !gameId || !teamChoice) return;
+    if (!teamId || !gameId || !teamChoice) {
+      console.error('Missing required data for fetching inning:', { teamId, gameId, teamChoice, inningNum });
+      return [];
+    }
+    
+    // Check if we already have data for this inning
+    if (inningData[inningNum] && inningData[inningNum].length > 0) {
+      // If we're not forcing a refresh, just use the cached data
+      if (!refreshTimestamp) {
+        return inningData[inningNum];
+      }
+    }
+    
+    // Create a unique key for this API call
+    const apiKey = `inning-${teamId}-${gameId}-${teamChoice}-${inningNum}`;
+    
+    // Skip if this exact call was made very recently (except after save/delete)
+    const minDelay = refreshTimestamp ? 200 : 1000; // shorter delay after save/delete
+    if (!shouldAllowApiCall(apiKey, minDelay)) {
+      return inningData[inningNum] || [];
+    }
     
     try {
-      // Use the specific inning endpoint
-      const apiUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/scores/new/${teamId}/${gameId}/${teamChoice}/${inningNum}/scorecardgrid_paonly_inningonly`;
+      // Use the inning-specific endpoint
+      const apiUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/scores/new2/${teamId}/${gameId}/${teamChoice}/${inningNum}/scorecardgrid_paonly_inningonly_exact?no_lineup=true&t=${Date.now()}`;
       
       const response = await fetch(apiUrl, {
         headers: {
@@ -306,109 +557,181 @@ const ScoreCardGrid = ({
       
       const data = await response.json();
       
-      // Transform the nested structure to flat array
+      // If there's no data or an empty response, handle gracefully
+      if (!data) {
+        // Return empty array but don't trigger a loading spinner
+        return [];
+      }
+      
+      // Transform the data
       const transformed = transformPlateAppearanceData(data);
       
-      // Update the inning data state
-      setInningData(prevData => {
-        const newData = {
-          ...prevData,
-          [inningNum]: transformed
-        };
-        return newData;
-      });
+      // Filter the transformed data to only include entries for the requested inning
+      const inningEntries = transformed.filter(entry => entry.inning_number === inningNum);
       
-      // Also update transformed entries with this data
-      setTransformedEntries(prevEntries => {
-        // Remove any existing entries for this inning
-        const filteredEntries = prevEntries.filter(
-          entry => entry.inning_number !== inningNum
-        );
+      // Update the inning data state - only if we have entries
+      if (inningEntries.length > 0) {
+        setInningData(prevData => {
+          const newData = {
+            ...prevData,
+            [inningNum]: inningEntries
+          };
+          return newData;
+        });
         
-        // Add the new entries for this inning
-        const updatedEntries = [...filteredEntries, ...transformed];
-        return updatedEntries;
-      });
+        // Update transformed entries with this data
+        setTransformedEntries(prevEntries => {
+          // Remove any existing entries for this inning to avoid duplicates
+          const filteredEntries = prevEntries.filter(
+            entry => entry.inning_number !== inningNum
+          );
+          
+          // Add the new entries for this inning
+          const updatedEntries = [...filteredEntries, ...inningEntries];
+          return updatedEntries;
+        });
+      }
       
-      return transformed;
+      return inningEntries;
     } catch (error) {
       console.error(`Error fetching inning ${inningNum} data:`, error);
+      // Return empty array but don't trigger a loading spinner
       return [];
     }
   };
 
-  // Function to transform the API response into ScoreBookEntry[] format
-  const transformPlateAppearanceData = (apiData: PlateAppearanceData): LocalScoreBookEntry[] => {
+  // Clean up transformPlateAppearanceData logging
+  const transformPlateAppearanceData = (apiData: any): LocalScoreBookEntry[] => {
     const entries: LocalScoreBookEntry[] = [];
     
-    if (!apiData || !apiData.plate_appearances) {
+    if (!apiData) {
       return entries;
     }
     
-    // Iterate through innings
-    Object.keys(apiData.plate_appearances).forEach(inningNumber => {
-      const inning = apiData.plate_appearances[inningNumber];
-      
-      // Iterate through rounds for this inning
-      if (inning?.rounds) {
-        Object.keys(inning.rounds).forEach(orderNumberKey => {
-          const paData = inning.rounds[orderNumberKey];
+    // Handle the original format with scorebook_entries array (backward compatibility)
+    if (apiData.scorebook_entries && Array.isArray(apiData.scorebook_entries)) {
+      return apiData.scorebook_entries.map((entry: any) => {
+        // Convert the scorebook entry to our LocalScoreBookEntry format
+        return {
+          team_id: entry.team_id?.toString() || apiData.team_id?.toString() || '',
+          game_id: entry.game_id?.toString() || apiData.game_id?.toString() || '',
+          inning_number: entry.inning_number || parseInt(apiData.inning_number) || 0,
+          home_or_away: entry.home_or_away || apiData.team_choice || '',
+          order_number: entry.order_number || 0,
+          batter_seq_id: entry.batter_seq_id || 0,
+          batter_name: entry.batter_name || '',
+          batter_jersey_number: entry.batter_jersey_number || '',
           
-          if (paData?.details) {
-            const details = paData.details;
+          // Result fields
+          why_base_reached: entry.why_base_reached || entry.pa_why || '',
+          pa_result: entry.pa_result?.toString() || entry.bases_reached || '0',
+          bases_reached: entry.bases_reached?.toString() || entry.pa_result?.toString() || '0',
+          result_type: entry.result_type || '',
+          detailed_result: entry.detailed_result?.toString() || entry.hit_to?.toString() || '0',
+          base_running: entry.base_running || '',
+          
+          // Pitch count details
+          balls_before_play: Number(entry.balls_before_play || 0),
+          strikes_before_play: Number(entry.strikes_before_play || 0),
+          strikes_watching: Number(entry.strikes_watching || 0),
+          strikes_swinging: Number(entry.strikes_swinging || 0),
+          strikes_unsure: Number(entry.strikes_unsure || 0),
+          fouls_after_two_strikes: Number(entry.fouls_after_two_strikes || 0),
+          base_running_stolen_base: Number(entry.base_running_stolen_base || 0),
+          round: Number(entry.round || 1),
+          
+          // CRITICAL: Include out field for proper display
+          out: entry.out !== undefined ? Number(entry.out) : 0,
+          out_at: entry.out_at !== undefined ? Number(entry.out_at) : 0,
+          my_team_ha: entry.my_team_ha || apiData.my_team_ha || '',
+          
+          // Special stats
+          wild_pitch: entry.wild_pitch,
+          passed_ball: entry.passed_ball,
+          error_on: entry.error_on,
+          br_result: entry.br_result !== undefined ? Number(entry.br_result) : undefined,
+          
+          // Badge properties
+          slap: Number(entry.slap || 0),
+          late_swings: Number(entry.late_swings || 0),
+          fouls: Number(entry.fouls || 0),
+          pitch_count: Number(entry.pitch_count || 0),
+          sac: Number(entry.sac || 0),
+          bunt: Number(entry.bunt || 0),
+          qab: Number(entry.qab || 0)
+        };
+      });
+    }
+    
+    // Direct pa_rounds array structure
+    if (apiData.pa_rounds && typeof apiData.pa_rounds === 'object') {
+      // Loop through each round (e.g., "1", "2", etc.)
+      Object.keys(apiData.pa_rounds).forEach(roundKey => {
+        const roundData = apiData.pa_rounds[roundKey];
+        
+        // Check if the round data is an array
+        if (Array.isArray(roundData)) {
+          // Process each PA in the array
+          roundData.forEach(paData => {
+            if (!paData) return;
             
-            // Create a ScoreBookEntry from the details
+            // Create a ScoreBookEntry from the direct PA data
             const entry: LocalScoreBookEntry = {
-              team_id: apiData.team_id.toString(),
-              game_id: apiData.game_id.toString(),
-              inning_number: details.inning_number,
-              home_or_away: apiData.team_choice,
-              order_number: paData.order_number,
-              batter_seq_id: details.batter_seq_id,
+              team_id: apiData.team_id?.toString() || paData.team_id?.toString() || '',
+              game_id: apiData.game_id?.toString() || paData.game_id?.toString() || '',
+              inning_number: parseInt(apiData.inning_number?.toString() || paData.inning_number?.toString() || '0'),
+              home_or_away: apiData.team_choice || paData.team_choice || '',
+              order_number: parseInt(paData.order_number?.toString() || '0'),
+              batter_seq_id: parseInt(paData.batter_seq_id?.toString() || '0'),
               batter_name: "", // Will be filled from lineup data
               batter_jersey_number: "", // Will be filled from lineup data
               
               // Result fields
-              why_base_reached: details.pa_why,
-              //pa_result is an int between 0 and 4
-              pa_result: details.pa_result.toString(), 
-              //br_result is an int between 0 and 4
-              bases_reached: details.pa_result.toString(),
+              why_base_reached: paData.pa_why || '',
+              pa_result: paData.pa_result?.toString() || '0',
+              bases_reached: paData.pa_result?.toString() || '0',
               result_type: "",
-              detailed_result: details.hit_to.toString(),
+              detailed_result: paData.hit_to?.toString() || '0',
               base_running: "",
               
               // Pitch count details
-              balls_before_play: details.balls_before_play,
-              strikes_before_play: details.strikes_before_play,
-              strikes_watching: 0,
-              strikes_swinging: 0,
-              strikes_unsure: 0,
-              fouls_after_two_strikes: 0,
+              balls_before_play: parseInt(paData.balls_before_play?.toString() || '0'),
+              strikes_before_play: parseInt(paData.strikes_before_play?.toString() || '0'),
+              strikes_watching: parseInt(paData.strikes_watching?.toString() || '0'),
+              strikes_swinging: parseInt(paData.strikes_swinging?.toString() || '0'),
+              strikes_unsure: parseInt(paData.strikes_unsure?.toString() || '0'),
+              fouls_after_two_strikes: parseInt(paData.fouls_after_two_strikes?.toString() || '0'),
               base_running_stolen_base: 0,
-              // Explicitly parse pa_round as number to ensure correct type
-              round: parseInt(details.pa_round?.toString() || '1'),
+              round: parseInt(paData.pa_round?.toString() || roundKey || '1'),
+              
+              // CRITICAL: Include out field for proper display
+              out: paData.out !== undefined ? Number(paData.out) : 0,
+              out_at: paData.out_at !== undefined ? Number(paData.out_at) : 0,
+              my_team_ha: paData.my_team_ha || apiData.my_team_ha || '',
               
               // Special stats
-              wild_pitch: details.wild_pitch,
-              passed_ball: details.passed_ball,
+              wild_pitch: parseInt(paData.wild_pitch?.toString() || '0'),
+              passed_ball: parseInt(paData.passed_ball?.toString() || '0'),
               
               // Error information
-              error_on: details.pa_error_on?.length ? details.pa_error_on[0].toString() : undefined,
-              // Convert br_result to number if it exists, otherwise leave as undefined
-              br_result: details.br_result !== undefined ? parseInt(details.br_result.toString()) : undefined,
+              error_on: paData.pa_error_on?.length ? paData.pa_error_on[0].toString() : undefined,
+              br_result: paData.br_result !== undefined ? parseInt(paData.br_result.toString()) : undefined,
               
-              // Badge properties
-              slap: details.slap,
-              late_swings: details.late_swings,
-              fouls: details.fouls || 0 // Use fouls field if available, otherwise default to 0
+              // Quality indicators
+              slap: parseInt(paData.slap?.toString() || '0'),
+              late_swings: parseInt(paData.late_swings?.toString() || '0'),
+              fouls: parseInt(paData.fouls?.toString() || '0'),
+              pitch_count: parseInt(paData.pitch_count?.toString() || '0'),
+              sac: parseInt(paData.sac?.toString() || '0'),
+              bunt: parseInt(paData.bunt?.toString() || '0'),
+              qab: parseInt(paData.qab?.toString() || '0')
             };
             
             entries.push(entry);
-          }
-        });
-      }
-    });
+          });
+        }
+      });
+    }
     
     return entries;
   };
@@ -572,15 +895,26 @@ const ScoreCardGrid = ({
         .sort((a, b) => (a.batter_seq_id || 0) - (b.batter_seq_id || 0));
     }
     
-    // Fall back to the overall transformed entries
-    if (!transformedEntries) return [];
+    // If we don't have inning-specific data, look in the overall transformedEntries
+    // This is important for preserving data during inning navigation
+    if (transformedEntries && transformedEntries.length > 0) {
+      const entriesForInning = transformedEntries.filter(
+        entry => entry.inning_number === inningNumber && entry.order_number === orderNumber
+      ).sort((a, b) => (a.batter_seq_id || 0) - (b.batter_seq_id || 0));
+      
+      if (entriesForInning.length > 0) {
+        // This means we have data but it's not in inningData, so let's add it there for future use
+        setInningData(prevData => ({
+          ...prevData,
+          [inningNumber]: transformedEntries.filter(entry => entry.inning_number === inningNumber)
+        }));
+        
+        return entriesForInning;
+      }
+    }
     
-    return transformedEntries
-      .filter(entry => 
-        entry.order_number === orderNumber && 
-        entry.inning_number === inningNumber
-      )
-      .sort((a, b) => (a.batter_seq_id || 0) - (b.batter_seq_id || 0));
+    // No data found for this inning and player
+    return [];
   };
 
   // Calculate column index for a specific inning and PA position
@@ -665,11 +999,14 @@ const ScoreCardGrid = ({
 
   // Memoize the BattingOrderTable component to ensure it only makes one API call
   const memoizedBattingOrderTable = useMemo(() => {
-    // Only render BattingOrderTable once we have processed entries
-    if (loading) return null;
-    
     // Create a stable memo key to ensure consistent rendering
-    const memoKey = `${teamId}-${gameId}-${teamChoice}`;
+    const memoKey = `${teamId}-${gameId}-${teamChoice}-${refreshTimestamp || Date.now()}`;
+    
+    // If we have preloaded lineups and they are already loaded for this team, pass that info
+    const isPreloaded = lineupsPreloaded && (
+      (teamChoice === 'home' && lineupsPreloaded.homeLineupLoaded) ||
+      (teamChoice === 'away' && lineupsPreloaded.awayLineupLoaded)
+    );
     
     return (
       <BattingOrderTable 
@@ -678,10 +1015,11 @@ const ScoreCardGrid = ({
         gameId={gameId} 
         teamChoice={teamChoice}
         inningNumber={inningNumber}
+        lineupsPreloaded={lineupsPreloaded}
         onLineupSizeUpdate={handleLineupSizeUpdate}
       />
     );
-  }, [teamId, gameId, teamChoice, inningNumber, loading]);
+  }, [teamId, gameId, teamChoice, inningNumber, refreshTimestamp, lineupsPreloaded]);
 
   // Determine if a cell should be interactive based on the inning
   const isCellInteractive = (inningNum: number) => {
@@ -698,14 +1036,93 @@ const ScoreCardGrid = ({
         
         // If we don't have any entries for the active inning, check if we need to fetch data
         if (activeInningEntries.length === 0) {
-          // Attempt to refresh all data to ensure we have everything
-          await refreshAllInningsData();
+          // Create a unique key for this check to avoid duplicate calls
+          const checkKey = `check-active-inning-${teamId}-${gameId}-${teamChoice}-${activeInning}`;
+          
+          if (shouldAllowApiCall(checkKey, 2000)) {
+            await fetchInningData(activeInning);
+          }
         }
       }
     };
     
     checkActiveInningData();
   }, [activeInning, loading]);
+
+  // Clean up logging in the loadAllPreviousInnings function
+  const loadAllPreviousInnings = async () => {
+    const currentInningNum = parseInt(inningNumber);
+    
+    if (currentInningNum <= 1) {
+      return false;
+    }
+    
+    setLoading(true);
+    
+    try {
+      // Create an array of innings to load
+      const inningsToLoad = Array.from({ length: currentInningNum - 1 }, (_, i) => i + 1);
+      
+      // Get the list of innings we've already loaded
+      const loadedInningNumbers = Object.keys(inningData).map(num => parseInt(num));
+      
+      // Only load innings we haven't loaded yet
+      const inningsToFetch = inningsToLoad.filter(inningNum => !loadedInningNumbers.includes(inningNum));
+      
+      console.log(`Loading previous innings: ${inningsToFetch.join(', ')}`);
+      
+      if (inningsToFetch.length === 0) {
+        console.log('All previous innings already loaded, just updating display state');
+        // Even if we don't need to fetch, update the state to show all innings
+        setShowingAllInnings(true);
+        
+        // Set displayed innings to include all innings 1 through current
+        setDisplayedInnings(Array.from({ length: currentInningNum }, (_, i) => i + 1));
+        
+        setLoading(false);
+        return true;
+      }
+      
+      // Load each inning sequentially using the proper endpoint
+      for (const inningNum of inningsToFetch) {
+        console.log(`Loading previous inning ${inningNum} for ${teamChoice}`);
+        await fetchInningData(inningNum);
+      }
+      
+      // Now show all innings including the current one
+      setShowingAllInnings(true);
+      
+      // Calculate the max inning to show (current inning)
+      const maxInningToShow = currentInningNum;
+      
+      // Create array for all innings 1 through maxInningToShow
+      const allInningsToShow = Array.from({ length: maxInningToShow }, (_, i) => i + 1);
+      
+      // Update displayed innings to show all innings up to the current one
+      setDisplayedInnings(allInningsToShow);
+      
+      setLoading(false);
+      return true;
+    } catch (error) {
+      console.error('Error loading previous innings:', error);
+      setLoading(false);
+      return false;
+    }
+  };
+
+  // Add a function to track rendered innings
+  const getRenderedInnings = (): number[] => {
+    // Get all innings that we have data for
+    const renderedInnings = Object.keys(inningData).map(num => parseInt(num));
+    
+    // Always include the active inning
+    if (!renderedInnings.includes(activeInning)) {
+      renderedInnings.push(activeInning);
+    }
+    
+    // Sort the innings
+    return renderedInnings.sort((a, b) => a - b);
+  };
 
   if (loading) {
     return <div className="p-4">Loading scorecard data...</div>;
@@ -880,6 +1297,7 @@ const ScoreCardGrid = ({
                                         // Create a minimal PA object with essential data for new plate appearance
                                         const newPa: Partial<LocalScoreBookEntry> = {
                                           order_number: orderNumber,
+                                          batting_order_position: orderNumber,
                                           batter_seq_id: nextSeqId,
                                           round: paPosition,
                                           inning_number: inningNum,
@@ -896,8 +1314,13 @@ const ScoreCardGrid = ({
                                           why_base_reached: "",
                                           pa_result: "",
                                           balls_before_play: 0,
-                                          strikes_before_play: 0
+                                          strikes_before_play: 0,
+                                          sac: 0, // Initialize sac field to 0
+                                          bunt: 0, // Initialize bunt field to 0
+                                          qab: 0, // Initialize qab field to 0
                                         };
+                                        
+                                        console.log('Creating new PA with order_number:', orderNumber, 'and batting_order_position:', orderNumber);
                                         
                                         // Pass the partial PA object for creating a new plate appearance
                                         onPlateAppearanceClick(newPa as LocalScoreBookEntry, orderNumber, columnIndex);
@@ -946,6 +1369,6 @@ const ScoreCardGrid = ({
       </div>
     </div>
   );
-};
+});
 
 export default ScoreCardGrid; 

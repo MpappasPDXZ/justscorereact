@@ -971,6 +971,20 @@ const ResultSection = ({
               <div className="flex items-start">
                 <span className="text-sm text-gray-700 mr-2 w-16">Base:</span>
                 <div className="flex space-x-1">
+                  {/* Add a "0" button to clear the selection */}
+                  <button
+                    key="out-at-clear"
+                    type="button"
+                    onClick={() => handleInputChange('out_at', 0)}
+                    className={`w-[27.27px] h-[27.27px] rounded-full flex items-center justify-center text-xs ${
+                      !editedPA.out_at || editedPA.out_at === 0
+                        ? 'bg-white text-gray-600 border border-gray-500'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                    title="Clear out at selection"
+                  >
+                    X
+                  </button>
                   {[1, 2, 3, 4].map(base => (
                     <button
                       key={`out-at-${base}`}

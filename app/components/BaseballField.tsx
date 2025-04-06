@@ -1,6 +1,5 @@
 'use client';
 
-import { ScoreBookEntry } from '@/app/types/scoreTypes';
 import { useEffect } from 'react';
 
 interface BaseballFieldProps {
@@ -9,9 +8,40 @@ interface BaseballFieldProps {
   balls?: number;
   strikes?: number;
   fouls?: number;
-  pa?: ScoreBookEntry; // Add the full PA object as an optional prop
+  pa?: any; // Using any type to avoid type conflicts
   onClick?: () => void; // Add onClick handler prop
   isInteractive?: boolean; // Flag to indicate if the field is clickable
+}
+
+// Ensure the ScoreBookEntry interface includes these properties
+interface ScoreBookEntry {
+  // Standard fields
+  batter_seq_id?: number;
+  pa_why?: string;
+  why_base_reached?: string;
+  pa_result?: number | string;
+  hit_to?: number | string;
+  detailed_result?: number | string;
+  
+  // Count fields
+  balls_before_play?: number;
+  strikes_before_play?: number;
+  fouls?: number;
+  
+  // Base running
+  br_result?: number;
+  base_running?: string;
+  
+  // Outcome flags
+  out?: number;
+  out_at?: number;
+  
+  // Quality indicators
+  slap?: number;
+  late_swings?: number;
+  bunt?: number;
+  sac?: number;
+  qab?: number;
 }
 
 const BaseballField = ({ 
@@ -461,11 +491,10 @@ const BaseballField = ({
     // Get the display text - align with base path logic
     let displayText = '';
     
-    // Handle HBP first
-    if (pa.pa_why === 'HBP') {
+    // Handle walks (BB) and hit by pitch (HBP) first as high priority
+    if (pa.pa_why === 'HBP' || pa.why_base_reached === 'HBP') {
       displayText = 'HBP';
     }
-    // Handle walks (BB) next
     else if (pa.pa_why === 'BB' || pa.why_base_reached === 'BB') {
       displayText = 'BB';
     }
@@ -541,11 +570,14 @@ const BaseballField = ({
 
     // Determine the circle style
     let circleStyle = '';
-    const outValue = pa.out !== undefined ? pa.out : 0;
-    const isPlayerOut = isOut || outValue > 0;
     
-    // For batter_seq_id circle: out > 0 then red, out = 0 then gray with light border
-    if (isPlayerOut) {
+    // CRITICAL FIX: Check pa.out directly, not just calculated isOut
+    // This ensures players marked as out=1 in the database get red circles
+    const outValue = pa.out !== undefined ? Number(pa.out) : 0;
+    
+    // Check all possible ways a player could be out - use logical OR
+    // We must explicitly check outValue > 0 first to prioritize the database value
+    if (outValue > 0 || isOut || strikeoutStatus) {
       circleStyle = 'text-red-600 border-2 border-red-300'; // Red for outs
     } else {
       circleStyle = 'text-gray-700 border border-gray-500'; // Gray with light border for non-outs
@@ -554,7 +586,7 @@ const BaseballField = ({
     // Determine path color - this will be used for both the text and the paths
     let pathColor = '';
     
-    if (isOut || outValue > 0 || strikeoutStatus) {
+    if (outValue > 0 || isOut || strikeoutStatus) {
       // Red for outs and strikeouts
       pathColor = '#DC2626';
     } else if (isError) {
@@ -791,13 +823,27 @@ const BaseballField = ({
           let indicator = '';
           let indicatorColor = '';
           
-          if (pa.slap === 1) {
-            indicator = 'SLAP';
+          // Safely convert property values to numbers for comparison
+          const sacValue = pa.sac !== undefined ? Number(pa.sac) : 0;
+          const buntValue = pa.bunt !== undefined ? Number(pa.bunt) : 0;
+          const qabValue = pa.qab !== undefined ? Number(pa.qab) : 0;
+          const slapValue = pa.slap !== undefined ? Number(pa.slap) : 0;
+          const lateSwingsValue = pa.late_swings !== undefined ? Number(pa.late_swings) : 0;
+          
+          // Priority order: SAC > BUNT > QAB > SLAP > LATE
+          if (sacValue === 1) {
+            indicator = 'SAC';
             indicatorColor = 'border-purple-600';
-          } else if (pa.bunt === 1) {
+          } else if (buntValue === 1) {
             indicator = 'BUNT';
             indicatorColor = 'border-purple-600';
-          } else if (pa.late_swings !== undefined && pa.late_swings > 1) {
+          } else if (qabValue === 1) {
+            indicator = 'QAB';
+            indicatorColor = 'border-blue-600';
+          } else if (slapValue === 1) {
+            indicator = 'SLAP';
+            indicatorColor = 'border-purple-600';
+          } else if (lateSwingsValue > 1) {
             indicator = 'LATE';
             indicatorColor = 'border-red-600';
           }
