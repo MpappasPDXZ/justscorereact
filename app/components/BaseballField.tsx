@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 interface BaseballFieldProps {
   paResult?: string;
@@ -11,6 +11,7 @@ interface BaseballFieldProps {
   pa?: any; // Using any type to avoid type conflicts
   onClick?: () => void; // Add onClick handler prop
   isInteractive?: boolean; // Flag to indicate if the field is clickable
+  fieldKey?: string; // Add fieldKey prop
 }
 
 // Ensure the ScoreBookEntry interface includes these properties
@@ -52,14 +53,86 @@ const BaseballField = ({
   fouls = 0, 
   pa,
   onClick,
-  isInteractive = false
+  isInteractive = false,
+  fieldKey
 }: BaseballFieldProps) => {
+  // Add detailed logging for component render
+  console.log(`[BaseballField] Rendering with key: ${fieldKey}`, {
+    paResult,
+    baseRunning,
+    balls,
+    strikes,
+    fouls,
+    pa,
+    isInteractive
+  });
+
   // If we have the full PA object, use it to determine the result
   const result = pa ? determineResult(pa) : paResult || '';
   const baseRunningValue = pa ? pa.base_running : baseRunning || '';
   const ballsValue = pa ? Number(pa.balls_before_play || 0) : balls;
   const strikesValue = pa ? Number(pa.strikes_before_play || 0) : strikes;
   const foulsValue = pa ? Number(pa.fouls || 0) : fouls;
+  
+  // Log the computed values
+  console.log(`[BaseballField] Computed values for key: ${fieldKey}`, {
+    result,
+    baseRunningValue,
+    ballsValue,
+    strikesValue,
+    foulsValue,
+    paData: pa ? {
+      batter_seq_id: pa.batter_seq_id,
+      pa_result: pa.pa_result,
+      why_base_reached: pa.why_base_reached,
+      base_running: pa.base_running,
+      balls_before_play: pa.balls_before_play,
+      strikes_before_play: pa.strikes_before_play,
+      fouls: pa.fouls
+    } : null
+  });
+
+  // Add state to force re-render when PA data changes
+  const [renderCount, setRenderCount] = useState(0);
+  
+  useEffect(() => {
+    console.log(`[BaseballField] PA data changed for key: ${fieldKey}`, pa);
+    setRenderCount(prev => prev + 1);
+  }, [pa, fieldKey]);
+
+  // If no PA data and cell is interactive, show NEW indicator
+  if (!pa && isInteractive) {
+    return (
+      <div 
+        className={`relative w-24 h-12 flex items-center justify-center ${isInteractive ? 'cursor-pointer hover:bg-gray-50 active:bg-gray-100' : ''}`}
+        onClick={onClick}
+        role={isInteractive ? "button" : undefined}
+        tabIndex={isInteractive ? 0 : undefined}
+        onKeyDown={(e) => {
+          if (isInteractive && onClick && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            onClick();
+          }
+        }}
+        data-component="EmptyBaseballField"
+      >
+        {/* Diamond shape */}
+        <div className="absolute transform rotate-45 w-6 h-6 border border-gray-400 bottom-1"></div>
+        
+        {/* NEW indicator */}
+        <div 
+          className="absolute text-[10px] font-bold text-red-500"
+          style={{
+            top: '65%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)'
+          }}
+        >
+          NEW
+        </div>
+      </div>
+    );
+  }
   
   // Define the getHitDirection function first
   const getHitDirection = () => {

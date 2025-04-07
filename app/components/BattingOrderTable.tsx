@@ -5,6 +5,10 @@ import { useState, useEffect, useRef } from 'react';
 // Create a global request tracker to deduplicate API calls across instances
 const inProgressRequests = new Map<string, boolean>();
 
+// Add a static flag to track which lineups have been loaded globally
+// This persists across component mounts/unmounts
+const loadedLineups = new Set<string>();
+
 interface BatterInfo {
   jersey_number: string;
   player_name: string;
@@ -50,6 +54,10 @@ const BattingOrderTable = ({
   const [battingOrderData, setBattingOrderData] = useState<BattingOrderData | null>(null);
   const [loading, setLoading] = useState(true);
   const componentMountedRef = useRef(true);
+  
+  // Add a static cache to store lineup data persistently
+  // This ensures lineup data is preserved even when component is unmounted/remounted
+  const lineupCacheRef = useRef<{[key: string]: BattingOrderData}>({});
 
   // Create a unique request ID for this specific request
   const getRequestId = (teamId: string, gameId: string, teamChoice: string) => {
@@ -67,7 +75,70 @@ const BattingOrderTable = ({
   }, []);
 
   useEffect(() => {
-    // Reset state when key props change
+    // Check if we've already loaded this lineup globally
+    const requestId = getRequestId(teamId, gameId, teamChoice);
+    
+    // First try to get from sessionStorage - this ensures data persists across page refreshes
+    const cacheKey = `lineup_${teamId}_${gameId}_${teamChoice}`;
+    const cachedSessionData = sessionStorage.getItem(cacheKey);
+    
+    if (cachedSessionData) {
+      console.log(`Using cached lineup data for ${teamChoice} team from sessionStorage`);
+      
+      try {
+        // Parse and use the cached data
+        const data = JSON.parse(cachedSessionData);
+        setBattingOrderData(data);
+        
+        // Call the callback with the lineup size if available
+        if (onLineupSizeUpdate && data.batting_order) {
+          const orderNumbers = Object.keys(data.batting_order);
+          if (orderNumbers.length > 0) {
+            const maxOrder = Math.max(...orderNumbers.map(n => parseInt(n)));
+            onLineupSizeUpdate(maxOrder);
+          }
+        }
+        
+        // Set loading to false
+        setLoading(false);
+        // Mark as loaded in our global tracker
+        loadedLineups.add(requestId);
+        return;
+      } catch (error) {
+        console.error("Error parsing cached lineup data:", error);
+      }
+    }
+    
+    // If not in sessionStorage, check our in-memory cache
+    const cachedData = lineupCacheRef.current[requestId];
+    
+    if (cachedData) {
+      // Use the cached data instead of fetching
+      console.log(`Using cached lineup data for ${teamChoice} team from in-memory cache`);
+      setBattingOrderData(cachedData);
+      
+      // Call the callback with the lineup size if available
+      if (onLineupSizeUpdate && cachedData.batting_order) {
+        const orderNumbers = Object.keys(cachedData.batting_order);
+        if (orderNumbers.length > 0) {
+          const maxOrder = Math.max(...orderNumbers.map(n => parseInt(n)));
+          onLineupSizeUpdate(maxOrder);
+        }
+      }
+      
+      // Set loading to false
+      setLoading(false);
+      return;
+    }
+    
+    // Check if this lineup has already been loaded globally
+    if (loadedLineups.has(requestId)) {
+      console.log(`Preventing duplicate fetch for ${teamChoice} team lineup - already loaded`);
+      setLoading(false);
+      return;
+    }
+    
+    // Reset state when key props change and no cached data is available
     setBattingOrderData(null);
     setLoading(true);
     
@@ -79,6 +150,9 @@ const BattingOrderTable = ({
 
   const fetchBattingOrder = async () => {
     try {
+      // Add trace log to monitor when this endpoint is called
+      console.log(`[TRACE] ${new Date().toISOString()} - Fetching batting order for ${teamChoice} team (${teamId}/${gameId})`);
+      
       if (!teamId || !gameId || teamId === 'undefined' || gameId === 'undefined') {
         console.error("Invalid parameters for fetchBattingOrder", { teamId, gameId, teamChoice });
         setLoading(false);
@@ -93,11 +167,17 @@ const BattingOrderTable = ({
         return;
       }
       
+      // Mark that we're loading this lineup globally
+      loadedLineups.add(requestId);
+      
       // Mark this request as in progress globally
       inProgressRequests.set(requestId, true);
       setLoading(true);
       
       const apiUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/lineup/games/${teamId}/${gameId}/${teamChoice}/order_by_batter`;
+      
+      // Add consistent logging for lineup fetch
+      console.log(`[PATHWAY] Fetching lineup for ${teamChoice} team: ${apiUrl}`);
       
       const response = await fetch(apiUrl, {
         headers: {
@@ -123,8 +203,19 @@ const BattingOrderTable = ({
       
       const data = await response.json();
       
+      // Store in sessionStorage for persistence across refreshes
+      try {
+        const cacheKey = `lineup_${teamId}_${gameId}_${teamChoice}`;
+        sessionStorage.setItem(cacheKey, JSON.stringify(data));
+      } catch (error) {
+        console.error("Error saving lineup data to sessionStorage:", error);
+      }
+      
       // Ensure data is valid before updating state
       if (data && data.batting_order) {
+        // Save the data to our in-memory cache
+        lineupCacheRef.current[requestId] = data;
+        
         setBattingOrderData(data);
         
         // Call the callback with the lineup size if available

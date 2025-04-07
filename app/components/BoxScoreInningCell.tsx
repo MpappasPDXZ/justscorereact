@@ -29,6 +29,9 @@ interface BoxScoreInningCellProps {
     runner_on_third: boolean;
   };
   isLastInning?: boolean;
+  isVisited?: boolean;
+  'data-inning'?: string;
+  'data-team'?: string;
 }
 
 const BoxScoreInningCell: React.FC<BoxScoreInningCellProps> = ({ 
@@ -39,12 +42,54 @@ const BoxScoreInningCell: React.FC<BoxScoreInningCellProps> = ({
   teamType = 'home',
   debug = false,
   runnersData,
-  isLastInning = false
+  isLastInning = false,
+  isVisited = false,
+  'data-inning': dataInning,
+  'data-team': dataTeam
 }) => {
   // Only log data when debug is true
   if (debug) {
     console.log(`BoxScore [Inning ${inningNumber} - ${teamType}]:`, inningData);
   }
+
+  // Track the inning state for proper pathway selection
+  const isPastInning = !!inningNumber && parseInt(inningNumber) < parseInt(sessionStorage.getItem('highest_inning_viewed') || '1');
+  
+  let cellStyles = {};
+  let bgColorClass = 'bg-white';
+  let borderClass = `border-t border-b border-l ${isLastInning ? 'border-r' : ''} border-gray-200`;
+  
+  if (isActive) {
+    // Active inning styling
+    bgColorClass = 'bg-indigo-50';
+    borderClass = `border-t border-b border-l ${isLastInning ? 'border-r' : ''} border-gray-200`;
+    cellStyles = { 
+      boxShadow: '0 0 0 2px rgba(99, 102, 241, 0.4)',
+      zIndex: 10 
+    };
+  } else if (isVisited) {
+    // Visited inning styling - add a subtle indicator
+    bgColorClass = 'bg-blue-50/30';
+    borderClass = `border-t border-b border-l ${isLastInning ? 'border-r' : ''} border-blue-200`;
+  } else if (isPastInning) {
+    // Past inning styling (previously viewed)
+    bgColorClass = 'bg-gray-50';
+    borderClass = `border-t border-b border-l ${isLastInning ? 'border-r' : ''} border-gray-300`;
+  }
+  
+  // Check for runners on bases - using the integer fields or the runnersData prop
+  const hasRunnerOnFirst = runnersData ? runnersData.runner_on_first : inningData.on_first_base > 0;
+  const hasRunnerOnSecond = runnersData ? runnersData.runner_on_second : inningData.on_second_base > 0;
+  const hasRunnerOnThird = runnersData ? runnersData.runner_on_third : inningData.on_third_base > 0;
+  
+  // Simple click handler
+  const handleClick = () => {
+    console.log(`[INNING] Clicked inning ${inningNumber} - Team ${teamType}`);
+    
+    if (onClick) {
+      onClick();
+    }
+  };
 
   // Format percentages to show as integers
   const strikePercentFormatted = Math.round(inningData.strike_percent);
@@ -59,19 +104,13 @@ const BoxScoreInningCell: React.FC<BoxScoreInningCellProps> = ({
   const strikePercentTextColor = getStrikePercentColor(strikePercentFormatted);
   const purpleColor = 'text-indigo-600'; // Standard purple color for hard hits
   
-  // Determine background color based on active state
-  const bgColor = isActive ? 'bg-indigo-50' : 'bg-white';
-  
-  // Check for runners on bases - using the integer fields or the runnersData prop
-  const hasRunnerOnFirst = runnersData ? runnersData.runner_on_first : inningData.on_first_base > 0;
-  const hasRunnerOnSecond = runnersData ? runnersData.runner_on_second : inningData.on_second_base > 0;
-  const hasRunnerOnThird = runnersData ? runnersData.runner_on_third : inningData.on_third_base > 0;
-  
   return (
     <div 
-      className={`relative w-[4.4rem] h-16 border-t border-b border-l ${isLastInning ? 'border-r' : ''} border-gray-200 ${bgColor} cursor-pointer hover:bg-gray-50`}
-      style={{ margin: 0, boxSizing: 'border-box', flexShrink: 0, display: 'block' }}
-      onClick={onClick}
+      className={`relative w-[4.4rem] h-16 ${borderClass} ${bgColorClass} cursor-pointer hover:bg-gray-50`}
+      style={{ margin: 0, boxSizing: 'border-box', flexShrink: 0, display: 'block', ...cellStyles }}
+      onClick={handleClick}
+      data-inning={dataInning}
+      data-team={dataTeam}
     >
       {/* Middle section: Unfilled Diamond with Runs - moved to the left side */}
       <div className="absolute top-[60%] left-1/2 transform -translate-x-1/2 -translate-y-1/2">
