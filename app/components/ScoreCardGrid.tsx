@@ -110,22 +110,13 @@ const ScoreCardGrid = forwardRef<ScoreCardGridRef, ScoreCardGridProps>((props, r
     refreshTimestamp
   } = props;
   
-  // Log incoming scorebook entries
-  useEffect(() => {
-    console.log('[DATA] Received scorebook entries:', scorebookEntries);
-    // Add detailed logging of each entry
-    scorebookEntries.forEach(entry => {
-      console.log(`[DATA] Entry - Order: ${entry.order_number}, Inning: ${entry.inning_number}, Round: ${entry.pa_round}, Result: ${entry.pa_result}`);
-    });
-  }, [scorebookEntries]);
-  
+
   const [activeInning, setActiveInning] = useState<number>(parseInt(inningNumber));
   const [visibleInnings, setVisibleInnings] = useState<number[]>([]);
 
   // Calculate lineup size from scorebook entries
   const lineupSize = useMemo(() => {
     const maxOrderNumber = Math.max(...scorebookEntries.map(entry => entry.order_number || 0), 0);
-    console.log(`[DEBUG] Calculated lineup size: ${maxOrderNumber || 9}`);
     // Always ensure lineup size is at least 9
     return Math.max(maxOrderNumber, 9);
   }, [scorebookEntries]);
@@ -207,7 +198,6 @@ const ScoreCardGrid = forwardRef<ScoreCardGridRef, ScoreCardGridProps>((props, r
   // Add effect to refresh active inning when refreshTimestamp changes
   useEffect(() => {
     if (refreshTimestamp) {
-      console.log('Refresh timestamp changed, forcing refresh of active inning:', inningNumber);
       // Force a refresh of the active inning by setting it to the current inning number
       setActiveInning(parseInt(inningNumber));
       
@@ -255,17 +245,13 @@ const ScoreCardGrid = forwardRef<ScoreCardGridRef, ScoreCardGridProps>((props, r
 
   // Add helper function to check if a plate appearance can be added
   const canAddPlateAppearance = (orderNumber: number, round: number, inningNum: number) => {
-    console.log(`\n[PA Check] Checking batter ${orderNumber}, round ${round}, inning ${inningNum}`);
-    
     // If it's not the active inning, can't add PA
     if (!isCellInteractive(inningNum)) {
-      console.log(`[PA Check] Not active inning - can't add PA`);
       return false;
     }
 
     // Get all PAs in this inning
     const inningPAs = scorebookEntries.filter(entry => entry.inning_number === inningNum);
-    console.log(`[PA Check] Total PAs in inning ${inningNum}:`, inningPAs.length);
 
     // Check if this batter already has a PA in this round
     const hasExistingPA = inningPAs.some(pa => 
@@ -275,12 +261,10 @@ const ScoreCardGrid = forwardRef<ScoreCardGridRef, ScoreCardGridProps>((props, r
 
     // If batter already has a PA in this round, they can't add another
     if (hasExistingPA) {
-      console.log(`[PA Check] Batter ${orderNumber} already has PA in round ${round}`);
       return false;
     }
 
     // Allow adding PA for any order number that hasn't batted yet
-    console.log(`[PA Check] Can add PA? true - Batter ${orderNumber} hasn't batted in this round`);
     return true;
   };
 
@@ -391,7 +375,6 @@ const ScoreCardGrid = forwardRef<ScoreCardGridRef, ScoreCardGridProps>((props, r
               <tbody className="bg-white divide-y divide-gray-200">
                 {Array.from({ length: lineupSize }, (_, index) => {
                   const orderNumber = index + 1;
-                  console.log(`[DEBUG] Rendering row for order number: ${orderNumber}`);
                   return (
                     <tr 
                       key={orderNumber}
@@ -430,7 +413,6 @@ const ScoreCardGrid = forwardRef<ScoreCardGridRef, ScoreCardGridProps>((props, r
                                   {canAddPlateAppearance(orderNumber, round, inningNum) ? (
                                     <button
                                       onClick={() => {
-                                        console.log(`[DEBUG] Adding PA for order ${orderNumber}, round ${round}, inning ${inningNum}`);
                                         const nextSeqId = Math.max(...scorebookEntries.map(e => e.batter_seq_id || 0), 0) + 1;
                                         const newPa = {
                                           order_number: orderNumber,
@@ -530,7 +512,6 @@ const ScoreCardGrid = forwardRef<ScoreCardGridRef, ScoreCardGridProps>((props, r
                                 {canAddPlateAppearance(orderNumber, round, inningNum) ? (
                                   <button
                                     onClick={() => {
-                                      console.log(`[DEBUG] Adding PA for order ${orderNumber}, round ${round}, inning ${inningNum}`);
                                       const nextSeqId = Math.max(...scorebookEntries.map(e => e.batter_seq_id || 0), 0) + 1;
                                       const newPa = {
                                         order_number: orderNumber,

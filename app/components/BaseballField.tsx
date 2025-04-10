@@ -57,15 +57,7 @@ const BaseballField = ({
   fieldKey
 }: BaseballFieldProps) => {
   // Add detailed logging for component render
-  console.log(`[BaseballField] Rendering with key: ${fieldKey}`, {
-    paResult,
-    baseRunning,
-    balls,
-    strikes,
-    fouls,
-    pa,
-    isInteractive
-  });
+
 
   // If we have the full PA object, use it to determine the result
   const result = pa ? determineResult(pa) : paResult || '';
@@ -74,29 +66,11 @@ const BaseballField = ({
   const strikesValue = pa ? Number(pa.strikes_before_play || 0) : strikes;
   const foulsValue = pa ? Number(pa.fouls || 0) : fouls;
   
-  // Log the computed values
-  console.log(`[BaseballField] Computed values for key: ${fieldKey}`, {
-    result,
-    baseRunningValue,
-    ballsValue,
-    strikesValue,
-    foulsValue,
-    paData: pa ? {
-      batter_seq_id: pa.batter_seq_id,
-      pa_result: pa.pa_result,
-      why_base_reached: pa.why_base_reached,
-      base_running: pa.base_running,
-      balls_before_play: pa.balls_before_play,
-      strikes_before_play: pa.strikes_before_play,
-      fouls: pa.fouls
-    } : null
-  });
-
   // Add state to force re-render when PA data changes
   const [renderCount, setRenderCount] = useState(0);
   
   useEffect(() => {
-    console.log(`[BaseballField] PA data changed for key: ${fieldKey}`, pa);
+    //console.log(`[BaseballField] PA data changed for key: ${fieldKey}`, pa);
     setRenderCount(prev => prev + 1);
   }, [pa, fieldKey]);
 
