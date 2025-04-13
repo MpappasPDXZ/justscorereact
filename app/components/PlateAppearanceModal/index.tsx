@@ -987,8 +987,8 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
   const createApiData = () => {
     if (!editedPA) return null;
 
-    // Calculate if this is an out based on pa_result
-    const isOut = editedPA.pa_result === 0 ? 1 : 0;
+    // Calculate if this is an out based on pa_result or out_at
+    const isOut = (editedPA.pa_result === 0 || (editedPA.out_at && editedPA.out_at !== 0)) ? 1 : 0;
 
     // Create the API data object with all necessary fields
     const apiData = {

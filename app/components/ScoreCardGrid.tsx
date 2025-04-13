@@ -17,6 +17,12 @@ interface ScoreCardGridProps {
   showPrecedingInnings?: boolean;
   refreshTimestamp?: number;
   inningsToShow?: number[];
+  refreshedData?: {
+    type: 'round' | 'inning';
+    inning: number;
+    round?: number;
+    entries: LocalScoreBookEntry[];
+  };
 }
 
 interface PlateAppearanceDetail {
@@ -97,9 +103,87 @@ const ScoreCardGrid = forwardRef<ScoreCardGridRef, ScoreCardGridProps>((props, r
     teamChoice, 
     onPlateAppearanceClick,
     inningsToShow: propInningsToShow,
-    refreshTimestamp
+    refreshTimestamp,
+    refreshedData
   } = props;
   
+  // Log only active inning data
+  const activeInningNumber = parseInt(inningNumber);
+
+  // Log the full refreshedData structure first
+  console.log('[REFRESHED DATA]', {
+    exists: !!refreshedData,
+    type: refreshedData?.type,
+    inning: refreshedData?.inning,
+    round: refreshedData?.round,
+    rawEntries: refreshedData?.entries,
+    filteredEntries: refreshedData?.entries.filter(e => e.inning_number === activeInningNumber),
+  });
+
+  // Create a Map to merge entries using batter_seq_id as the key
+  const entriesMap = new Map();
+
+  // Process refreshed data first if it exists (since it's always newer)
+  if (refreshedData) {
+    refreshedData.entries
+      .filter(entry => entry.inning_number === activeInningNumber)
+      .forEach(entry => {
+        entriesMap.set(entry.batter_seq_id, {
+          timestamp: refreshTimestamp,
+          data: {
+            batter_seq_id: entry.batter_seq_id,
+            pa_round: entry.pa_round,
+            order_number: entry.order_number,
+            pa_result: entry.pa_result,
+            base_running: entry.base_running
+          }
+        });
+      });
+  }
+
+  // Then process original entries, but only if there's no refreshed data for that batter_seq_id
+  scorebookEntries
+    .filter(entry => entry.inning_number === activeInningNumber)
+    .forEach(entry => {
+      if (!entriesMap.has(entry.batter_seq_id)) {
+        entriesMap.set(entry.batter_seq_id, {
+          timestamp: 0, // Original entries get timestamp 0
+          data: {
+            batter_seq_id: entry.batter_seq_id,
+            pa_round: entry.pa_round,
+            order_number: entry.order_number,
+            pa_result: entry.pa_result,
+            base_running: entry.base_running
+          }
+        });
+      }
+    });
+
+  // Convert Map back to array, taking only the data portion
+  const mergedEntries = Array.from(entriesMap.values()).map(entry => entry.data);
+
+  // Sort entries by order_number and pa_round for consistent display
+  const sortedEntries = mergedEntries.sort((a, b) => {
+    if (a.order_number !== b.order_number) {
+      return a.order_number - b.order_number;
+    }
+    return a.pa_round - b.pa_round;
+  });
+
+  // Log the final merged data
+  console.log('[SCORECARD DATA]', {
+    timestamp: refreshTimestamp,
+    inning: activeInningNumber,
+    hasRefreshedData: !!refreshedData,
+    refreshedDataType: refreshedData?.type,
+    entries: sortedEntries,
+    _debug: {
+      originalEntriesCount: scorebookEntries.filter(e => e.inning_number === activeInningNumber).length,
+      refreshedEntriesCount: refreshedData?.entries.filter(e => e.inning_number === activeInningNumber).length || 0,
+      finalEntriesCount: sortedEntries.length,
+      entriesMap: Object.fromEntries(entriesMap)
+    }
+  });
 
   const [activeInning, setActiveInning] = useState<number>(parseInt(inningNumber));
   const [visibleInnings, setVisibleInnings] = useState<number[]>([]);
@@ -266,17 +350,8 @@ const ScoreCardGrid = forwardRef<ScoreCardGridRef, ScoreCardGridProps>((props, r
 
   // Add helper function to check if a plate appearance can be added
   const canAddPlateAppearance = (orderNumber: number, round: number, inningNum: number) => {
-    console.log('canAddPlateAppearance called with:', {
-      orderNumber,
-      round,
-      inningNum,
-      teamChoice,
-      isInteractive: isCellInteractive(inningNum)
-    });
-
     // If it's not the active inning, can't add PA
     if (!isCellInteractive(inningNum)) {
-      console.log('Not interactive inning, returning false');
       return false;
     }
 
@@ -285,64 +360,69 @@ const ScoreCardGrid = forwardRef<ScoreCardGridRef, ScoreCardGridProps>((props, r
       entry.inning_number === inningNum && 
       entry.home_or_away === teamChoice
     );
-    console.log('Found PAs in this inning:', inningPAs);
 
     // Check if this batter already has a PA in this round
     const hasExistingPA = inningPAs.some(pa => 
       pa.order_number === orderNumber && 
       pa.pa_round === round
     );
-    console.log('Has existing PA in this round:', {
-      hasExistingPA,
-      orderNumber,
-      round,
-      inningPAs: inningPAs.map(pa => ({
-        order_number: pa.order_number,
-        pa_round: pa.pa_round,
-        home_or_away: pa.home_or_away
-      }))
-    });
 
     // If batter already has a PA in this round, they can't add another
     if (hasExistingPA) {
-      console.log('Has existing PA, returning false');
       return false;
     }
 
-    console.log('No existing PA, returning true');
     // Allow adding PA for any order number that hasn't batted yet
     return true;
   };
 
   const renderPACell = (playerPAs: ScoreBookEntry[], columnIndex: number, orderNumber: number, inningNum: number) => {
-    // Find the PA for this cell
-    const pa = playerPAs.find(p => 
-      p.order_number === orderNumber && 
-      p.pa_round === columnIndex + 1 &&
-      p.inning_number === inningNum
-    ) || null;
+    // Start with the original entries
+    let sourceEntries = [...playerPAs];
     
-    // Check if this order number is within the actual lineup size
+    // If we have refreshed data, merge it with existing entries
+    if (props.refreshedData) {
+        if (props.refreshedData.type === 'inning' && props.refreshedData.inning === inningNum) {
+            // For inning refresh, merge all entries for this inning
+            const existingEntries = sourceEntries.filter(e => e.inning_number !== inningNum);
+            sourceEntries = [...existingEntries, ...props.refreshedData.entries];
+        } else if (props.refreshedData.type === 'round' && 
+                   props.refreshedData.inning === inningNum && 
+                   props.refreshedData.round === columnIndex + 1) {
+            // For round refresh, only merge entries for this specific round
+            const existingEntries = sourceEntries.filter(e => 
+                e.inning_number !== inningNum || e.pa_round !== columnIndex + 1
+            );
+            sourceEntries = [...existingEntries, ...props.refreshedData.entries];
+        }
+    }
+
+    // Find the PA using the merged source
+    const pa = sourceEntries.find(p => 
+        p.order_number === orderNumber && 
+        p.pa_round === columnIndex + 1 &&
+        p.inning_number === inningNum
+    ) || null;
+
     const playerExists = orderNumber <= actualLineupSize;
     
-    // Always show the cell if the player exists in the lineup
     if (!playerExists) {
-      return <td key={`empty-${orderNumber}-${columnIndex}`} className="border p-0"></td>;
+        return <td key={`empty-${orderNumber}-${columnIndex}`} className="border p-0"></td>;
     }
     
     return (
-      <td 
-        key={`pa-${orderNumber}-${columnIndex}`} 
-        className="border p-0 text-xs text-center align-top"
-        style={{ height: '60px', minWidth: '96px' }}
-      >
-        <BaseballDiamondCell 
-          pa={pa}
-          onClick={() => onPlateAppearanceClick(pa, orderNumber, columnIndex)}
-          isInteractive={isCellInteractive(inningNum)}
-          canAddPA={canAddPlateAppearance(orderNumber, columnIndex + 1, inningNum)}
-        />
-      </td>
+        <td 
+            key={`pa-${orderNumber}-${columnIndex}-${refreshTimestamp}-${props.refreshedData?.type || 'original'}`} 
+            className="border p-0 text-xs text-center align-top"
+            style={{ height: '60px', minWidth: '96px' }}
+        >
+            <BaseballDiamondCell 
+                pa={pa}
+                onClick={() => onPlateAppearanceClick(pa, orderNumber, columnIndex)}
+                isInteractive={isCellInteractive(inningNum)}
+                canAddPA={canAddPlateAppearance(orderNumber, columnIndex + 1, inningNum)}
+            />
+        </td>
     );
   };
 
@@ -462,10 +542,13 @@ const ScoreCardGrid = forwardRef<ScoreCardGridRef, ScoreCardGridProps>((props, r
                         const maxRounds = getDisplayedRounds(inningNum);
                         const isActiveInning = isCellInteractive(inningNum);
                         
+                        const filteredEntries = scorebookEntries.filter(entry => 
+                          entry.inning_number === inningNum
+                        );
                         return Array.from({ length: maxRounds }, (_, roundIndex) => {
                           const round = roundIndex + 1;
                           const pa = getPlayerPAForRound(orderNumber, round, inningNum);
-                          return renderPACell(scorebookEntries, roundIndex, orderNumber, inningNum);
+                          return renderPACell(filteredEntries, roundIndex, orderNumber, inningNum);
                         });
                       })}
                     </tr>
@@ -486,10 +569,13 @@ const ScoreCardGrid = forwardRef<ScoreCardGridRef, ScoreCardGridProps>((props, r
                       const maxRounds = getDisplayedRounds(inningNum);
                       const isActiveInning = isCellInteractive(inningNum);
                       
+                      const filteredEntries = scorebookEntries.filter(entry => 
+                        entry.inning_number === inningNum
+                      );
                       return Array.from({ length: maxRounds }, (_, roundIndex) => {
                         const round = roundIndex + 1;
                         const pa = getPlayerPAForRound(orderNumber, round, inningNum);
-                        return renderPACell(scorebookEntries, roundIndex, orderNumber, inningNum);
+                        return renderPACell(filteredEntries, roundIndex, orderNumber, inningNum);
                       });
                     })}
                   </tr>
