@@ -8,7 +8,7 @@ import PositionSelectOptions from '@/app/components/PositionSelectOptions';
 import BoxScoreInningCell from '@/app/components/BoxScoreInningCell';
 import ScoreCardGrid from '@/app/components/ScoreCardGrid';
 import { ScoreBookEntry as ImportedScoreBookEntry } from '@/app/types/scoreTypes';
-import { PlateAppearance } from '../../../../../types/plateAppearance';
+import { PlateAppearance } from '@/types/plateAppearance';
 
 // Define types
 interface Game {
