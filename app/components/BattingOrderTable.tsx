@@ -55,13 +55,15 @@ const BattingOrderTable = ({
   const [loading, setLoading] = useState(true);
   const componentMountedRef = useRef(true);
   
-  // Add a static cache to store lineup data persistently
-  // This ensures lineup data is preserved even when component is unmounted/remounted
-  const lineupCacheRef = useRef<{[key: string]: BattingOrderData}>({});
-
-  // Create a unique request ID for this specific request
+  // Create a ref to store the cached lineup data
+  const lineupCacheRef = useRef<{ [key: string]: BattingOrderData }>({});
+  
+  // Create a ref to track loaded lineups per team
+  const loadedLineupsRef = useRef<{ [key: string]: boolean }>({});
+  
+  // Function to get a unique request ID for caching
   const getRequestId = (teamId: string, gameId: string, teamChoice: string) => {
-    return `lineup_${teamId}_${gameId}_${teamChoice}`;
+    return `${teamId}-${gameId}-${teamChoice}`;
   };
 
   useEffect(() => {
@@ -75,24 +77,19 @@ const BattingOrderTable = ({
   }, []);
 
   useEffect(() => {
-    // Check if we've already loaded this lineup globally
+    // Generate a unique request ID for this lineup
     const requestId = getRequestId(teamId, gameId, teamChoice);
     
-    // First try to get from sessionStorage - this ensures data persists across page refreshes
-    const cacheKey = `lineup_${teamId}_${gameId}_${teamChoice}`;
-    const cachedSessionData = sessionStorage.getItem(cacheKey);
-    
-    if (cachedSessionData) {
-      console.log(`Using cached lineup data for ${teamChoice} team from sessionStorage`);
-      
+    // Check sessionStorage first
+    const cachedLineup = sessionStorage.getItem(`lineup-${requestId}`);
+    if (cachedLineup) {
       try {
-        // Parse and use the cached data
-        const data = JSON.parse(cachedSessionData);
-        setBattingOrderData(data);
+        const parsedData = JSON.parse(cachedLineup);
+        setBattingOrderData(parsedData);
         
         // Call the callback with the lineup size if available
-        if (onLineupSizeUpdate && data.batting_order) {
-          const orderNumbers = Object.keys(data.batting_order);
+        if (onLineupSizeUpdate && parsedData.batting_order) {
+          const orderNumbers = Object.keys(parsedData.batting_order);
           if (orderNumbers.length > 0) {
             const maxOrder = Math.max(...orderNumbers.map(n => parseInt(n)));
             onLineupSizeUpdate(maxOrder);
@@ -101,8 +98,8 @@ const BattingOrderTable = ({
         
         // Set loading to false
         setLoading(false);
-        // Mark as loaded in our global tracker
-        loadedLineups.add(requestId);
+        // Mark as loaded in our ref
+        loadedLineupsRef.current[requestId] = true;
         return;
       } catch (error) {
         console.error("Error parsing cached lineup data:", error);
@@ -131,8 +128,8 @@ const BattingOrderTable = ({
       return;
     }
     
-    // Check if this lineup has already been loaded globally
-    if (loadedLineups.has(requestId)) {
+    // Check if this lineup has already been loaded
+    if (loadedLineupsRef.current[requestId]) {
       console.log(`Preventing duplicate fetch for ${teamChoice} team lineup - already loaded`);
       setLoading(false);
       return;

@@ -152,18 +152,12 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}${endpoint}`);
       
       if (!response.ok) {
-        console.error(`Error fetching data: ${response.status} ${response.statusText}`);
         return null;
       }
       
       const data = await response.json();
-      
-      // Handle the original format from:
-      // /scores/new/{team_id}/{game_id}/{team_choice}/{inning_number}/scorecardgrid_paonly_inningonly/{batter_seq_id}/pa_edit
-      // No need to navigate nested structures - data is directly available
       return data;
     } catch (error) {
-      console.error('Error fetching data:', error);
       return null;
     }
   };
@@ -264,7 +258,6 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
     try {
       // Ensure we have valid teamId and gameId
       if (!teamId || !gameId || !homeOrAway) {
-        console.error('Missing required parameters for lineup fetch', { teamId, gameId, homeOrAway });
         return null;
       }
       
@@ -274,7 +267,6 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
         const response = await fetch(endpoint);
         
         if (!response.ok) {
-          console.error(`Error fetching lineup data: ${response.status} ${response.statusText}`);
           return null;
         }
         
@@ -301,11 +293,9 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
         }
         return null;
       } catch (fetchError) {
-        console.error('Network error in fetchPlayerInfoFromLineup:', fetchError);
         return null;
       }
     } catch (error) {
-      console.error('Error in fetchPlayerInfoFromLineup:', error);
       return null;
     }
   };
@@ -460,30 +450,19 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
         order_number: orderNumber,
         batter_jersey_number: playerJerseyNumber,
         batter_name: playerName,
-        batter_seq_id: seqId,
+        batter_seq_id: seqId,  // Use the server-provided ID
         round: round,
-        pa_result: 0,
-        bases_reached: '', // Required by ScoreBookEntry interface but duplicative with pa_result
-        base_running: '',
-        balls_before_play: 0,
-        strikes_before_play: 0,
-        strikes_watching: 0,
-        strikes_swinging: 0,
-        strikes_unsure: 0,
-        fouls_after_two_strikes: 0,
-        fouls: 0, // Explicitly set fouls to 0
-        ball_swinging: 0, // Explicitly set ball_swinging to 0
-        base_running_stolen_base: 0,
+        pa_round: round,
         team_id: teamId || '',
         game_id: gameId || '',
         inning_number: inningNumber || 0,
         home_or_away: homeOrAway || 'away',
-        out_at: 0, // Ensure out_at is a number for type compatibility
+        out_at: 0,
         pitch_count: 0,
         // Initialize our new fields
         qab: 0,
         hh: 0,
-        hard_hit: 0, // Initialize hard_hit field as 0
+        hard_hit: 0,
         rbi: 0,
         // Add missing required properties
         pa_error_on: [],
@@ -492,7 +471,25 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
         base_running_hit_around: [],
         slap: 0,
         sac: 0,
-        bunt: 0
+        bunt: 0,
+        // Initialize all other fields
+        bases_reached: '',
+        why_base_reached: '',
+        pa_result: '',
+        result_type: '',
+        detailed_result: '',
+        base_running: '',
+        balls_before_play: 0,
+        strikes_before_play: 0,
+        strikes_watching: 0,
+        strikes_swinging: 0,
+        strikes_unsure: 0,
+        fouls_after_two_strikes: 0,
+        fouls: 0,
+        ball_swinging: 0,
+        base_running_stolen_base: 0,
+        br_result: 0,
+        late_swings: 0
       };
       
       setEditedPA(newPA);
@@ -600,7 +597,7 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
       game_id: apiPA.game_id,
       team_choice: apiPA.team_choice,
       inning_number: apiPA.inning_number,
-      pa_round: apiPA.pa_round,
+      round: apiPA.pa_round,
       batter_seq_id: apiPA.batter_seq_id,
       order_number: apiPA.order_number,
       pa_why: apiPA.pa_why,
@@ -999,7 +996,7 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
       game_id: editedPA.game_id || gameId,
       team_choice: editedPA.home_or_away || homeOrAway,
       inning_number: editedPA.inning_number || inningNumber,
-      pa_round: editedPA.round || 1,
+      round: editedPA.round || 1,
       batter_seq_id: editedPA.batter_seq_id,
       order_number: editedPA.order_number,
       pa_why: editedPA.pa_why || '',
@@ -1049,10 +1046,7 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
     // Get the API data using our helper function
     const apiData = createApiData();
     if (!apiData) return;
-    
-    // Log the key fields again just before saving
-    console.log(`Saving PA with order_number=${apiData.order_number}, out=${apiData.out}, out_at=${apiData.out_at}`);
-    
+
     // Call the onSave function with the prepared data
     if (onSave) {
       // Set saving state if needed
@@ -1126,7 +1120,6 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
   // Update the delete handler to safely handle undefined values
   const handleDelete = async () => {
     if (!pa || !pa.batter_seq_id) {
-      console.error("Cannot delete: Missing required plate appearance data");
       return;
     }
     
@@ -1187,7 +1180,6 @@ const PlateAppearanceModal: React.FC<PlateAppearanceModalProps> = ({
       // Close the modal after successful deletion using our custom close handler
       handleClose();
     } catch (error) {
-      console.error("Error in delete handler:", error);
       alert("Failed to delete plate appearance. Please try again.");
     }
   };

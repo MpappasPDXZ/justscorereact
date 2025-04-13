@@ -12,6 +12,7 @@ interface BaseballFieldProps {
   onClick?: () => void; // Add onClick handler prop
   isInteractive?: boolean; // Flag to indicate if the field is clickable
   fieldKey?: string; // Add fieldKey prop
+  canAddPA?: boolean; // Add flag to indicate if PA can be added
 }
 
 // Ensure the ScoreBookEntry interface includes these properties
@@ -54,7 +55,8 @@ const BaseballField = ({
   pa,
   onClick,
   isInteractive = false,
-  fieldKey
+  fieldKey,
+  canAddPA = false
 }: BaseballFieldProps) => {
   // Add detailed logging for component render
 
@@ -74,8 +76,8 @@ const BaseballField = ({
     setRenderCount(prev => prev + 1);
   }, [pa, fieldKey]);
 
-  // If no PA data and cell is interactive, show NEW indicator
-  if (!pa && isInteractive) {
+  // If no PA data and cell is interactive and can add PA, show NEW indicator
+  if (!pa && isInteractive && canAddPA) {
     return (
       <div 
         className={`relative w-24 h-12 flex items-center justify-center ${isInteractive ? 'cursor-pointer hover:bg-gray-50 active:bg-gray-100' : ''}`}
@@ -95,14 +97,16 @@ const BaseballField = ({
         
         {/* NEW indicator */}
         <div 
-          className="absolute text-[10px] font-bold text-red-500"
+          className="absolute text-emerald-500/80"
           style={{
             top: '65%',
             left: '50%',
             transform: 'translate(-50%, -50%)'
           }}
         >
-          NEW
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
         </div>
       </div>
     );
@@ -920,7 +924,11 @@ const BaseballField = ({
       {/* Add plate appearance indicator (only shown when interactive and empty) - adjusted position */}
       {isInteractive && !result && (
         <div className="absolute inset-0 flex items-center justify-center" style={{ paddingTop: '11px' }}>
-          <div className="text-red-500 text-[10px] font-bold">NEW</div>
+          <div className="text-emerald-500/80">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+          </div>
         </div>
       )}
     </div>

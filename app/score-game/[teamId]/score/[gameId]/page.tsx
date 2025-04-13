@@ -8,6 +8,7 @@ import PositionSelectOptions from '@/app/components/PositionSelectOptions';
 import BoxScoreInningCell from '@/app/components/BoxScoreInningCell';
 import ScoreCardGrid from '@/app/components/ScoreCardGrid';
 import { ScoreBookEntry as ImportedScoreBookEntry } from '@/app/types/scoreTypes';
+import { PlateAppearance } from '@/types/plateAppearance';
 
 // Define types
 interface Game {
@@ -115,6 +116,7 @@ interface ScoreBookEntry {
   team_id?: string;           // Add team_id field
   game_id?: string;           // Add game_id field
   home_or_away?: string;      // Add home_or_away field
+  pa_round?: number;          // Add pa_round field
 }
 
 interface InningDetail {
@@ -133,6 +135,7 @@ interface InningDetail {
   };
   lineup_entries: LineupEntry[];
   scorebook_entries: ScoreBookEntry[];
+  pa_data?: PlateAppearance[];
 }
 
 interface PlateAppearanceModalProps {
@@ -310,6 +313,17 @@ export default function ScoreGame() {
         
         if (response.ok) {
           const data = await response.json();
+          
+          // Log the API response data
+          console.log('API Response Data:', {
+            scorebook_entries: data.scorebook_entries?.map((entry: any) => ({
+              batter_seq_id: entry.batter_seq_id,
+              round: entry.round,
+              pa_round: entry.pa_round,
+              order_number: entry.order_number,
+              inning_number: entry.inning_number
+            }))
+          });
           
           // Set the inningDetail state
           setInningDetail(data);
@@ -665,39 +679,6 @@ export default function ScoreGame() {
     return playerIndex >= 0 ? playerIndex : 0;
   };
 
-  // Function to get the next batter sequence ID using the round field
-  const getNextBatterSeqId = () => {
-    if (!inningDetail?.scorebook_entries || inningDetail.scorebook_entries.length === 0) {
-      return 1; // First batter in the inning always gets sequence ID 1
-    }
-    
-    // Get the lineup size from the maximum order number in the lineup
-    const lineupSize = inningDetail?.lineup_entries && Array.isArray(inningDetail.lineup_entries) 
-      ? Math.max(...inningDetail.lineup_entries.map(entry => entry.order_number))
-      : 0;
-    
-    if (lineupSize === 0) return 1;
-    
-    // Find the highest round in the current inning
-    const highestRound = Math.max(...inningDetail.scorebook_entries.map(entry => entry.round || 1));
-    // Find the highest order number that has batted in the highest round
-    const highestOrderInRound = Math.max(
-      ...inningDetail.scorebook_entries
-        .filter(entry => entry.round === highestRound)
-        .map(entry => entry.order_number)
-    );
-    
-    // If we've completed the round, start a new round
-    if (highestOrderInRound === lineupSize) {
-      // Start a new round
-      const newRound = highestRound + 1;
-      return (newRound - 1) * lineupSize + 1;
-    }
-    // Otherwise, get the next batter in the current round
-    const nextOrder = highestOrderInRound + 1;
-    return (highestRound - 1) * lineupSize + nextOrder;
-  };
-  
   // Function to get the next batter sequence ID for a specific player
   const getNextBatterSeqIdForPlayer = (orderNumber: number): number => {
     if (!inningDetail?.scorebook_entries) return 1;
@@ -714,8 +695,8 @@ export default function ScoreGame() {
       
     // If this player has no PAs yet, we need to calculate their first batter_seq_id
     if (playerPAs.length === 0) {
-      // Get the global next batter sequence ID
-      return getNextBatterSeqId();
+      // Get the next batter sequence ID from the server
+      return 1; // Default to 1, will be updated by server
     }
     // Otherwise, this player is batting again, so increment their last batter_seq_id
     // This shouldn't normally happen as each player should only bat once per column
@@ -741,10 +722,27 @@ export default function ScoreGame() {
     return maxRound + 1;
   };
 
-  // Update the renderPACell function to remove the pa_why field
+  // Add helper function to check if a cell is interactive
+  const isCellInteractive = (inningNum: number) => {
+    return inningNum === parseInt(selectedInning);
+  };
+
   const renderPACell = (playerPAs: ScoreBookEntry[], columnIndex: number, orderNumber: number) => {
+    console.log('renderPACell:', {
+      columnIndex,
+      orderNumber,
+      playerPAs: playerPAs.map(pa => ({
+        batter_seq_id: pa.batter_seq_id,
+        round: pa.round,
+        pa_round: pa.pa_round,
+        order_number: pa.order_number
+      }))
+    });
+
     // Find the PA for this cell
     const pa = playerPAs.find(p => p.round === columnIndex + 1);
+    
+    console.log('Found PA for cell:', pa);
     
     // Check if this order number exists in the lineup
     const playerExists = inningDetail?.lineup_entries?.some(entry => entry.order_number === orderNumber);
@@ -762,87 +760,8 @@ export default function ScoreGame() {
       >
         <BaseballDiamondCell 
           pa={pa as any || null}
-          key={`diamond-${selectedTeam}-${selectedInning}-${orderNumber}-${columnIndex}-${pa?.slap || 0}-${pa?.sac || 0}-${pa?.qab || 0}-${pa?.hard_hit || 0}-${Date.now()}`}
-          onClick={() => {
-            if (pa) {
-              setSelectedPA(pa);
-              setIsPlateAppearanceModalOpen(true);
-            } else {
-              // For a new PA, we'll use the round (column index + 1) to determine the sequence ID
-              const round = columnIndex + 1;
-              
-              // Get the lineup size from the maximum order number in the lineup
-              const lineupSize = inningDetail?.lineup_entries && Array.isArray(inningDetail.lineup_entries) 
-                ? Math.max(...inningDetail.lineup_entries.map(entry => entry.order_number))
-                : 0;
-              
-              // The sequence ID is calculated as: (round - 1) * lineupSize + order_number
-              const newSeqId = (round - 1) * lineupSize + orderNumber;
-              
-              // Get player information from lineup entries
-              let playerJerseyNumber = '';
-              let playerName = '';
-              
-              if (inningDetail?.lineup_entries) {
-                const playerInfo = inningDetail.lineup_entries.find(entry => entry.order_number === orderNumber);
-                if (playerInfo) {
-                  playerJerseyNumber = playerInfo.jersey_number;
-                  playerName = playerInfo.name;
-                }
-              }
-              
-              // Create a new PA with the required fields
-              const newPA: ScoreBookEntry = {
-                inning_number: parseInt(selectedInning),
-                home_or_away: selectedTeam,
-                batting_order_position: orderNumber,
-                order_number: orderNumber,
-                batter_seq_id: newSeqId,
-                round: round,
-                team_id: teamId,
-                game_id: gameId,
-                batter_jersey_number: playerJerseyNumber,
-                batter_name: playerName,
-                bases_reached: '',
-                why_base_reached: '',
-                pa_result: '',
-                result_type: '',
-                detailed_result: '',
-                base_running: '',
-                balls_before_play: 0,
-                strikes_before_play: 0,
-                strikes_watching: 0,
-                strikes_swinging: 0,
-                strikes_unsure: 0,
-                fouls_after_two_strikes: 0,
-                base_running_stolen_base: 0,
-                pitch_count: 0,
-                fouls: 0,
-                ball_swinging: 0,
-                slap: 0,
-                sac: 0,
-                bunt: 0,
-                
-                // Additional quality indicators - initialize all to 0 for new PAs
-                wild_pitch: 0,
-                passed_ball: 0,
-                late_swings: 0,
-                rbi: 0,
-                qab: 0,
-                hard_hit: 0,
-                
-                // Initialize array fields
-                base_running_hit_around: [],
-                br_stolen_bases: [],
-                pa_error_on: [],
-                br_error_on: []
-              } as ScoreBookEntry;
-              
-              setSelectedPA(newPA);
-              setIsPlateAppearanceModalOpen(true);
-            }
-          }}
-          isInteractive={true}
+          onClick={() => handlePlateAppearanceClick(pa || null, orderNumber, columnIndex)}
+          isInteractive={isCellInteractive(parseInt(selectedInning))}
         />
       </td>
     );
@@ -912,6 +831,7 @@ export default function ScoreGame() {
         batter_seq_id: updatedPA.batter_seq_id,
         order_number: updatedPA.order_number,
         batting_order_position: updatedPA.batting_order_position || updatedPA.order_number,
+        jersey_number: updatedPA.jersey_number,
         out: updatedPA.out || 0,
         out_at: updatedPA.out_at || 0,
         pa_why: updatedPA.pa_why || '',
@@ -952,6 +872,16 @@ export default function ScoreGame() {
         round: updatedPA.round || 1
       };
       
+      // Log the PA data being saved
+      console.log('Saving PA with:', {
+        inning_number: paData.inning_number,
+        order_number: paData.order_number,
+        batter_seq_id: paData.batter_seq_id,
+        batting_order_position: paData.batting_order_position,
+        pa_round: paData.round
+      });
+      
+      // Make the API call to save the plate appearance
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/scores/api/plate-appearance`, {
         method: 'POST',
         headers: {
@@ -987,20 +917,54 @@ export default function ScoreGame() {
       
       // Update just this PA in the UI
       if (inningDetail && updatedPAData) {
-        const updatedInningDetail = { ...inningDetail };
-        const paIndex = updatedInningDetail.scorebook_entries.findIndex(
-          (pa: any) => pa.batter_seq_id === updatedPA.batter_seq_id
-        );
+        console.log('Updating inning detail with:', {
+          inningDetail,
+          updatedPAData,
+          updatedPA
+        });
         
-        if (paIndex !== -1) {
-          // Replace existing PA data
-          updatedInningDetail.scorebook_entries[paIndex] = updatedPAData;
-        } else {
-          // Add new PA data
-          updatedInningDetail.scorebook_entries.push(updatedPAData);
+        const updatedInningDetail = { 
+          ...inningDetail,
+          scorebook_entries: inningDetail.scorebook_entries.map(entry => {
+            // Only update the entry if it matches batter_seq_id, inning_number, AND round
+            if (entry.batter_seq_id === updatedPA.batter_seq_id && 
+                entry.inning_number === updatedPA.inning_number &&
+                entry.round === updatedPA.round) {
+              console.log('Found matching entry to update:', entry);
+              return {
+                ...updatedPAData,
+                inning_number: updatedPA.inning_number,
+                round: updatedPA.round,
+                pa_round: updatedPA.round,
+                home_or_away: updatedPA.home_or_away
+              };
+            }
+            return entry;
+          }),
+          lineup_entries: inningDetail.lineup_entries ? [...inningDetail.lineup_entries] : []
+        };
+        
+        // If this is a new PA, add it to the entries
+        if (!updatedInningDetail.scorebook_entries.some(
+          entry => entry.batter_seq_id === updatedPA.batter_seq_id && 
+                  entry.inning_number === updatedPA.inning_number &&
+                  entry.round === updatedPA.round
+        )) {
+          console.log('Adding new PA to entries:', updatedPAData);
+          updatedInningDetail.scorebook_entries.push({
+            ...updatedPAData,
+            inning_number: updatedPA.inning_number,
+            round: updatedPA.round,
+            pa_round: updatedPA.round,
+            home_or_away: updatedPA.home_or_away
+          });
         }
         
+        console.log('Updated inning detail:', updatedInningDetail);
         setInningDetail(updatedInningDetail);
+        
+        // Force a refresh of the inning data by incrementing the refresh timestamp
+        setRefreshTimestamp(Date.now());
       }
 
       // Fetch box score summary to update stats
@@ -1068,12 +1032,19 @@ export default function ScoreGame() {
         headers: { 'Content-Type': 'application/json' },
       });
       
-      // Remove the PA from the UI
+      // This is the code that handles delete / save of plate appearances and refreshes the grid.
       if (inningDetail) {
-        const updatedInningDetail = { ...inningDetail };
-        updatedInningDetail.scorebook_entries = updatedInningDetail.scorebook_entries.filter(
-          (pa: any) => pa.batter_seq_id !== paData.batter_seq_id
-        );
+        const updatedInningDetail = { 
+          ...inningDetail,
+          scorebook_entries: inningDetail.scorebook_entries.filter(
+            (pa: any) => !(pa.batter_seq_id === paData.batter_seq_id && 
+                          pa.inning_number === paData.inning_number &&
+                          //DO NOT USE pa_round, USE round
+                          pa.round === pa.round) // Use round instead of pa_round
+          ),
+          lineup_entries: inningDetail.lineup_entries ? [...inningDetail.lineup_entries] : []
+        };
+        
         setInningDetail(updatedInningDetail);
       }
 
@@ -1100,29 +1071,83 @@ export default function ScoreGame() {
   };
 
   // When adding a new plate appearance, check if we've reached the end of the lineup
-  const handleAddPlateAppearance = () => {
-    // Get the current batter index
-    const currentBatterIndex = getCurrentBatterIndex();
-    
-    // Check if lineup_entries exists and is an array
-    if (!inningDetail?.lineup_entries || !Array.isArray(inningDetail.lineup_entries)) {
-      return;
-    }
-    
-    // Get the total number of batters in the lineup
-    const totalBatters = inningDetail.lineup_entries.length;
-    
-    // If we're at the last batter, cycle back to the first batter
-    const nextBatterIndex = currentBatterIndex === totalBatters - 1 
-      ? 0  // Go back to the first batter
-      : currentBatterIndex + 1;  // Go to the next batter
-    
-    // Set the next batter as active
-    const nextBatter = inningDetail.lineup_entries[nextBatterIndex];
-    
-    if (nextBatter) {
-      setSelectedPA(null);
-      setIsPlateAppearanceModalOpen(true);
+  const handleAddPlateAppearance = async () => {
+    try {
+      // Get the current batter index
+      const currentBatterIndex = getCurrentBatterIndex();
+      
+      // Check if lineup_entries exists and is an array
+      if (!inningDetail?.lineup_entries || !Array.isArray(inningDetail.lineup_entries)) {
+        return;
+      }
+      
+      // Get the total number of batters in the lineup
+      const totalBatters = inningDetail.lineup_entries.length;
+      
+      // If we're at the last batter, cycle back to the first batter
+      const nextBatterIndex = currentBatterIndex === totalBatters - 1 
+        ? 0  // Go back to the first batter
+        : currentBatterIndex + 1;  // Go to the next batter
+      
+      // Set the next batter as active
+      const nextBatter = inningDetail.lineup_entries[nextBatterIndex];
+      
+      if (nextBatter) {
+        // Get the next batter sequence ID from the server
+        const nextBatterSeqId = await getNextBatterSeqId();
+        console.log('Next batter sequence ID:', nextBatterSeqId);
+
+        // Calculate the round based on the sequence ID
+        const lineupSize = inningDetail.lineup_entries.length;
+        const round = Math.floor((nextBatterSeqId - 1) / lineupSize) + 1;
+
+        // Create a new PA with the required fields
+        const newPA: ScoreBookEntry = {
+          inning_number: parseInt(selectedInning),
+          home_or_away: selectedTeam,
+          batting_order_position: nextBatter.order_number,
+          order_number: nextBatter.order_number,
+          batter_seq_id: nextBatterSeqId,  // Use the fetched nextBatterSeqId
+          round: round,
+          pa_round: round,
+          team_id: teamId,
+          game_id: gameId,
+          batter_jersey_number: nextBatter.jersey_number,
+          batter_name: nextBatter.name,
+          bases_reached: '',
+          why_base_reached: '',
+          pa_result: '',
+          result_type: '',
+          detailed_result: '',
+          base_running: '',
+          balls_before_play: 0,
+          strikes_before_play: 0,
+          strikes_watching: 0,
+          strikes_swinging: 0,
+          strikes_unsure: 0,
+          fouls_after_two_strikes: 0,
+          base_running_stolen_base: 0,
+          br_result: 0,
+          pitch_count: 0,
+          fouls: 0,
+          ball_swinging: 0,
+          late_swings: 0,
+          rbi: 0,
+          qab: 0,
+          hard_hit: 0,
+          slap: 0,
+          sac: 0,
+          bunt: 0
+        };
+
+        console.log('Created new PA:', newPA);
+        
+        setSelectedPA(newPA);
+        setIsPlateAppearanceModalOpen(true);
+      }
+    } catch (error) {
+      console.error('Error in handleAddPlateAppearance:', error);
+      alert('Failed to add plate appearance. Please try again.');
     }
   };
 
@@ -1144,171 +1169,141 @@ export default function ScoreGame() {
     }
   }, [inningDetail]);
 
-  // Handle click on a plate appearance cell
-  const handlePlateAppearanceClick = useCallback(async (pa: any | null, orderNumber: number, columnIndex: number) => {
-    console.log('[handlePlateAppearanceClick] Called with:', {
-      hasPA: !!pa,
-      orderNumber,
-      columnIndex
-    });
+  // Function to calculate the round for a new PA based on previous PAs for this player
+  const calculatePARound = (orderNumber: number) => {
+    if (!inningDetail?.scorebook_entries) return 1;
+    
+    // Filter PAs for this specific player in current inning and team
+    const playerPAsInInning = inningDetail.scorebook_entries.filter(
+      entry => 
+        entry.order_number === orderNumber && 
+        entry.inning_number === parseInt(selectedInning) &&
+        entry.home_or_away === selectedTeam
+    );
+    
+    // Round is number of previous PAs plus 1
+    return playerPAsInInning.length + 1;
+  };
 
-    if (pa) {
-      // For existing PAs, first try to fetch the latest data from the edit endpoint
-      const editEndpoint = `/scores/new/${teamId}/${gameId}/${selectedTeam}/${selectedInning}/scorecardgrid_paonly_inningonly/${pa.batter_seq_id}/pa_edit`;
-      try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}${editEndpoint}`);
-        if (response.ok) {
-          const data = await response.json();
-          if (data) {
-            // If we got data from the endpoint, use that instead of the passed PA
-            const typedPA: ScoreBookEntry = {
-              ...data,
-              order_number: parseInt(data.order_number?.toString() || pa.order_number.toString()),
-              batting_order_position: parseInt(data.order_number?.toString() || pa.order_number.toString()),
-              batter_seq_id: parseInt(data.batter_seq_id?.toString() || pa.batter_seq_id.toString()),
-              balls_before_play: parseInt(data.balls_before_play?.toString() || '0'),
-              strikes_before_play: parseInt(data.strikes_before_play?.toString() || '0'),
-              strikes_watching: parseInt(data.strikes_watching?.toString() || '0'),
-              strikes_swinging: parseInt(data.strikes_swinging?.toString() || '0'),
-              strikes_unsure: parseInt(data.strikes_unsure?.toString() || '0'),
-              fouls_after_two_strikes: parseInt(data.fouls_after_two_strikes?.toString() || '0'),
-              base_running_stolen_base: parseInt(data.base_running_stolen_base?.toString() || '0'),
-              wild_pitch: data.wild_pitch !== undefined ? parseInt(data.wild_pitch.toString()) : 0,
-              passed_ball: data.passed_ball !== undefined ? parseInt(data.passed_ball.toString()) : 0,
-              late_swings: data.late_swings !== undefined ? parseInt(data.late_swings.toString()) : 0,
-              rbi: data.rbi !== undefined ? parseInt(data.rbi.toString()) : 0,
-              qab: data.qab !== undefined ? parseInt(data.qab.toString()) : 0,
-              hard_hit: data.hard_hit !== undefined ? parseInt(data.hard_hit.toString()) : 0,
-              slap: data.slap !== undefined ? parseInt(data.slap.toString()) : 0,
-              sac: data.sac !== undefined ? parseInt(data.sac.toString()) : 0,
-              bunt: data.bunt !== undefined ? parseInt(data.bunt.toString()) : 0,
-              round: data.round ? parseInt(data.round.toString()) : 
-                     data.pa_round ? parseInt(data.pa_round.toString()) : 1,
-              fouls: data.fouls !== undefined ? parseInt(data.fouls.toString()) : 0,
-              pitch_count: data.pitch_count !== undefined ? parseInt(data.pitch_count.toString()) : 0,
-              ball_swinging: data.ball_swinging !== undefined ? parseInt(data.ball_swinging.toString()) : 0,
-              base_running_hit_around: data.base_running_hit_around || [],
-              br_stolen_bases: data.br_stolen_bases || [],
-              pa_error_on: data.pa_error_on || [],
-              br_error_on: data.br_error_on || [],
-            };
-            
-            console.log(`Editing PA from endpoint: order_number=${typedPA.order_number}, batting_order_position=${typedPA.batting_order_position}`);
-            setSelectedPA(typedPA);
-            setIsPlateAppearanceModalOpen(true);
-            return;
-          }
-        } else {
-          console.error('Failed to fetch PA data from edit endpoint:', response.status);
+  // Update the function to get the next batter sequence ID from the server
+  const getNextBatterSeqIdFromServer = async (inningNumber: number, team: string) => {
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/scores/new/${teamId}/${gameId}/${team}/${inningNumber}/next_batter_seq_id`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
         }
-      } catch (error) {
-        console.error('Error fetching PA data from edit endpoint:', error);
-      }
+      );
 
-      // If the endpoint fetch failed, fall back to using the passed PA data
-      const typedPA: ScoreBookEntry = {
-        ...pa,
-        // ... rest of the existing PA typing code ...
-      } as ScoreBookEntry;
-      
-      setSelectedPA(typedPA);
-      setIsPlateAppearanceModalOpen(true);
-    } else {
-      // For a new PA, first check if there's existing data at the edit endpoint
-      const round = columnIndex + 1;
-      const lineupSize = inningDetail?.lineup_entries && Array.isArray(inningDetail.lineup_entries) 
-        ? Math.max(...inningDetail.lineup_entries.map(entry => entry.order_number))
-        : 0;
-      
-      if (lineupSize === 0) {
-        console.error('No lineup entries found');
-        return;
+      if (response.ok) {
+        const data = await response.json();
+        return data.next_batter_seq_id;
       }
-      
-      const newSeqId = (round - 1) * lineupSize + orderNumber;
-      const editEndpoint = `/scores/new/${teamId}/${gameId}/${selectedTeam}/${selectedInning}/scorecardgrid_paonly_inningonly/${newSeqId}/pa_edit`;
-      
-      try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}${editEndpoint}`);
-        if (response.ok) {
-          const data = await response.json();
-          if (data) {
-            // If we got data from the endpoint, use that
-            const typedPA: ScoreBookEntry = {
-              ...data,
-              order_number: parseInt(data.order_number?.toString() || orderNumber.toString()),
-              batting_order_position: parseInt(data.order_number?.toString() || orderNumber.toString()),
-              batter_seq_id: newSeqId,
-              // ... rest of the field parsing like above ...
-            };
-            
-            setSelectedPA(typedPA);
-            setIsPlateAppearanceModalOpen(true);
-            return;
-          }
-        }
-      } catch (error) {
-        console.error('Error checking for existing PA data:', error);
-      }
-
-      // If no existing data found or error occurred, create a new PA
-      let playerJerseyNumber = '';
-      let playerName = '';
-      
-      if (inningDetail?.lineup_entries) {
-        const playerInfo = inningDetail.lineup_entries.find(entry => entry.order_number === orderNumber);
-        if (playerInfo) {
-          playerJerseyNumber = playerInfo.jersey_number;
-          playerName = playerInfo.name;
-        }
-      }
-      
-      const newPA: ScoreBookEntry = {
-        inning_number: parseInt(selectedInning),
-        home_or_away: selectedTeam,
-        batting_order_position: orderNumber,
-        order_number: orderNumber,
-        batter_seq_id: newSeqId,
-        round: round,
-        team_id: teamId,
-        game_id: gameId,
-        batter_jersey_number: playerJerseyNumber,
-        batter_name: playerName,
-        bases_reached: '',
-        why_base_reached: '',
-        pa_result: '',
-        result_type: '',
-        detailed_result: '',
-        base_running: '',
-        balls_before_play: 0,
-        strikes_before_play: 0,
-        strikes_watching: 0,
-        strikes_swinging: 0,
-        strikes_unsure: 0,
-        fouls_after_two_strikes: 0,
-        base_running_stolen_base: 0,
-        pitch_count: 0,
-        fouls: 0,
-        ball_swinging: 0,
-        slap: 0,
-        sac: 0,
-        bunt: 0,
-        wild_pitch: 0,
-        passed_ball: 0,
-        late_swings: 0,
-        rbi: 0,
-        qab: 0,
-        hard_hit: 0,
-        base_running_hit_around: [],
-        br_stolen_bases: [],
-        pa_error_on: [],
-        br_error_on: []
-      } as ScoreBookEntry;
-      
-      setSelectedPA(newPA);
-      setIsPlateAppearanceModalOpen(true);
+      return 1; // fallback if request fails
+    } catch (error) {
+      console.error('Error fetching next batter sequence ID:', error);
+      return 1; // fallback if request fails
     }
-  }, [teamId, gameId, selectedInning, selectedTeam, inningDetail]);
+  };
+
+  // Get the next batter sequence ID from the server
+  const getNextBatterSeqId = useCallback(async () => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/scores/new/${teamId}/${gameId}/${selectedTeam}/${selectedInning}/next_batter_seq_id`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch next batter sequence ID: ${response.status}`);
+      }
+      const data = await response.json();
+      return data.next_batter_seq_id;
+    } catch (error) {
+      throw error;
+    }
+  }, [teamId, gameId, selectedTeam, selectedInning]);
+
+  const handlePlateAppearanceClick = async (pa: ScoreBookEntry | null, orderNumber: number, columnIndex: number) => {
+    try {
+      if (pa?.batter_seq_id) {
+        // For existing PAs, try to fetch from edit endpoint
+        const editEndpoint = `/scores/new/${teamId}/${gameId}/${selectedTeam}/${selectedInning}/scorecardgrid_paonly_inningonly/${pa.batter_seq_id}/pa_edit`;
+        const editResponse = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}${editEndpoint}`);
+        
+        if (!editResponse.ok) {
+          throw new Error(`Failed to fetch PA data: ${editResponse.status}`);
+        }
+        
+        const editData = await editResponse.json();
+
+        if (!editData) {
+          throw new Error('No data returned from edit endpoint');
+        }
+
+        setSelectedPA(editData);
+        setIsPlateAppearanceModalOpen(true);
+      } else {
+        // For a new PA, get the next batter sequence ID from the server
+        const nextBatterSeqId = await getNextBatterSeqId();
+
+        // Get player information from lineup entries
+        let playerJerseyNumber = '';
+        let playerName = '';
+        
+        if (inningDetail?.lineup_entries) {
+          const playerInfo = inningDetail.lineup_entries.find(entry => entry.order_number === orderNumber);
+          if (playerInfo) {
+            playerJerseyNumber = playerInfo.jersey_number;
+            playerName = playerInfo.name;
+          }
+        }
+
+        // Create a new PA with the required fields
+        const newPA: ScoreBookEntry = {
+          inning_number: parseInt(selectedInning),
+          home_or_away: selectedTeam,
+          batting_order_position: orderNumber,
+          order_number: orderNumber,
+          batter_seq_id: nextBatterSeqId,  // Use the server-provided ID
+          round: columnIndex + 1,
+          pa_round: columnIndex + 1,
+          team_id: teamId,
+          game_id: gameId,
+          batter_jersey_number: playerJerseyNumber,
+          batter_name: playerName,
+          bases_reached: '',
+          why_base_reached: '',
+          pa_result: '',
+          result_type: '',
+          detailed_result: '',
+          base_running: '',
+          balls_before_play: 0,
+          strikes_before_play: 0,
+          strikes_watching: 0,
+          strikes_swinging: 0,
+          strikes_unsure: 0,
+          fouls_after_two_strikes: 0,
+          base_running_stolen_base: 0,
+          br_result: 0,
+          pitch_count: 0,
+          fouls: 0,
+          ball_swinging: 0,
+          late_swings: 0,
+          rbi: 0,
+          qab: 0,
+          hard_hit: 0,
+          slap: 0,
+          sac: 0,
+          bunt: 0
+        };
+        
+        setSelectedPA(newPA);
+        setIsPlateAppearanceModalOpen(true);
+      }
+    } catch (error) {
+      alert('Failed to handle plate appearance. Please try again.');
+    }
+  };
 
   // Memoize the handler to prevent unnecessary re-renders
   const memoizedHandleClick = useCallback(handlePlateAppearanceClick, [
@@ -1710,21 +1705,6 @@ export default function ScoreGame() {
           {/* Show Load Previous Innings Button - Only when needed */}
           {!loadingInningDetail && inningDetail && !loadingPreviousInnings && (
             <div className="mr-4 flex space-x-2">
-              {/* Add Batter Button */}
-              <button
-                onClick={() => {
-                  // Call the handleAddOrderNumber function from the ScoreCardGrid ref
-                  if (scoreCardGridRef.current) {
-                    // @ts-ignore - We know this method exists
-                    scoreCardGridRef.current.handleAddOrderNumber();
-                  }
-                }}
-                className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-md text-xs font-medium shadow-md transition-all duration-200 ease-in-out flex items-center space-x-2"
-              >
-                <span className="text-indigo-600 font-bold">+</span>
-                <span>Add Next Plate Appearance</span>
-              </button>
-              
               {/* Only show this button for inning 2 and later */}
               {parseInt(selectedInning) > 1 && (
                 <button
@@ -1819,6 +1799,8 @@ export default function ScoreGame() {
       </div>
       
       {/* Plate Appearance Modal */}
+      {/* I would like to add a new prop here that is the next batter sequence id */}
+      
       <PlateAppearanceModal
         pa={selectedPA as any}
         isOpen={isPlateAppearanceModalOpen}
@@ -1837,7 +1819,7 @@ export default function ScoreGame() {
         gameId={gameId}
         inningNumber={parseInt(selectedInning)}
         homeOrAway={selectedTeam}
-        nextBatterSeqId={getNextBatterSeqId()}
+        nextBatterSeqId={1} // Default value, will be updated by the modal if needed
         myTeamHomeOrAway={boxScore?.game_header?.my_team_ha || 'home'}
         inningDetail={inningDetail as any}
         // Ensure the paEditEndpoint is always set correctly when editing an existing PA

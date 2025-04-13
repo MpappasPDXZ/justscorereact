@@ -8,9 +8,10 @@ interface BaseballDiamondCellProps {
   onClick?: () => void;
   isInteractive?: boolean;
   fieldKey?: string;
+  canAddPA?: boolean;
 }
 
-const BaseballDiamondCell = ({ pa, onClick, isInteractive = true, fieldKey }: BaseballDiamondCellProps) => {
+const BaseballDiamondCell = ({ pa, onClick, isInteractive = true, fieldKey, canAddPA = false }: BaseballDiamondCellProps) => {
   // Generate a unique key for the BaseballField component
   const uniqueKey = `${fieldKey}-${Date.now()}`;
   
@@ -22,6 +23,7 @@ const BaseballDiamondCell = ({ pa, onClick, isInteractive = true, fieldKey }: Ba
         pa={pa}
         onClick={onClick}
         isInteractive={isInteractive}
+        canAddPA={canAddPA}
       />
     </div>
   );
