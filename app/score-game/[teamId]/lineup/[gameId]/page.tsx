@@ -1314,7 +1314,7 @@ export default function GameLineup() {
       </div>
       
       {/* Current team lineup - all innings horizontally */}
-      <div className="bg-white shadow-sm rounded-b-lg overflow-hidden mb-6 border border-gray-200 border-t-0">
+      <div className="bg-white shadow-sm rounded-b-lg overflow-scroll mb-6 border border-gray-200 border-t-0">
         <div className="p-4">
           {(() => {
             const currentTeamLineup = activeTab === 'home' ? homeLineup : awayLineup;
