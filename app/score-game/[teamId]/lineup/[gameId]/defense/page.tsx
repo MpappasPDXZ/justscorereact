@@ -7,6 +7,7 @@ import DefensiveLineupTable, { DefensivePlayer, DEFENSIVE_POSITIONS, getPosition
 import InningSelector from "../components/InningSelector";
 import PositionSelect from "../components/PositionSelect";
 import Toast from '../components/Toast';
+import ExportLineupModal from '../components/ExportLineupModal';
 
 interface Game {
   away_team_name: string;
@@ -91,6 +92,7 @@ export default function DefensiveLineup() {
   
   // Create refs inside the component
   const isInitialRender = React.useRef(true);
+  const cleanupRef = React.useRef<(() => void) | null>(null);
   
   // Default 7 innings with ability to add more
   const [availableInnings, setAvailableInnings] = useState<number[]>([1, 2, 3, 4, 5, 6, 7]);
@@ -110,6 +112,15 @@ export default function DefensiveLineup() {
     type: 'info' as 'success' | 'error' | 'warning' | 'info'
   });
   
+  // Cleanup function for WebSocket connections
+  useEffect(() => {
+    return () => {
+      if (cleanupRef.current) {
+        cleanupRef.current();
+      }
+    };
+  }, []);
+
   // Function to show toast
   const showToast = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info') => {
     setToast({
@@ -211,8 +222,6 @@ export default function DefensiveLineup() {
       // Build the endpoint URL for the copy operation
       const endpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL}/defense/${teamId}/${gameId}/${activeTab}/copy/${prevInning}/${currentInning}`;
       
-      console.log('Copy inning API endpoint:', endpoint);
-      
       // Call the API to copy the inning
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -224,8 +233,6 @@ export default function DefensiveLineup() {
       if (response.ok) {
         try {
           const responseData = await response.json().catch(() => null);
-          console.log('Copy response:', responseData);
-          
           const successMessage = responseData?.message || `Players copied from inning ${prevInning} to ${currentInning}`;
           showToast(successMessage, 'success');
           
@@ -235,7 +242,6 @@ export default function DefensiveLineup() {
           // Set the lineup as changed to reflect the new state
           setLineupChanged(true);
         } catch (error) {
-          console.error('Error processing copy response:', error);
           showToast(`Players copied from inning ${prevInning} to ${currentInning}`, 'success');
           
           // Re-fetch the defensive lineups even if processing the response failed
@@ -247,10 +253,8 @@ export default function DefensiveLineup() {
         const errorMessage = errorData?.message || `Failed to copy lineup from inning ${prevInning} to ${currentInning}`;
         
         showToast(errorMessage, 'error');
-        console.error('Error copying inning:', errorData || response.status);
       }
     } catch (error) {
-      console.error('Error in copy inning operation:', error);
       showToast('An error occurred while copying the inning. Please try again.', 'error');
     } finally {
       // Reset the operation flag after copying
@@ -912,6 +916,95 @@ export default function DefensiveLineup() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty dependency array - this effect runs only once on component mount
   
+  // Add these state variables in the component
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [exportData, setExportData] = useState<{
+    battingOrderData: any;
+    defensiveRotationsData: any;
+    defensivePositionsData: any;
+  } | null>(null);
+  const [gameDetails, setGameDetails] = useState<{
+    away_team_name: string;
+    event_date: string;
+  } | null>(null);
+  
+  // Add this function to fetch game details
+  const fetchGameDetails = async () => {
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/games/${params.teamId}/${params.gameId}/get_one_game`
+      );
+      if (!response.ok) throw new Error("Failed to fetch game details");
+      const data = await response.json();
+      
+      if (data && data.game_data) {
+        setGameDetails({
+          away_team_name: data.game_data.away_team_name,
+          event_date: data.game_data.event_date
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching game details:', error);
+    }
+  };
+  
+  // Modify the handleExportLineup function
+  const handleExportLineup = async () => {
+    try {
+      console.log('Starting export lineup process...');
+      showToast('Generating lineup export...', 'info');
+
+      if (!gameDetails) {
+        console.log('Fetching game details...');
+        await fetchGameDetails();
+      }
+
+      // Get the team ID and game ID from params
+      const teamId = params.teamId;
+      const gameId = params.gameId;
+
+      console.log('Fetching data for export:', { teamId, gameId, activeTab });
+
+      // Fetch all required data concurrently
+      const [battingOrderResponse, defensiveRotationsResponse, defensivePositionsResponse] = await Promise.all([
+        fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/lineup/games/${teamId}/${gameId}/${activeTab}/order_by_batter`),
+        fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/lineup/${teamId}/${gameId}/${activeTab}/rotations`),
+        fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/lineup/${teamId}/${gameId}/${activeTab}/positions`)
+      ]);
+
+      console.log('API responses received:', {
+        battingOrderStatus: battingOrderResponse.status,
+        defensiveRotationsStatus: defensiveRotationsResponse.status,
+        defensivePositionsStatus: defensivePositionsResponse.status
+      });
+
+      if (!battingOrderResponse.ok || !defensiveRotationsResponse.ok || !defensivePositionsResponse.ok) {
+        throw new Error('Failed to fetch lineup data');
+      }
+
+      const [battingOrderData, defensiveRotationsData, defensivePositionsData] = await Promise.all([
+        battingOrderResponse.json(),
+        defensiveRotationsResponse.json(),
+        defensivePositionsResponse.json()
+      ]);
+
+      console.log('Setting export data and opening modal...');
+      
+      // Store the data and open the modal
+      setExportData({
+        battingOrderData,
+        defensiveRotationsData,
+        defensivePositionsData
+      });
+      setIsExportModalOpen(true);
+
+      showToast('Export view generated successfully', 'success');
+    } catch (error) {
+      console.error('Error generating export:', error);
+      showToast('Failed to generate export', 'error');
+    }
+  };
+  
   return (
     <div className="container mx-auto px-1 py-0 max-w-full">
       {/* Toast Component */}
@@ -939,7 +1032,18 @@ export default function DefensiveLineup() {
               <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
-              Back to Offense
+              Offense
+            </button>
+            
+            {/* Export Lineup button */}
+            <button 
+              onClick={handleExportLineup}
+              className="flex items-center justify-center py-2 px-3 rounded-md shadow-sm text-xs font-medium text-gray-600 border border-gray-300 hover:bg-gray-50 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              <span>Analyze</span>
             </button>
             
             {/* Save Lineup button */}
@@ -1422,6 +1526,22 @@ export default function DefensiveLineup() {
           })()}
         </div>
       </div>
+      
+      {/* Export Modal */}
+      {exportData && (
+        <ExportLineupModal
+          isOpen={isExportModalOpen}
+          onClose={() => setIsExportModalOpen(false)}
+          battingOrderData={exportData.battingOrderData}
+          defensiveRotationsData={exportData.defensiveRotationsData}
+          defensivePositionsData={exportData.defensivePositionsData}
+          opponentName={gameDetails?.away_team_name || ''}
+          gameDate={gameDetails?.event_date || ''}
+          gameId={params.gameId as string}
+          teamId={params.teamId as string}
+          teamChoice={activeTab}
+        />
+      )}
     </div>
   );
 }
